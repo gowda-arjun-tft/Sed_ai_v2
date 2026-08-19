@@ -14,7 +14,7 @@ class FinalCheckTests(unittest.TestCase):
             checks = run_checks(create_complete_run(Path(temporary)))
             self.assertEqual(sum(ok for _, _, ok, _ in checks), 19)
 
-    def test_completed_json_run_remains_checkable(self):
+    def test_completed_markdown_run_remains_checkable(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = create_complete_run(Path(temporary))
             self.assertEqual(main(["--check-only", str(run_dir)]), 0)

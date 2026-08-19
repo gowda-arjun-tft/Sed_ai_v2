@@ -3,8 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-from ..settings import SKIPPED_SECTIONS, SMALL_SECTION_TOKENS, TARGET_TOKENS
-from ..claims import input_claim_blocks
+from ..settings import SKIPPED_SECTIONS
 from ..fs import atomic_write_text, load_json, slug, write_json
 from ..factsheet import (
     Section,
@@ -39,80 +38,6 @@ def _partition_sections(sections: list[Section]) -> tuple[list[Section], list[tu
     return kept, skipped
 
 
-def _prepare_fact_pieces(kept: list[Section]) -> list[PreparedPiece]:
-    prepared: list[PreparedPiece] = []
-    small: list[Section] = []
-
-    def flush_small() -> None:
-        if not small:
-            return
-        prepared.append(
-            (
-                [section.title for section in small],
-                "\n\n".join(section.raw for section in small),
-                "1/1",
-                sum(len(fact_blocks(section.raw)) for section in small),
-            )
-        )
-        small.clear()
-
-    for section in kept:
-        size = estimate_tokens(section.raw)
-        if size < SMALL_SECTION_TOKENS:
-            combined = "\n\n".join(item.raw for item in small + [section])
-            if small and estimate_tokens(combined) > TARGET_TOKENS:
-                flush_small()
-            small.append(section)
-            continue
-        flush_small()
-        blocks = fact_blocks(section.raw)
-        if size <= TARGET_TOKENS or not blocks:
-            prepared.append(([section.title], section.raw, "1/1", len(blocks)))
-            continue
-        chunks: list[list[str]] = []
-        current: list[str] = []
-        for block in blocks:
-            candidate = current + [block]
-            if current and estimate_tokens("\n\n".join(candidate)) > TARGET_TOKENS:
-                chunks.append(current)
-                current = [block]
-            else:
-                current = candidate
-        if current:
-            chunks.append(current)
-        for index, chunk in enumerate(chunks, 1):
-            body = f"## {section.title}\n\n" + "\n\n".join(chunk)
-            prepared.append(
-                ([section.title], body, f"{index}/{len(chunks)}", len(chunk))
-            )
-    flush_small()
-    return prepared
-
-
-def _prepare_claim_pieces(blocks: list[str]) -> list[PreparedPiece]:
-    chunks: list[list[str]] = []
-    current: list[str] = []
-    for block in blocks:
-        candidate = current + [block]
-        body = "## Claims\n\n" + "\n\n".join(candidate)
-        if current and estimate_tokens(body) > TARGET_TOKENS:
-            chunks.append(current)
-            current = [block]
-        else:
-            current = candidate
-    if current:
-        chunks.append(current)
-    return [
-        (
-            ["Claims"],
-            "## Claims\n\n" + "\n\n".join(chunk),
-            f"{index}/{len(chunks)}",
-            len(chunk),
-        )
-        for index, chunk in enumerate(chunks, 1)
-    ]
-
-
 def _write_pieces(run_dir: Path, prepared: list[PreparedPiece]) -> list[dict[str, str]]:
     rows = []
     for number, (titles, body, part, count) in enumerate(prepared, 1):
@@ -144,26 +69,7 @@ def _write_pieces(run_dir: Path, prepared: list[PreparedPiece]) -> list[dict[str
 
 def split_fact_sheet(run_dir: Path) -> None:
     run = load_json(run_dir / "run.json")
-    input_path = run_dir / "inputs" / run.get("input_file", "fact_sheet.md")
-    source = read_text(input_path)
-    if run.get("input_format") == "json":
-        original_blocks = input_claim_blocks(input_path)
-        prepared = _prepare_claim_pieces(original_blocks)
-        rows = _write_pieces(run_dir, prepared)
-        write_progress(run_dir, rows)
-        cut = Counter()
-        for path in sorted((run_dir / "pieces").glob("p*.md")):
-            cut.update(atoms(piece_body(path), "claims"))
-        if Counter(original_blocks) != cut:
-            raise RuntimeError("phase 1 failed its lossless JSON-claim cut check")
-        run["split_mode"] = "claims"
-        run["input"]["claims"] = len(original_blocks)
-        run["pieces"] = len(rows)
-        run["sections_set_aside"] = 0
-        run["status"] = "split"
-        write_json(run_dir / "run.json", run)
-        return
-
+    source = read_text(run_dir / "inputs" / "fact_sheet.md")
     sections = split_sections(source)
     mode = "facts" if fact_blocks(source) else "sections"
     kept, skipped = _partition_sections(sections)
@@ -174,10 +80,15 @@ def split_fact_sheet(run_dir: Path) -> None:
         path = skipped_dir / f"{slug(section.title)}.md"
         atomic_write_text(path, f"<!-- skipped: {reason} -->\n\n{section.raw}\n")
 
-    if mode == "sections":
-        prepared = [([section.title], section.raw, "1/1", 1) for section in kept]
-    else:
-        prepared = _prepare_fact_pieces(kept)
+    prepared = [
+        (
+            [section.title],
+            section.raw,
+            "1/1",
+            len(fact_blocks(section.raw)) if mode == "facts" else 1,
+        )
+        for section in kept
+    ]
     rows = _write_pieces(run_dir, prepared)
     write_progress(run_dir, rows)
 

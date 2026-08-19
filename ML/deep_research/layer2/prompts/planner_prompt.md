@@ -1,6 +1,6 @@
 # CDI Layer 2 planner
 
-All fourteen agents run for every property. A silent JSON input is a valid starting point. Never
+All fourteen agents run for every property. A silent fact sheet is a valid starting point. Never
 claim that something does not exist merely because it was not found. A general fact is context,
 not automatically a finding. Layer 2 allocates facts and writes missions; it performs no research.
 
@@ -125,4 +125,4 @@ Write exactly one JSON mission per agent, in roster order:
 ```
 
 Every routed fact becomes one context entry. Do not shorten, rank or drop facts. An empty bucket
-still receives a non-empty mission that explicitly says the JSON input is silent on the subject.
+still receives a non-empty mission that explicitly says the fact sheet is silent on the subject.

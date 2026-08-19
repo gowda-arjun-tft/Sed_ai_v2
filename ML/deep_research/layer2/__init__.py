@@ -1,4 +1,4 @@
-"""CDI Layer 2: turn one property's JSON claims into checked research missions."""
+"""CDI Layer 2: turn one property fact sheet into checked research missions."""
 
 from .cli import main
 

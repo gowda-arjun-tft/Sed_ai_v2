@@ -13,14 +13,14 @@ Output    runs/<run_id>/run.json          completed
 
 ## The one check that matters most
 
-**Every claim in the JSON input reaches at least one bucket, or is recorded as unrouted.**
+**Every fact in the fact sheet reaches at least one bucket, or is recorded as unrouted.**
 
 ```
-claims in the JSON input
-  = claim blocks in routed pieces
+### blocks in the fact sheet
+  = blocks in routed pieces + blocks in set-aside sections
 
-claim blocks in routed pieces
-  = claims appearing in at least one bucket + entries in _unrouted.md
+blocks in routed pieces
+  = facts appearing in at least one bucket + entries in _unrouted.md
 ```
 
 Both sides are counted by code. Nothing here depends on the model reporting its own work
@@ -46,8 +46,8 @@ Everything else in this list can be spotted by reading the output. This one cann
 
 | # | Check |
 |---|---|
-| 4 | Every input claim is in exactly one piece file |
-| 5 | Total claim count across pieces equals the count in the JSON input |
+| 4 | Every `###` block is in exactly one piece file or one set-aside section — never both, never neither |
+| 5 | Total block count across pieces and set-aside sections equals the count in the original |
 | 6 | Every piece carries its parent `##` heading |
 | 7 | Every set-aside section has a recorded reason |
 
@@ -57,8 +57,8 @@ Everything else in this list can be spotted by reading the output. This one cann
 |---|---|
 | 8 | Every row in `progress.csv` is `done` |
 | 9 | Per piece, `facts_routed + facts_unrouted` equals `facts_in_piece` |
-| 10 | **Every claim block in every bucket appears character for character in a piece file** |
-| 11 | Every routed claim reached at least one bucket |
+| 10 | **Every fact block in every bucket appears character for character in a piece file** |
+| 11 | Every routed fact reached at least one bucket |
 | 12 | `_unrouted.md` count is reported, with each reason |
 
 ### Missions
@@ -67,14 +67,14 @@ Everything else in this list can be spotted by reading the output. This one cann
 |---|---|
 | 13 | Fourteen mission files, one per agent name |
 | 14 | Every `agent` value is one of the fourteen frozen names |
-| 15 | **Every `context[].claim` exactly equals a claim in that agent's bucket** |
-| 16 | Entry count equals the bucket's claim count |
+| 15 | **Every `context[].fact` appears character for character in that agent's bucket** |
+| 16 | Entry count equals the bucket's fact count |
 | 17 | Every `mission` field is non-empty |
-| 18 | An empty `context` is accompanied by a mission saying the JSON input is silent |
-| 19 | Every `context[].input_pointer` resolves to the same object in `claims.json` |
+| 18 | An empty `context` is accompanied by a mission saying the fact sheet is silent |
+| 19 | Every `context[].where` locator resolves to a real line in the original fact sheet |
 
-Checks **10** and **15** are the transcription guards. Together they prove that a claim went from
-the JSON input, through a bucket, into a mission without being changed on the way.
+Checks **10** and **15** are the transcription guards. Together they prove that a fact went from
+the fact sheet, through a bucket, into a mission without being reworded on the way.
 
 ## `check_report.md`
 
@@ -86,7 +86,7 @@ Written whether or not everything passed.
 19 checks · 19 passed · 0 failed
 
 ## Coverage
-input claims                412
+fact sheet blocks           412
   routed                    381
   set aside                  27      Not covered, Audit appendix, 4 others
   unrouted                    4      listed below
@@ -112,11 +112,11 @@ have run.
   "finished_at": "2026-08-19T09:58:40Z",
   "model": "gpt-5.6-luna",
   "deepagents_version": "0.7.7",
-  "input": { "bytes": 65824, "sha256": "…", "claims": 412 },
+  "fact_sheet": { "bytes": 65824, "sha256": "…", "blocks": 412 },
   "pieces": 9,
   "sections_set_aside": 6,
   "model_calls": { "routing": 9, "missions": 14 },
-  "claims": { "routed": 408, "set_aside": 0, "unrouted": 4 },
+  "facts": { "routed": 381, "set_aside": 27, "unrouted": 4 },
   "buckets": { "…": 88, "…": 61 },
   "checks": { "run": 19, "passed": 19, "failed": 0 }
 }

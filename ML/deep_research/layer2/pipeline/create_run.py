@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 import shutil
 from datetime import UTC, datetime
@@ -10,17 +11,17 @@ from ..settings import (
     MODEL_NAME,
     REASONING_EFFORT,
 )
-from ..fs import now_iso, sha256, write_json
-from ..claims import load_claims
+from ..fs import now_iso, read_text, sha256, write_json
 from ..planner import load_planner
 
 
-def create_run(input_json: Path, planner: Path, runs_dir: Path) -> Path:
-    input_json = input_json.resolve()
+def create_run(fact_sheet: Path, planner: Path, runs_dir: Path) -> Path:
+    fact_sheet = fact_sheet.resolve()
     planner = planner.resolve()
-    if not input_json.is_file() or input_json.suffix.casefold() != ".json":
-        raise ValueError(f"claims input must be an existing .json file: {input_json}")
-    claims, _ = load_claims(input_json)
+    if not fact_sheet.is_file() or not read_text(fact_sheet).strip():
+        raise ValueError(f"fact sheet is missing or empty: {fact_sheet}")
+    if not re.search(r"(?m)^## ", read_text(fact_sheet)):
+        raise ValueError("fact sheet must contain at least one ## heading")
     load_planner(planner)
 
     runs_dir.mkdir(parents=True, exist_ok=True)
@@ -37,12 +38,12 @@ def create_run(input_json: Path, planner: Path, runs_dir: Path) -> Path:
     for name in ("pieces", "buckets", "missions"):
         (run_dir / name).mkdir()
     inputs.mkdir()
-    input_copy = inputs / "claims.json"
+    fact_copy = inputs / "fact_sheet.md"
     planner_copy = inputs / "planner_prompt.md"
-    shutil.copy2(input_json, input_copy)
+    shutil.copy2(fact_sheet, fact_copy)
     shutil.copy2(planner, planner_copy)
     copies_match = (
-        sha256(input_json) == sha256(input_copy)
+        sha256(fact_sheet) == sha256(fact_copy)
         and sha256(planner) == sha256(planner_copy)
     )
     if not copies_match:
@@ -54,14 +55,11 @@ def create_run(input_json: Path, planner: Path, runs_dir: Path) -> Path:
             "run_id": run_id,
             "status": "started",
             "started_at": now_iso(),
-            "input": {
-                "source_path": str(input_json),
-                "bytes": input_json.stat().st_size,
-                "sha256": sha256(input_json),
-                "claims": len(claims),
+            "fact_sheet": {
+                "source_path": str(fact_sheet),
+                "bytes": fact_sheet.stat().st_size,
+                "sha256": sha256(fact_sheet),
             },
-            "input_file": "claims.json",
-            "input_format": "json",
             "planner_prompt": {
                 "source_path": str(planner),
                 "bytes": planner.stat().st_size,

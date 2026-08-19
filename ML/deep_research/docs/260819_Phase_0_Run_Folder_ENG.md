@@ -3,7 +3,7 @@
 No model. Ordinary code.
 
 ```
-Input     a claims JSON file, from anywhere on disk
+Input     a fact sheet, from anywhere on disk
           planner_prompt.md, from the repository
 Happens   a run folder is created and both inputs are copied into it
 Output    runs/<run_id>/inputs/ containing both files, and run.json
@@ -29,20 +29,20 @@ here, so it cannot read or write anything outside it.
 
 ```
 runs/L2_20260819_a3f1/inputs/
-  claims.json            copied from wherever it was produced
+  fact_sheet.md          copied from wherever it was produced
   planner_prompt.md      copied from the repository
 ```
 
 Copying rather than pointing at the originals means a finished run is self-contained. Six months
-later the claims input may have been regenerated and `planner_prompt.md` may have been edited; the
+later the fact sheet may have been regenerated and `planner_prompt.md` may have been edited; the
 run folder still shows exactly what was used.
 
 Neither copy is ever modified after this phase.
 
-### `claims.json`
+### `fact_sheet.md`
 
-The output of Layer 1 for one property. It is either a list of non-empty claim objects or an object
-with a `claims` list. Claim keys are unrestricted and are preserved without interpretation.
+The output of Layer 1 for one property. It is structured Markdown with `##` sections and normally
+contains complete `###` fact blocks.
 
 Record its size and a hash in `run.json`, so it can be proved later that the run used the file it
 claims to have used.
@@ -72,14 +72,11 @@ Written at the start and updated at the end.
 {
   "run_id": "L2_20260819_a3f1",
   "started_at": "2026-08-19T09:42:11Z",
-  "input": {
-    "source_path": "…/claims.json",
+  "fact_sheet": {
+    "source_path": "…/fact_sheet.md",
     "bytes": 65824,
-    "sha256": "…",
-    "claims": 42
+    "sha256": "…"
   },
-  "input_file": "claims.json",
-  "input_format": "json",
   "planner_prompt": { "bytes": 0, "sha256": "…" },
   "model": "gpt-5.6-luna",
   "deepagents_version": "0.7.7",
@@ -93,7 +90,7 @@ Written at the start and updated at the end.
 2. Both input files copied, and their hashes match the originals.
 3. `planner_prompt.md` contains exactly fourteen agent definitions, and the fourteen names match
    the frozen list in the design document character for character.
-4. `claims.json` is valid JSON and contains at least one non-empty claim object.
+4. `fact_sheet.md` is not empty and contains at least one `##` heading.
 
 A failure at check 3 stops the run. A wrong or missing agent name here becomes a missing mission
 at the end, and it is much cheaper to catch now.
@@ -102,7 +99,7 @@ at the end, and it is much cheaper to catch now.
 
 | Problem | What happens | What to do |
 |---|---|---|
-| JSON is invalid or has no claims | phase 1 has nothing safe to route | stop, and look at how Layer 1 produced it |
+| the fact sheet has no `##` headings | phase 1 cannot cut it | stop, and look at how Layer 1 produced it |
 | `planner_prompt.md` has thirteen or fifteen definitions | the roster does not match the design | stop at check 3 |
 | an agent name differs by a character | phase 3 writes a mission nothing downstream will accept | stop at check 3 |
 | the run folder exists | a previous run would be overwritten | generate a new suffix and retry |

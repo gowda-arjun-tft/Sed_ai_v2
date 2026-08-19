@@ -5,7 +5,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from ..claims import claims_by_pointer, context_from_claim_block, input_claim_blocks
 from ..settings import AGENT_NAMES
 from ..fs import (
     atomic_write_text,
@@ -65,7 +64,7 @@ def _write_report(
             "",
             "## Coverage",
             "",
-        f"- Input claims: {original_count}",
+            f"- Fact sheet blocks: {original_count}",
             f"- Routed: {routed_count}",
             f"- Set aside: {skipped_count} in {skipped_sections} sections",
             f"- Unrouted: {len(unrouted)}",
@@ -86,17 +85,11 @@ def _write_report(
 
 def run_checks(run_dir: Path) -> list[Check]:
     run = load_json(run_dir / "run.json")
-    input_record = run.get("input", run.get("fact_sheet", {}))
     mode = run["split_mode"]
-    input_copy = run_dir / "inputs" / run.get("input_file", "fact_sheet.md")
+    fact_copy = run_dir / "inputs" / "fact_sheet.md"
     planner_copy = run_dir / "inputs" / "planner_prompt.md"
-    original_text = read_text(input_copy)
-    if mode == "claims":
-        original_atoms = input_claim_blocks(input_copy)
-        input_claims = claims_by_pointer(input_copy)
-    else:
-        original_atoms = atoms(original_text, mode)
-        input_claims = {}
+    original_text = read_text(fact_copy)
+    original_atoms = atoms(original_text, mode)
     piece_paths = sorted((run_dir / "pieces").glob("p*.md"))
     skipped_paths = sorted((run_dir / "pieces" / "_skipped").glob("*.md"))
     piece_atoms = {
@@ -119,9 +112,9 @@ def run_checks(run_dir: Path) -> list[Check]:
         checks.append((number, label, bool(ok), detail))
 
     inputs_match = (
-        input_copy.is_file()
+        fact_copy.is_file()
         and planner_copy.is_file()
-        and sha256(input_copy) == input_record["sha256"]
+        and sha256(fact_copy) == run["fact_sheet"]["sha256"]
         and sha256(planner_copy) == run["planner_prompt"]["sha256"]
     )
     add(1, "Input files and hashes", inputs_match)
@@ -135,12 +128,12 @@ def run_checks(run_dir: Path) -> list[Check]:
     combined_cut += skipped_atoms
     add(
         4,
-        "Every claim appears in exactly one cut destination",
+        "Every block appears in exactly one cut destination",
         Counter(original_atoms) == Counter(combined_cut),
     )
     add(
         5,
-        "Cut claim count matches input",
+        "Cut block count matches input",
         len(original_atoms) == len(combined_cut),
         f"input={len(original_atoms)}, cut={len(combined_cut)}",
     )
@@ -164,7 +157,7 @@ def run_checks(run_dir: Path) -> list[Check]:
     piece_counter = Counter(atom for values in piece_atoms.values() for atom in values)
     add(
         10,
-        "Every bucket claim is an exact piece claim",
+        "Every bucket block is an exact piece block",
         all(piece_counter[block] > 0 for _, block in routed_entries + unrouted),
     )
     expected_keys = _route_keys(piece_atoms)
@@ -174,13 +167,13 @@ def run_checks(run_dir: Path) -> list[Check]:
     }
     add(
         11,
-        "Every routed claim reached a bucket or unrouted",
+        "Every routed-piece fact reached a bucket or unrouted",
         expected_keys <= actual_keys,
         f"missing={len(expected_keys - actual_keys)}",
     )
     add(
         12,
-        "Every unrouted claim has a reason",
+        "Every unrouted fact has a reason",
         all(meta.get("reason", "").strip() for meta, _ in unrouted),
         f"unrouted={len(unrouted)}",
     )
@@ -200,28 +193,16 @@ def run_checks(run_dir: Path) -> list[Check]:
     for name, mission in missions.items():
         blocks = [block for _, block in bucket_map[name]]
         context = mission.get("context", [])
-        if mode == "claims":
-            expected_context = [context_from_claim_block(block) for block in blocks]
-            exact &= all(item in expected_context for item in context)
-            locators &= all(
-                input_claims.get(item.get("input_pointer")) == item.get("claim")
-                for item in context
-            )
-        else:
-            exact &= all(any(str(item.get("fact", "")) in block for block in blocks) for item in context)
-            locators &= all(bool(item.get("where")) and str(item["where"]) in original_text for item in context)
+        exact &= all(any(str(item.get("fact", "")) in block for block in blocks) for item in context)
         counts &= len(context) == len(blocks)
         nonempty &= bool(str(mission.get("mission", "")).strip())
-        silence_text = str(mission.get("mission", "")).casefold()
-        silent &= bool(context) or any(
-            phrase in silence_text
-            for phrase in ("json input is silent", "fact sheet is silent")
-        )
-    add(15, "Every mission claim is exact bucket data", len(missions) == 14 and exact)
+        silent &= bool(context) or "fact sheet is silent" in str(mission.get("mission", "")).casefold()
+        locators &= all(bool(item.get("where")) and str(item["where"]) in original_text for item in context)
+    add(15, "Every mission fact is exact bucket text", len(missions) == 14 and exact)
     add(16, "Mission context counts equal bucket counts", len(missions) == 14 and counts)
     add(17, "Every mission is non-empty", len(missions) == 14 and nonempty)
-    add(18, "Every empty context says the input is silent", len(missions) == 14 and silent)
-    add(19, "Every context pointer resolves in the JSON input", len(missions) == 14 and locators)
+    add(18, "Every empty context says the fact sheet is silent", len(missions) == 14 and silent)
+    add(19, "Every context locator resolves in the fact sheet", len(missions) == 14 and locators)
 
     routed_keys = {
         (meta.get("piece_id"), meta.get("sha256"), int(meta.get("occurrence", 1)))
@@ -234,8 +215,7 @@ def run_checks(run_dir: Path) -> list[Check]:
     )
     passed = sum(ok for _, _, ok, _ in checks)
     run["finished_at"] = now_iso()
-    count_key = "claims" if mode == "claims" else "facts"
-    run[count_key] = {"routed": len(expected_keys & routed_keys), "set_aside": len(skipped_atoms), "unrouted": len(unrouted)}
+    run["facts"] = {"routed": len(expected_keys & routed_keys), "set_aside": len(skipped_atoms), "unrouted": len(unrouted)}
     run["buckets"] = bucket_counts
     run["checks"] = {"run": 19, "passed": passed, "failed": 19 - passed}
     run["status"] = "complete" if passed == 19 else "failed"

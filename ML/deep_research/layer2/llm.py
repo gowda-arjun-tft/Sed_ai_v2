@@ -40,13 +40,13 @@ def create_routing_agent(
     from langchain.agents.middleware import TodoListMiddleware
 
     configure_deepagents()
-    prompt = f"""You allocate property claim blocks to research agents. Do no research and make no findings.
+    prompt = f"""You allocate property fact blocks to research agents. Do no research and make no findings.
 
 {planner_text}
 
-For the one piece in each user message, call append_to_bucket for every complete claim block and
+For the one piece in each user message, call append_to_bucket for every complete fact block and
 every agent whose subject it touches. Use _unrouted only when no roster agent needs it. Copy each
-claim block exactly. Then call mark_piece_done. Do not finish before mark_piece_done succeeds.
+fact block exactly. Then call mark_piece_done. Do not finish before mark_piece_done succeeds.
 """
     return create_deep_agent(
         model=MODEL_SPEC,

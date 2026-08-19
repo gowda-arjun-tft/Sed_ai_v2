@@ -17,11 +17,11 @@ def build_routing_tools(
 
     @tool(parse_docstring=True)
     def append_to_bucket(agent_name: str, fact_block: str, reason: str) -> str:
-        """Append one complete claim block to one agent bucket.
+        """Append one complete fact block to one agent bucket.
 
         Args:
             agent_name: One exact roster name, or _unrouted when no agent needs the fact.
-            fact_block: The complete ### claim block copied character for character from the piece.
+            fact_block: The complete ### block copied character for character from the piece.
             reason: One short line explaining the routing decision.
         """
         if agent_name not in name_to_file:

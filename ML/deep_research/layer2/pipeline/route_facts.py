@@ -62,7 +62,7 @@ def route_facts(run_dir: Path) -> None:
                         "role": "user",
                         "content": (
                             f"Route piece {row['piece_id']}. It contains "
-                            f"{len(current_facts)} claim blocks.\n\n{body}"
+                            f"{len(current_facts)} fact blocks.\n\n{body}"
                         ),
                     }
                 ]

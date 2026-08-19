@@ -57,7 +57,7 @@ def piece_body(path: Path) -> str:
 
 
 def atoms(text: str, mode: str) -> list[str]:
-    return fact_blocks(text) if mode in {"facts", "claims"} else [section.raw for section in split_sections(text)]
+    return fact_blocks(text) if mode == "facts" else [section.raw for section in split_sections(text)]
 
 
 def field_value(block: str, name: str) -> str:

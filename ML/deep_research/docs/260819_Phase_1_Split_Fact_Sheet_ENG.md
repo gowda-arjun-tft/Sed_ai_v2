@@ -1,75 +1,67 @@
-# Phase 1 — split JSON claims into pieces
+# Phase 1 — cutting the fact sheet into pieces
 
 No model. Ordinary code.
 
 ```text
-Input     runs/<run_id>/inputs/claims.json
-Happens   complete claim objects are grouped into bounded pieces
-Output    runs/<run_id>/pieces/pNNN_claims.md
+Input     runs/<run_id>/inputs/fact_sheet.md
+Happens   every retained ## section becomes exactly one piece
+Output    runs/<run_id>/pieces/pNNN_<slug>.md
           runs/<run_id>/progress.csv
 ```
 
-## Accepted JSON contract
+## Input contract
 
-The external input is JSON-only. It may be either:
+The fact sheet is non-empty Markdown with at least one `##` section. Structured sheets use `###`
+fact blocks:
 
-```json
-[
-  {"claim_type": "annual_rent", "amount": 100000}
-]
+```markdown
+## Identity, title and land
+
+### Land-register reference
+
+**Evidence:** "Bad Homburg v.d.Höhe Gonzenheim 2967"
+**Source:** `register.pdf` — locator `p1`.
+**Interpretation:** The property is registered on sheet 2967.
 ```
 
-or:
+The complete `###` block is the atom. Evidence, source locator, and interpretation must remain
+together. If the sheet contains no `###` facts, complete `##` sections become the atoms and the
+run records `split_mode: sections`.
 
-```json
-{
-  "claims": [
-    {"claim_type": "annual_rent", "amount": 100000}
-  ]
-}
-```
+## Sections set aside
 
-Every claim must be a non-empty JSON object. Claim field names are deliberately unrestricted;
-Layer 2 preserves the complete object instead of guessing which keys mean evidence, source, or
-interpretation. Empty inputs, scalar claims, invalid JSON, and Markdown inputs stop before a run
-is created.
+These sections are not property facts and are stored under `pieces/_skipped/` with their reason:
 
-## Internal claim blocks
+| Section | Reason |
+|---|---|
+| Not covered | Lists gaps rather than property facts |
+| Audit appendix | Run bookkeeping |
+| How to read this document | Reader instructions |
+| Coverage at a glance | Coverage counts |
+| Reader note | Reader instructions |
+| Executive readout | Summary duplicated from full fact sections |
 
-Each object becomes a deterministic block containing the complete JSON value and its input JSON
-pointer:
-
-````markdown
-### Claim 001
-
-**JSON Pointer:** `/claims/0`
-
-```json
-{
-  "claim_type": "annual_rent",
-  "amount": 100000
-}
-```
-````
-
-These Markdown files are internal agent artifacts, not an input dependency. They give the model a
-clear claim boundary while the JSON object remains the source of truth.
+The executive readout is routed when it contains evidence not present elsewhere. Set-aside
+content is never discarded and remains part of the lossless-cut check.
 
 ## Splitting rule
 
-Claims stay in input order. The splitter groups complete blocks until the next block would exceed
-the soft 8,000-token target, then starts another piece. A single oversized claim remains intact;
-claims are never truncated or divided.
+1. Every retained `##` section becomes exactly one piece.
+2. Never combine two sections, even when both are small.
+3. Never split one section, even when it is large.
+4. Preserve every complete `###` fact block and the parent `##` heading.
+5. Record an estimated token count only as metadata; it never controls a boundary.
 
-Each piece begins with `## Claims` and a metadata comment carrying its piece id, part number, and
-estimated size. `progress.csv` records the exact number of claims in every piece.
+Each piece begins with a metadata comment containing its `pNNN` identity, source section, part
+number, and estimated token count. `progress.csv` records the number of facts and starts every row
+as `pending`.
 
 ## Gate before phase 2
 
-1. Every input claim appears in exactly one piece.
-2. Every key and value survives JSON serialization unchanged.
+1. Every input atom appears in exactly one piece or set-aside file.
+2. Piece and set-aside counts equal the original count.
 3. No piece is empty.
-4. Every piece carries its `## Claims` parent heading.
+4. Every piece carries a parent `##` heading.
 
-The lossless comparison is deterministic and model-free. Phase 2 cannot start if any claim is
-missing, duplicated by the cut, or altered.
+The comparison is deterministic and model-free. Phase 2 cannot start if any fact was lost,
+duplicated by the section cut, or altered.

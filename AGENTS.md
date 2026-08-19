@@ -5,7 +5,7 @@
 `ML/deep_research/layer2/` holds the application code. The five pipeline steps are in `ML/deep_research/layer2/pipeline/`, one
 file per step, named for what the step does. Shared code sits directly in `ML/deep_research/layer2/`: `settings.py`
 (constants and the frozen agent roster), `fs.py` (paths, hashing, atomic writes), `factsheet.py`
-(legacy run parsing), `claims.py` (JSON validation and claim preservation), `planner.py` (loading and validating the roster), `progress.py` (the
+(parsing the fact sheet), `planner.py` (loading and validating the roster), `progress.py` (the
 resume ledger), `routing_tools.py` (the two Deep Agents tools) and `llm.py` (model wiring). The
 single planner prompt is `ML/deep_research/layer2/prompts/planner_prompt.md`. `run.ps1` bootstraps and starts or
 resumes a run. Specifications are in `ML/deep_research/docs/`. Offline tests are grouped by behaviour in `tests/`, outside `ML/` so they can cover every component as the repository grows.
@@ -13,10 +13,10 @@ Generated `runs/`, caches and `.env` are local-only and ignored.
 
 ## Build, Test, and Development Commands
 
-Run a claims JSON file from PowerShell:
+Run a fact sheet from PowerShell:
 
 ```powershell
-.\run.ps1 -InputJson 'C:\full\path\to\claims.json'
+.\run.ps1 -FactSheet 'C:\full\path\to\fact_sheet.md'
 ```
 
 Resume an interrupted run without duplicating completed work:
@@ -41,11 +41,11 @@ Executable source files must not exceed 350 lines; aim to split them once they a
 
 ## Testing Guidelines
 
-Tests use `unittest` and must remain model-free. Add one focused regression test for every non-trivial branch, parser change, resume rule, or validation change. Preserve complete claim objects and their JSON pointers without assuming claim field names. A deliverable is valid only when `check_report.md` records `19 passed · 0 failed`.
+Tests use `unittest` and must remain model-free. Add one focused regression test for every non-trivial branch, parser change, resume rule, or validation change. Preserve exact-string checks for fact blocks, evidence, and source locators. A deliverable is valid only when `check_report.md` records `19 passed · 0 failed`.
 
 ## Commit & Pull Request Guidelines
 
-This folder currently has no Git history, so no existing convention can be inferred. Use short imperative commits such as `Preserve nested claim values`. Pull requests should describe affected phases, include the test command and result, and call out any change to mission schemas, agent names, model settings, or resume behavior. Screenshots are unnecessary unless output presentation changes.
+Use short imperative commits such as `Fix section-boundary splitting`. Pull requests should describe affected phases, include the test command and result, and call out any change to mission schemas, agent names, model settings, or resume behavior. Screenshots are unnecessary unless output presentation changes.
 
 ## Security & Configuration
 

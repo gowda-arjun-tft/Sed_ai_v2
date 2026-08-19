@@ -26,12 +26,12 @@ It also means the fourteen calls are independent. If one fails, it is re-run on 
 
 ```
 the agent definition        name, establishes, do_not_cover, take_as_given
-the bucket                  every claim routed to this agent, in the order it arrived
+the bucket                  every fact routed to this agent, in the order it arrived
 the mission schema          the required shape of the output
 ```
 
 The bucket for a busy agent may be large. This is acceptable: one bucket is a fraction of the
-JSON input, and the claims in it are already on one subject, which is the easiest case for a model
+fact sheet, and the facts in it are already on one subject, which is the easiest case for a model
 to reason about.
 
 If a bucket is genuinely too large, split the call: write the `context` array from the bucket in
@@ -45,7 +45,7 @@ present. The `mission` field does not need every fact in view to be written well
   "agent": "Building condition, capital expenditure & warranty",
   "mission": "…plain prose…",
   "context": [
-    { "claim": {"any": "key-value data"}, "input_pointer": "/claims/0" }
+    { "section": "…", "fact": "…", "means": "…", "where": "…" }
   ]
 }
 ```
@@ -54,15 +54,15 @@ Three fields. The shape is fixed by the design document.
 
 ### The `context` array is a transcription, not a judgement
 
-Every claim in the bucket becomes one `context` entry. `claim` is the complete input object and
-`input_pointer` identifies its position in the copied JSON. No field names are assumed.
+Every fact in the bucket becomes one `context` entry. The four fields come from the `###` block:
+its heading, evidence, interpretation, and source locator.
 
 **Nothing is selected, ranked, dropped or shortened here.** The list has no maximum length. If the
-bucket holds ninety claims, the mission holds ninety entries. All the choosing already happened in
+bucket holds ninety facts, the mission holds ninety entries. All the choosing already happened in
 phase 2.
 
-Because it is transcription, it can be checked exactly: every `claim` object must equal the object
-at its JSON pointer and appear in the bucket. See phase 4.
+Because it is transcription, it can be checked exactly: every `fact` value must appear character
+for character in the bucket. See phase 4.
 
 ### The `mission` field is the judgement
 
@@ -93,7 +93,7 @@ The mission for an empty bucket says so plainly:
 ```json
 {
   "agent": "Geopolitical, trade & supply chain",
-  "mission": "The JSON input is silent on this subject. Establish the position
+  "mission": "The fact sheet is silent on this subject. Establish the position
               from public sources, and state plainly that the property's documents did not
               address it. …",
   "context": []
@@ -101,7 +101,7 @@ The mission for an empty bucket says so plainly:
 ```
 
 The design document already requires this: a mission must have a non-empty `mission` and either a
-`context` entry or an explicit statement that the JSON input is silent.
+`context` entry or an explicit statement that the fact sheet is silent.
 
 ## Should the fourteen calls run in parallel?
 
@@ -123,10 +123,10 @@ mission text — a subagent returning raw data defeats the isolation it exists f
 
 1. Fourteen mission files exist, one per agent name.
 2. Every `agent` value is one of the fourteen frozen names, character for character.
-3. Every `context[].claim` exactly equals a claim in that agent's bucket.
-4. The number of `context` entries equals the number of claims in the bucket.
+3. Every `context[].fact` appears character for character in that agent's bucket.
+4. The number of `context` entries equals the number of facts in the bucket.
 5. Every mission has a non-empty `mission` field.
-6. A mission with an empty `context` says in its `mission` field that the JSON input is silent on
+6. A mission with an empty `context` says in its `mission` field that the fact sheet is silent on
    the subject.
 
 Checks 3 and 4 together are what prove the transcription lost nothing and invented nothing.

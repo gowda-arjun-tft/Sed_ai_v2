@@ -5,9 +5,6 @@ MODEL_SPEC = "openai:gpt-5.6-luna"
 MODEL_NAME = "gpt-5.6-luna"
 REASONING_EFFORT = "high"
 DEEPAGENTS_VERSION = "0.7.7"
-TARGET_TOKENS = 8_000
-SMALL_SECTION_TOKENS = 400
-
 MODULE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = MODULE_DIR.parents[2]
 PLANNER_PATH = MODULE_DIR / "prompts" / "planner_prompt.md"

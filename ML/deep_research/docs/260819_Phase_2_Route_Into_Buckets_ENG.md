@@ -22,8 +22,8 @@ read progress.csv, find the first piece still "pending"
 read that piece                             read_file, built in
         │
         ▼
-for each ### claim block in it:
-    which of the fourteen agents needs this claim?
+for each ### block in it:
+    which of the fourteen agents needs this fact?
     append it to each of their buckets      append_to_bucket, custom
         │
         ▼
@@ -32,10 +32,10 @@ mark the piece done, with a count           mark_piece_done, custom
         └──► next pending piece, until none remain
 ```
 
-The agent holds **one piece plus the fourteen definitions**. It never holds the whole JSON input, and
+The agent holds **one piece plus the fourteen definitions**. It never holds the fact sheet, and
 never holds a bucket. The buckets grow on disk.
 
-## A claim may go to several buckets
+## A fact may go to several buckets
 
 This is the point of the design, not an edge case.
 
@@ -44,16 +44,16 @@ The garage award — *"Angebotssumme gesamt: 702.668,06 EUR (netto)"* — belong
 **Occupier, lease & income** because whether it is recoverable from the tenant decides who pays,
 and to **Market, valuation & exit** because it bears on the valuation.
 
-All three get the same claim, copied exactly, with the same JSON pointer. Each will draw its own
+All three get the same fact, copied exactly, with the same locator. Each will draw its own
 conclusion inside its own subject.
 
 **Every routing step sees all fourteen definitions**, which is what makes this possible. This is
-how the design's original requirement — that a claim belonging to two agents must be visible as
-such — is met without sending the whole JSON input in one request.
+how the design's original requirement — that a fact belonging to two agents must be visible as
+such — is met without sending the whole fact sheet in one request.
 
-## A claim may go to no bucket
+## A fact may go to no bucket
 
-Some claims belong to no agent. That is a real answer, and it is recorded rather than passed over
+Some facts belong to no agent. That is a real answer, and it is recorded rather than passed over
 in silence: the agent appends it to `buckets/_unrouted.md` with one line on why.
 
 Phase 4 reads that file. A handful of entries is normal. A large number means either the roster
@@ -67,11 +67,11 @@ are started.
 ```python
 @tool(parse_docstring=True)
 def append_to_bucket(agent_name: str, fact_block: str, reason: str) -> str:
-    """Append one claim to one agent's bucket.
+    """Append one fact to one agent's bucket.
 
     Args:
         agent_name: Exactly one of the fourteen agent names. Any other value is rejected.
-        fact_block: The complete ### claim block, copied character for character from the piece.
+        fact_block: The complete ### block, copied character for character from the piece.
         reason: One short line on why this agent needs it.
     """
 ```
@@ -97,7 +97,7 @@ def mark_piece_done(piece_id: str, facts_routed: int, facts_unrouted: int) -> st
 
     Args:
         piece_id: The piece id, e.g. "p003".
-        facts_routed: How many claim blocks from this piece went to at least one bucket.
+        facts_routed: How many ### blocks from this piece went to at least one bucket.
         facts_unrouted: How many went to none.
     """
 ```
@@ -112,10 +112,10 @@ What is written here is all there is.
 
 It contains:
 
-- **the role** — you are allocating claims to fourteen research agents
+- **the role** — you are allocating facts to fourteen research agents
 - **the fourteen definitions**, verbatim from `planner_prompt.md`: name, `establishes`,
   `do_not_cover`, `take_as_given`
-- **the work loop** — read the next pending piece, route every claim in it, mark it done
+- **the work loop** — read the next pending piece, route every fact in it, mark it done
 - **the routing rules**, below
 - **the output rule** — you produce nothing but tool calls in this phase
 
@@ -125,13 +125,13 @@ once and does not repeat what the schemas already say.
 
 ### The routing rules
 
-1. **Copy the claim block exactly.** Its complete JSON object and pointer go across character for
-   character. Nothing is summarised, shortened or reworded on the way into a bucket.
-2. **Send a claim to every agent whose subject it touches.** Not the single best fit.
+1. **Copy the fact exactly.** The evidence, source, locator and interpretation go across character
+   for character. Nothing is summarised, shortened or reworded on the way into a bucket.
+2. **Send a fact to every agent whose subject it touches.** Not the single best fit.
 3. **Use `do_not_cover` to decide.** If a definition says a subject belongs to another agent, the
    fact goes to that other agent, not this one.
-4. **A claim that belongs to nobody goes to `_unrouted.md`,** with a reason.
-5. **Never invent a claim, and never merge two.** One `###` block in, the same block out.
+4. **A fact that belongs to nobody goes to `_unrouted.md`,** with a reason.
+5. **Never invent a fact, and never merge two.** One `###` block in, the same block out.
 6. **Route every block in the piece before marking it done.** The count in `mark_piece_done` must
    equal the number of blocks in the piece.
 

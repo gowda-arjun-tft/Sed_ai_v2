@@ -44,9 +44,9 @@ def run_all(run_dir: Path) -> list[Check]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Turn one JSON claims file into fourteen checked research missions."
+        description="Turn one CDI fact sheet into fourteen checked research missions."
     )
-    parser.add_argument("claims_json", nargs="?", type=Path)
+    parser.add_argument("fact_sheet", nargs="?", type=Path)
     parser.add_argument(
         "--resume",
         type=Path,
@@ -67,9 +67,9 @@ def main(argv: list[str] | None = None) -> int:
         if not (run_dir / "run.json").is_file():
             parser.error("--resume must point to a CDI run folder")
     else:
-        if not args.claims_json:
-            parser.error("provide a claims.json path or --resume")
-        run_dir = create_run(args.claims_json, PLANNER_PATH, RUNS_DIR)
+        if not args.fact_sheet:
+            parser.error("provide a fact_sheet.md path or --resume")
+        run_dir = create_run(args.fact_sheet, PLANNER_PATH, RUNS_DIR)
         print(f"Created {run_dir}", flush=True)
     checks = run_all(run_dir)
     passed = sum(ok for _, _, ok, _ in checks)
