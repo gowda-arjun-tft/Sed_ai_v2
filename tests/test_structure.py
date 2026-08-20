@@ -3,6 +3,7 @@ import pkgutil
 import unittest
 
 import ML.deep_research.layer2 as layer2
+import ML.deep_research.layer3 as layer3
 from ML.deep_research.layer2.settings import PLANNER_PATH, REPO_ROOT
 
 
@@ -12,9 +13,10 @@ class StructureTests(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "planner_prompt.md").exists())
 
     def test_all_package_modules_import_without_model_calls(self):
-        prefix = f"{layer2.__name__}."
-        for module in pkgutil.walk_packages(layer2.__path__, prefix):
-            importlib.import_module(module.name)
+        for package in (layer2, layer3):
+            prefix = f"{package.__name__}."
+            for module in pkgutil.walk_packages(package.__path__, prefix):
+                importlib.import_module(module.name)
 
     def test_executable_source_files_do_not_exceed_350_lines(self):
         violations = []

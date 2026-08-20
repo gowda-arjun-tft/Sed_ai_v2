@@ -97,3 +97,21 @@ def create_complete_run(root: Path) -> Path:
         mission_path = run_dir / "missions" / f"{slug(name)}.json"
         mission_path.write_text(json.dumps(mission), encoding="utf-8")
     return run_dir
+
+
+def create_complete_l3_run(root: Path) -> Path:
+    import asyncio
+
+    from ML.deep_research.layer2.pipeline.run_checks import run_checks as run_l2_checks
+    from ML.deep_research.layer3.cli import run_all
+    from ML.deep_research.layer3.pipeline.create_run import create_run as create_l3_run
+
+    l2_run = create_complete_run(root)
+    assert sum(ok for _, _, ok, _ in run_l2_checks(l2_run)) == 19
+    fixtures = root / "fixtures"
+    (fixtures / "queries").mkdir(parents=True)
+    (fixtures / "pages").mkdir()
+    l3_run = create_l3_run(l2_run, root / "runs", fixture_root=fixtures)
+    checks = asyncio.run(run_all(l3_run))
+    assert sum(ok for _, _, ok, _ in checks) == len(checks)
+    return l3_run

@@ -1,73 +1,80 @@
-# CDI Layer 2
+# CDI Deep Research
 
-Turns one real-estate `fact_sheet.md` into fourteen checked research missions, following every
-step in `docs/`.
+CDI turns one structured real-estate fact sheet into checked research missions and then into
+evidence-backed subject reports. Python runs through the `compute` Conda interpreter at
+`C:\src\anaconda3\envs\compute\python.exe`.
 
-`ML/deep_research/layer2/` holds the application code. The five pipeline steps are in `ML/deep_research/layer2/pipeline/`, one
-file per step, named for what the step does. Shared code sits directly in `ML/deep_research/layer2/`: `settings.py`
-(constants and the frozen agent roster), `fs.py` (paths, hashing, atomic writes), `factsheet.py`
-(parsing the fact sheet), `planner.py` (loading and validating the roster), `progress.py` (the
-resume ledger), `routing_tools.py` (the two Deep Agents tools) and `llm.py` (model wiring). The
-single planner prompt is `ML/deep_research/layer2/prompts/planner_prompt.md`. `run.ps1` bootstraps and starts or
-resumes a run. Specifications are in `ML/deep_research/docs/`. Offline tests are grouped by behaviour in `tests/`, outside `ML/` so they can cover every component as the repository grows.
-Generated `runs/`, caches and `.env` are local-only and ignored.
+## Structure
 
-| Step | File | What it does |
-|---|---|---|
-| 0 | `pipeline/create_run.py` | creates the run folder, copies and hashes both inputs |
-| 1 | `pipeline/split_fact_sheet.py` | writes one piece per retained `##` section |
-| 2 | `pipeline/route_facts.py` | routes every fact into one or more of the fourteen buckets |
-| 3 | `pipeline/write_missions.py` | turns each bucket into one mission file |
-| 4 | `pipeline/run_checks.py` | runs the nineteen checks and writes the record |
+- `ML/deep_research/layer2/` converts `fact_sheet.md` into fourteen mission JSON files. It never
+  accesses the web and is complete only at `19 passed · 0 failed`.
+- `ML/deep_research/layer3/` runs five independent research lenses per mission, writes unattributed
+  questions, performs question-only second rounds, optionally adds one sixth lens, and produces
+  fourteen answers. It is complete only at `24 passed · 0 failed`.
+- `ML/deep_research/docs/` contains the Layer 2 phase specifications.
+- `tests/` contains model-free unit and end-to-end fixture tests.
 
-## Run
+Generated `runs/`, `.env`, caches, sources, and checkpoint databases remain local and are ignored.
 
-1. Open `.env` and set:
-
-   ```text
-   OPENAI_API_KEY=your-key
-   ```
-
-2. Install the pinned dependencies into the `compute` Conda environment:
-
-   ```powershell
-   & 'C:\src\anaconda3\envs\compute\python.exe' -m pip install -r requirements.txt
-   ```
-
-3. Run:
-
-   ```powershell
-   .\run.ps1 -FactSheet 'C:\full\path\to\fact_sheet.md'
-   ```
-
-The launcher and VS Code use `C:\src\anaconda3\envs\compute\python.exe`. The model is fixed in
-code to `gpt-5.6-luna` with `reasoning_effort="high"`; it is intentionally not an `.env` setting.
-
-Each completed run is self-contained under `runs/L2_YYYYMMDD_xxxx/`. The deliverables are the
-fourteen files in `missions/`; `check_report.md` must say `19 passed · 0 failed` before they are
-used.
-
-## Resume
-
-If a model/network call stops, keep the run folder and resume it:
+## Setup
 
 ```powershell
+& 'C:\src\anaconda3\envs\compute\python.exe' -m pip install -r requirements.txt
+```
+
+Set only the API key in `.env`:
+
+```text
+OPENAI_API_KEY=your-key
+```
+
+The model is fixed in code to `gpt-5.6-luna` with high reasoning effort. Layer 3 uses Deep Agents
+0.7.7 with thread-scoped SQLite checkpoints; it intentionally has no cross-property memory,
+subagents, host shell, or model-writable run directory.
+
+## Layer 2
+
+```powershell
+.\run.ps1 -FactSheet 'C:\full\path\to\fact_sheet.md'
 .\run.ps1 -Resume '.\runs\L2_YYYYMMDD_xxxx'
 ```
 
-Completed pieces and missions are skipped. Bucket appends are idempotent, so retrying an
-incomplete piece does not duplicate facts.
+Layer 2 splits only on Markdown `##` sections, routes exact fact blocks, writes fourteen missions,
+and preserves the existing nineteen deterministic checks.
 
-## Offline check
+## Layer 3
 
-No API call is made by the tests:
+Run the whole six-phase pipeline offline. Fixture mode makes no model or web API calls:
+
+```powershell
+.\run.ps1 -Research '.\runs\L2_YYYYMMDD_xxxx' -Fixtures '.\tests\fixtures\web'
+```
+
+Enable live research only for public or invented input:
+
+```powershell
+.\run.ps1 -Research '.\runs\L2_YYYYMMDD_xxxx' -Online -PublicInputConfirmed
+```
+
+Resume an interrupted run, or explicitly retry failed sessions and dependent aggregation:
+
+```powershell
+.\run.ps1 -ResumeL3 '.\runs\L3_YYYYMMDD_xxxx'
+.\run.ps1 -ResumeL3 '.\runs\L3_YYYYMMDD_xxxx' -RetryFailed
+```
+
+Layer 3 retains raw page bytes, canonical text, hashes, exact-quote citations, query decisions,
+usage, stable thread IDs, and an 84+ row register. Binary/PDF sources are retained but cannot
+support claims until deterministic PDF extraction is added.
+
+## Validation
 
 ```powershell
 & 'C:\src\anaconda3\envs\compute\python.exe' -m unittest discover -s tests -v
+& 'C:\src\anaconda3\envs\compute\python.exe' -m compileall -q ML tests
+& 'C:\src\anaconda3\envs\compute\python.exe' -m pip check
 ```
 
-Phase 0 copies and hashes both inputs. Phase 1 splits only at Markdown `##` section boundaries. Phase 2
-routes facts with a Deep Agents harness and two validated append/progress tools. Phase 3 uses the
-same configured OpenAI model to write mission prose; exact context transcription is ordinary code.
-Phase 4 runs the specified nineteen deterministic checks and writes the final record. An offline
-structure test also rejects any executable source file longer than 350 lines.
+The suite makes no model calls. It covers both complete check reports, citation verification,
+egress rejection, private-host rejection, idempotent logs, checkpoint construction, second-round
+byte preservation, and the 350-line executable-source limit.

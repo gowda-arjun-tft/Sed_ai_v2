@@ -13,10 +13,23 @@ def now_iso() -> str:
 
 
 def slug(text: str) -> str:
+    """Filename-safe identifier that survives every writing system.
+
+    Latin scripts fold to their unaccented form, so ``Bauträger`` becomes
+    ``bautrager`` and ``Marché`` becomes ``marche``. Scripts with no Latin form
+    keep a stable hashed identifier instead of collapsing to an empty string.
+    Pure ASCII input is returned unchanged.
+    """
     import re
+    import unicodedata
 
     value = text.casefold().replace("&", " and ")
-    return re.sub(r"[^a-z0-9]+", "-", value).strip("-")
+    decomposed = unicodedata.normalize("NFKD", value)
+    folded = "".join(item for item in decomposed if not unicodedata.combining(item))
+    result = re.sub(r"[^a-z0-9]+", "-", folded).strip("-")
+    if result:
+        return result
+    return f"x-{text_hash(text)[:12]}" if text.strip() else ""
 
 
 def sha256(path: Path) -> str:

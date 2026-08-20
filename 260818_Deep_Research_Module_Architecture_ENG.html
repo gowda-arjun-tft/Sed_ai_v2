@@ -219,18 +219,17 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
     <div class="grplabel">Layer 3 · research</div>
     <a href="#s8"><span class="n">8</span>Five researchers</a>
     <a href="#s9"><span class="n">9</span>The five lenses</a>
-    <a href="#s10"><span class="n">10</span>Reading a document</a>
-    <a href="#s11"><span class="n">11</span>The second round</a>
-    <a href="#s12"><span class="n">12</span>Where to look</a>
-    <a href="#s13"><span class="n">13</span>How long an answer should be</a>
-    <a href="#s14"><span class="n">14</span>The aggregator</a>
+    <a href="#s10"><span class="n">10</span>The second round</a>
+    <a href="#s11"><span class="n">11</span>Where to look</a>
+    <a href="#s12"><span class="n">12</span>How long an answer should be</a>
+    <a href="#s13"><span class="n">13</span>The aggregator</a>
   </div>
 
   <div class="grp">
     <div class="grplabel">Reference</div>
-    <a href="#s15"><span class="n">15</span>Every model call</a>
-    <a href="#s16"><span class="n">16</span>What comes out</a>
-    <a href="#s17"><span class="n">17</span>Before going online</a>
+    <a href="#s14"><span class="n">14</span>Every model call</a>
+    <a href="#s15"><span class="n">15</span>What comes out</a>
+    <a href="#s16"><span class="n">16</span>Before going online</a>
   </div>
 </nav>
 
@@ -278,8 +277,6 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
   <tr><td><span class="f">aggregator</span></td><td>the step that reads all five researchers and writes one answer</td></tr>
   <tr><td><span class="f">system prompt</span></td><td>the standing instruction that tells one researcher who it is and how to look at the job</td></tr>
   <tr><td><span class="f">locator</span></td><td>file name, page number and document date — how a fact is traced back to where it came from</td></tr>
-  <tr><td><span class="f">Docling</span></td><td>the tool that turns a PDF into text a model can read</td></tr>
-  <tr><td><span class="f">queue</span></td><td>a list of documents a researcher asked for but could not open</td></tr>
   <tr><td><span class="f">register</span></td><td>a table with one row per researcher, recording how it ended</td></tr>
   <tr><td><span class="f">tier</span></td><td>how trustworthy a source is, 1 (official) to 4 (interested party)</td></tr>
   </tbody>
@@ -336,7 +333,7 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
    Fourteen briefs come back in one response and are saved as fourteen files.</p>
 
 <div class="svgwrap">
-<svg viewBox="0 0 880 292" role="img" aria-label="Layer 3: one mission fans to five lenses, then a drain, an aggregator pass that writes questions, a second round, and a final aggregator pass">
+<svg viewBox="0 0 760 292" role="img" aria-label="Layer 3: one mission fans to five lenses, then an aggregator pass that writes questions, a second round, and a final aggregator pass">
   <defs>
     <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
       <path d="M0,1 L7,4.5 L0,8 z" fill="currentColor"/>
@@ -375,41 +372,36 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
       <path d="M272,115 L296,115 L316,115"/>
       <path d="M272,148 L296,148 L296,118 L316,118"/>
       <path d="M272,183 L296,183 L296,121 L316,121"/>
-      <path d="M430,115 L456,115"/>
-      <path d="M596,115 L622,115"/>
-      <path d="M760,115 L786,115"/>
+      <path d="M454,115 L482,115"/>
+      <path d="M618,115 L646,115"/>
     </g>
 
-    <rect x="318" y="90" width="110" height="50" rx="7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"/>
-    <text x="328" y="110" font-size="10">DRAIN</text>
-    <text x="328" y="126" font-size="9.5" fill="#6B7684">docs → Docling</text>
+    <rect x="318" y="90" width="136" height="50" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
+    <text x="329" y="110" font-size="10.5" font-weight="700">AGGREGATOR · 1</text>
+    <text x="329" y="126" font-size="9.5" fill="#6B7684">writes questions</text>
 
-    <rect x="458" y="90" width="136" height="50" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
-    <text x="469" y="110" font-size="10.5" font-weight="700">AGGREGATOR · 1</text>
-    <text x="469" y="126" font-size="9.5" fill="#6B7684">writes questions</text>
+    <rect x="484" y="90" width="134" height="50" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
+    <text x="495" y="110" font-size="10.5" font-weight="700">AGGREGATOR · 2</text>
+    <text x="495" y="126" font-size="9.5" fill="#6B7684">reads all five again</text>
 
-    <rect x="624" y="90" width="134" height="50" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
-    <text x="635" y="110" font-size="10.5" font-weight="700">AGGREGATOR · 2</text>
-    <text x="635" y="126" font-size="9.5" fill="#6B7684">reads all five again</text>
+    <rect x="648" y="97" width="90" height="36" rx="6" fill="none" stroke="#2F6B4F" stroke-width="1.5"/>
+    <text x="658" y="119" fill="#2F6B4F">answer</text>
 
-    <rect x="788" y="97" width="90" height="36" rx="6" fill="none" stroke="#2F6B4F" stroke-width="1.5"/>
-    <text x="798" y="119" fill="#2F6B4F">answer</text>
-
-    <path d="M526,140 L526,238 L208,238 L208,201" stroke="currentColor" stroke-width="1.2"
+    <path d="M386,140 L386,238 L208,238 L208,201" stroke="currentColor" stroke-width="1.2"
           fill="none" stroke-dasharray="5 3" marker-end="url(#a2)"/>
-    <text x="222" y="256" font-size="10" fill="#6B7684">SECOND ROUND &#8212; its own documents, and the questions raised</text>
+    <text x="222" y="256" font-size="10" fill="#6B7684">SECOND ROUND &#8212; the questions raised</text>
     <text x="222" y="272" font-size="9.5" fill="#9A3B32">questions only. Never another lens&#39;s text, conclusions, or which lens asked</text>
   </g>
 </svg>
 </div>
 <p class="cap">Layer 3, for one brief. Five researchers work at the same time and never read each
-   other. Documents they could not open are converted after all five finish. Questions written by
-   the aggregator go back to the researchers, and only then is the answer written.</p>
+   other. Questions written by the aggregator go back to the researchers, and only then is the
+   answer written.</p>
 
 <pre class="block">per property   <b>1</b> planning request
                <b>70</b> research sessions             <i>14 agents × 5 researchers</i>
                <b>14</b> aggregator pass 1             <i>writes the questions</i>
-               <b>0–70</b> short second rounds         <i>researchers with documents or questions</i>
+               <b>0–70</b> short second rounds         <i>researchers with questions</i>
                <b>14</b> aggregator pass 2             <i>writes the answer</i>
                <b>0–14</b> sixth researchers           <i>added by an aggregator</i></pre>
 
@@ -747,7 +739,7 @@ a section heading   <i>the subject the fact was filed under</i></pre>
                five</i></li>
         <li><span class="f">do_not_cover</span> and <span class="f">take_as_given</span>
             <i>added by the surrounding software</i></li>
-        <li>web search, and the ability to request a document</li>
+        <li>web search</li>
       </ul>
     </div>
     <div class="io-col mid">
@@ -755,7 +747,6 @@ a section heading   <i>the subject the fact was filed under</i></pre>
       <ul>
         <li>one query at a time, each chosen from the previous result</li>
         <li>stops when a round adds no new source</li>
-        <li>documents it cannot open are queued, not waited for</li>
         <li>every source is checked before anything is written</li>
       </ul>
     </div>
@@ -767,7 +758,6 @@ a section heading   <i>the subject the fact was filed under</i></pre>
         <li>every statement cited</li>
         <li>every page read, listed with its date</li>
         <li>what it could not find, and the searches tried</li>
-        <li>the documents it queued, and why</li>
       </ul>
     </div>
   </div>
@@ -838,68 +828,7 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 </div>
 
 <!-- ============ 10 ============ -->
-<h2 id="s10"><span class="num">10</span>Reading a document</h2>
-
-<p>Web search returns pages. Some are readable directly. Some link to a document — a PDF, a Word
-   file, a spreadsheet — that the model cannot read. Docling converts a downloaded document into
-   text. It is the same conversion step already used to read the property's own documents.</p>
-
-<div class="contract">
-  <div class="contract-h"><b>Layer 3 · document conversion</b><span>once per agent</span></div>
-  <div class="io">
-    <div class="io-col">
-      <b>Input</b>
-      <ul>
-        <li>the address of every document a researcher could not open</li>
-        <li>one line per document on why it was wanted</li>
-      </ul>
-    </div>
-    <div class="io-col mid">
-      <b>What happens</b>
-      <ul>
-        <li>runs once, after all five researchers finish</li>
-        <li>each document is downloaded, then converted by Docling</li>
-        <li>no limit on the number of documents</li>
-      </ul>
-    </div>
-    <div class="io-col out">
-      <b>Output</b>
-      <ul>
-        <li>the text of each document, returned to the researcher that asked for it</li>
-        <li>a stored copy in <span class="f">sources/</span></li>
-      </ul>
-    </div>
-  </div>
-</div>
-
-<p>A researcher that meets a document it cannot read records the address and why it wants it, then
-   continues. It does not wait.</p>
-
-<pre class="block">researcher meets a document it cannot read
-        │
-        ▼
-  <b>RECORDS it</b> in the queue, with a note on why      <i>and continues</i>
-        │
-   … all five researchers finish …
-        │
-        ▼
-  <b>CONVERT, once</b>      download ─► Docling ─► text ─► back to whoever asked
-        │
-        ▼
-  that researcher gets <b>one short round</b> to read it and add to its file</pre>
-
-<p><strong>Conversion runs once, after all five researchers finish and before the combining step
-   starts.</strong> Running it earlier would leave researchers waiting on downloads. Running it
-   later would mean the combining step read incomplete files.</p>
-
-<div class="call">
-  <p><b>Scope.</b> Conversion belongs to one agent — an agent's queued documents are converted
-     before that agent's combining step runs. The software may download across several agents at
-     the same time.</p>
-</div>
-
-<!-- ============ 11 ============ -->
-<h2 id="s11"><span class="num">11</span>The second round</h2>
+<h2 id="s10"><span class="num">10</span>The second round</h2>
 
 <p>Researchers work independently and exchange information only through the aggregator, in one
    direction, as questions.</p>
@@ -910,7 +839,6 @@ a section heading   <i>the subject the fact was filed under</i></pre>
     <div class="io-col">
       <b>Input</b>
       <ul>
-        <li>the researcher's own converted documents</li>
         <li><span class="f">questions/&lt;agent&gt;/&lt;lens&gt;.md</span>
             <i>questions raised by the other four, without attribution</i></li>
       </ul>
@@ -919,7 +847,7 @@ a section heading   <i>the subject the fact was filed under</i></pre>
       <b>What happens</b>
       <ul>
         <li>one short round of research on those questions</li>
-        <li>a researcher with no documents and no questions is skipped</li>
+        <li>a researcher with no questions is skipped</li>
       </ul>
     </div>
     <div class="io-col out">
@@ -971,14 +899,14 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 <ul>
   <li>questions carry no attribution — a researcher is never told who raised one</li>
   <li>the aggregator may write no questions for a researcher</li>
-  <li>a researcher with no queued documents and no questions skips the second round</li>
+  <li>a researcher with no questions skips the second round</li>
   <li>a researcher that cannot answer a question says so, naming the searches it tried</li>
   <li>the second round is added below the first and never rewrites it, so what a researcher
       established alone stays separable from what it found after being asked</li>
 </ul>
 
-<!-- ============ 12 ============ -->
-<h2 id="s12"><span class="num">12</span>Where to look</h2>
+<!-- ============ 11 ============ -->
+<h2 id="s11"><span class="num">11</span>Where to look</h2>
 
 <p>Sources are ranked. Every researcher searches tier 1 first, then lower tiers. The tier is
    recorded next to each claim in the researcher's file.</p>
@@ -1011,8 +939,8 @@ a section heading   <i>the subject the fact was filed under</i></pre>
      resting only on a tier 4 source must say so, on the claim itself.</p>
 </div>
 
-<!-- ============ 13 ============ -->
-<h2 id="s13"><span class="num">13</span>How long an answer should be</h2>
+<!-- ============ 12 ============ -->
+<h2 id="s12"><span class="num">12</span>How long an answer should be</h2>
 
 <p>This applies to all five researcher files and to the aggregator's answer. Each must be as short
    as it can be without losing a fact. Long outputs make individual findings harder to find.</p>
@@ -1043,8 +971,8 @@ a section heading   <i>the subject the fact was filed under</i></pre>
      a source because the point is already made. Retrieved facts are not deleted.</p>
 </div>
 
-<!-- ============ 14 ============ -->
-<h2 id="s14"><span class="num">14</span>The aggregator</h2>
+<!-- ============ 13 ============ -->
+<h2 id="s13"><span class="num">13</span>The aggregator</h2>
 
 <p>Two passes over the same five researcher files, once per agent.</p>
 
@@ -1129,8 +1057,8 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 <p>The five researcher files are retained alongside the answer, so the answer can be checked
    against what it was based on.</p>
 
-<!-- ============ 15 ============ -->
-<h2 id="s15"><span class="num">15</span>Every model call</h2>
+<!-- ============ 14 ============ -->
+<h2 id="s14"><span class="num">14</span>Every model call</h2>
 
 <p>What runs, how often, and what each request receives and returns.</p>
 
@@ -1148,7 +1076,7 @@ a section heading   <i>the subject the fact was filed under</i></pre>
       <td>the five researcher files for one agent</td>
       <td>a question list per researcher</td></tr>
   <tr><td><strong>second round</strong></td><td>Layer 3</td><td class="n0">0–70</td>
-      <td>a researcher's converted documents and its question list</td>
+      <td>a researcher's question list</td>
       <td>added to the same markdown file</td></tr>
   <tr><td><strong>aggregator pass 2</strong></td><td>Layer 3</td><td class="n0">14</td>
       <td>the five files again, plus the mission</td>
@@ -1163,8 +1091,8 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 <p>The seventy researcher sessions are the largest cost. Each is a back-and-forth session with
    live retrieval and has no round limit, so the cost per property is not fixed in advance.</p>
 
-<!-- ============ 16 ============ -->
-<h2 id="s16"><span class="num">16</span>What comes out</h2>
+<!-- ============ 15 ============ -->
+<h2 id="s15"><span class="num">15</span>What comes out</h2>
 
 <pre class="block">research/&lt;agent&gt;.md            <i>one answer per agent, in prose</i>
 lenses/&lt;agent&gt;/&lt;lens&gt;.md       <i>the five researcher files, retained</i>
@@ -1199,8 +1127,8 @@ register                       <i>a status table</i></pre>
      from <em>nobody looked</em>.</p>
 </div>
 
-<!-- ============ 17 ============ -->
-<h2 id="s17"><span class="num">17</span>Before going online</h2>
+<!-- ============ 16 ============ -->
+<h2 id="s16"><span class="num">16</span>Before going online</h2>
 
 <p>Layer 3 makes internet requests. Layer 2 makes none. Three rules apply only to the seventy
    researcher sessions.</p>
