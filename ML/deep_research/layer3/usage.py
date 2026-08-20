@@ -4,6 +4,9 @@ import json
 import threading
 from pathlib import Path
 from typing import Any
+from uuid import UUID
+
+from langchain_core.callbacks import BaseCallbackHandler
 
 from ML.deep_research.layer2.fs import read_text, text_hash
 
@@ -25,25 +28,30 @@ def _append(run_dir: Path, record: dict[str, Any]) -> None:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
 
 
-def record_agent_usage(run_dir: Path, session_id: str, role: str, result: dict) -> None:
-    for position, message in enumerate(result.get("messages", [])):
-        usage = getattr(message, "usage_metadata", None)
-        if not usage:
-            continue
-        message_id = getattr(message, "id", "") or text_hash(
-            f"{session_id}:{role}:{position}:{getattr(message, 'content', '')}"
-        )
-        _append(
-            run_dir,
-            {
-                "usage_id": str(message_id),
-                "session_id": session_id,
-                "role": role,
-                "input_tokens": int(usage.get("input_tokens", 0)),
-                "output_tokens": int(usage.get("output_tokens", 0)),
-                "total_tokens": int(usage.get("total_tokens", 0)),
-            },
-        )
+class UsageCallback(BaseCallbackHandler):
+    """Record supervisor and nested subagent calls through one callback path."""
+
+    def __init__(self, run_dir: Path, session_id: str) -> None:
+        self.run_dir = run_dir
+        self.session_id = session_id
+
+    def on_llm_end(self, response: Any, *, run_id: UUID, **_: Any) -> None:
+        for position, generations in enumerate(response.generations):
+            message = getattr(generations[0], "message", None) if generations else None
+            usage = getattr(message, "usage_metadata", None)
+            if not usage:
+                continue
+            _append(
+                self.run_dir,
+                {
+                    "usage_id": f"{run_id}:{position}",
+                    "session_id": self.session_id,
+                    "role": getattr(message, "name", None) or "agent",
+                    "input_tokens": int(usage.get("input_tokens", 0)),
+                    "output_tokens": int(usage.get("output_tokens", 0)),
+                    "total_tokens": int(usage.get("total_tokens", 0)),
+                },
+            )
 
 
 def record_search_usage(run_dir: Path, response: Any) -> None:

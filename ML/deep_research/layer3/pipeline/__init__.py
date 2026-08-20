@@ -1,1 +1,1 @@
-"""The six deterministic Layer 3 pipeline phases."""
+"""Deterministic Layer 3 run creation and validation."""

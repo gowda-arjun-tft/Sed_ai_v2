@@ -101,16 +101,42 @@ cli.write_missions
 |---|---|
 | `configure_provider` | Registers the model profile (high effort, Responses API, `store=False`). Owned here because the registry is global and both layers share `MODEL_SPEC`. |
 | `system_prompt` | `mission_agent.md` with the real run path substituted, then `planner_prompt.md` verbatim. Since deepagents 0.7 this is the *entire* prompt — the harness adds none. |
-| `subagents` | The two helpers the agent may spawn. Each carries its own prompt, because subagents never inherit the parent's. |
+| `subagents` | Two CDI helpers plus an explicit general-purpose helper. Each carries its own prompt, because subagents never inherit the parent's. |
 | `create_mission_agent` | Assembles the harness. Makes no model call — tests inspect it offline. |
 | `mission_request` | The one user turn: *"Read the fact sheet and write the fourteen mission files. Tell me what you wrote and how you checked it."* |
+| `cli.final_message` | Keeps the agent's closing account → `agent_report.md`. |
+| `cli.usage_summary` | Counts the top-level turns, tokens and tool calls → `run.json`. |
 
 **What the agent is given:** the file tools (`read_file`, `write_file`, `ls`, `glob`, `grep`,
 `edit_file`, `delete`), `task` to spawn a helper, and `run_python`. Capabilities, not instructions.
 
-**What it is not given:** any middleware. No model-call ceiling, no tool-call ceiling, no retry
-policy, no tool that validates or rejects what it produces. The only Python restriction in the layer
-is a write-deny on `inputs/`, and that protects a hash Layer 3 verifies.
+**What it is not given:** any ceiling. No model-call limit, no tool-call limit, no retry policy, no
+tool that validates or rejects what it produces.
+
+### Three harness facts
+
+Verified by building the graph and reading it, not from documentation:
+
+- **A third helper is explicit.** Layer 2 declares `general-purpose` so Layer 3's process-wide
+  disabling of the implicit helper cannot change Layer 2 based on import order. The
+  `task` tool offers three, not two. It has the same tools and no idea what a mission file is, which
+  is why `mission_agent.md` names it and says to prefer the two specialists.
+- **No helper can delegate.** `SubAgentMiddleware` attaches to the main agent only, so no subagent
+  has `task`. Delegation is exactly one level deep. Both helper prompts say so plainly.
+- **`middleware=[]` does not mean a bare graph.** The harness always installs its own filesystem,
+  subagent, summarisation and tool-call-repair middleware — those are what make the file tools and
+  `task` exist at all. What the empty list omits is any ceiling of ours.
+
+### Layer 2 is not a sandbox
+
+`run_python` executes model-authored code in a subprocess on the host. That subprocess inherits the
+environment (`OPENAI_API_KEY` included), the host filesystem and host network access, with no
+timeout, output cap or import restriction. The `FilesystemPermission` deny on `inputs/**` constrains
+the built-in file tools only — **it cannot constrain a subprocess.**
+
+The absence of limits is deliberate and was asked for. The consequence is not a limit but a fact
+about authority: Layer 2 does no web research, but nothing stops a snippet from reaching the network.
+Run it only on input you would run any untrusted script against.
 
 The backend is a `CompositeBackend`: `/run/` maps to the real run folder, and everything else stays
 in memory. That matters — it keeps the harness's own artefacts (`/large_tool_results/`,
@@ -133,7 +159,7 @@ run_checks
 | 1 | Both inputs match their recorded hashes |
 | 2 | The planner copy still holds the frozen roster |
 | 3 | Fourteen mission files exist, one per roster name |
-| 4 | Every mission parses and has exactly `agent`, `mission`, `context` |
+| 4 | Every mission parses, has exactly `agent`/`mission`/`context`, and `context` is a list |
 | 5 | Every mission names its own agent |
 | 6 | Every context entry has the four keys and a non-empty `where` |
 | 7 | Fact counts — **printed, never judged. Always passes.** |
@@ -148,6 +174,20 @@ totals and mission totals differ for good reasons and no threshold would be hone
 
 The lossless check the code used to do, the agent now does *during* the run, with Python, against
 both sides on disk — and unlike a code gate it can go and fix what it finds, then check again.
+
+### A crash is not a failed check
+
+`_context_of` exists because the agent authors these files, so `context` can arrive as anything JSON
+allows — `null` for "no facts" is the likeliest. Four such shapes used to raise out of `run_checks`,
+and because the exception happened *before* `check_report.md` was written and `run.json` stamped, the
+run was left with **no report at all** and `status` stuck at `"started"`. That reads as a run that
+never finished rather than one that produced malformed output.
+
+The rule now: a wrong shape is a **failed check**, never a crash. A corrupt `run.json` and a deleted
+fact sheet are handled the same way. Only a *missing* `run.json` still raises, because that is the
+wrong folder being passed, not agent output. `tests/test_layer2_robustness.py` pins all of it.
+
+An empty `context` list still passes — coverage is never gated. That distinction is the whole point.
 
 ---
 
@@ -192,9 +232,22 @@ The one thing the prompt insists on: **no single context holds much more than 20
 source text.**
 
 Not a limit. Nothing truncates and nothing rejects. Attention decays long before a context window
-fills, and past about 85% the harness silently compresses the older half of the conversation into a
-summary — so a fact read early stops existing with no error raised. *Forgetting looks exactly like
-success*, which is why the rule is written down rather than left to be discovered.
+fills, and two harness behaviours then compound it silently. Both numbers were read off the installed
+deepagents 0.7.7 and this model's profile:
+
+| What | When | What it does |
+|---|---|---|
+| Tool-result offload | a single result over **20,000 tokens** | moved to `/large_tool_results/`, replaced by a pointer |
+| Summarisation | conversation reaches **85% of max input — about 892,500 tokens here** | keeps `("fraction", 0.10)`: **the most recent tenth** |
+
+That second row is worth reading twice. It is not "the older half gets compressed" — an earlier
+version of this document and of the prompt said that, and it understated the loss badly. Roughly the
+older **nine tenths** are replaced by a summary, and a fact read early stops existing with no error
+raised. *Forgetting looks exactly like success*, which is why the rule is written down rather than
+left to be discovered.
+
+The 20,000 figure is not arbitrary either: it happens to be exactly the harness's own offload
+threshold, so reading more than that in one call puts a file path in the agent's head, not the text.
 
 ### How the agent uses it
 
@@ -230,6 +283,36 @@ decided:
 This replaced a `progress.csv` the code maintained and the agent could not see. The checkpointer is
 durable in the framework, needs no bookkeeping, and covers reasoning as well as files.
 
+Note what resume does *not* do: it continues the conversation, it does not decide the work is
+finished. Resuming a run that already reports `complete` asks the agent again — usually one cheap
+turn, since the prompt tells it to look at what exists and carry on, but the CLI prints a note first
+so paying for a finished run is never a surprise.
+
+## What a finished run leaves behind
+
+```
+runs/L2_20260820_a1b2/
+    run.json            record: input hashes, model, checks, facts, usage
+    check_report.md     what the code could confirm
+    agent_report.md     what the agent says it did and how it checked itself
+    missions/*.json     the deliverable, fourteen files
+    inputs/             the two byte-identical copies
+    staging/            whatever the agent used, if anything
+    checkpoints.sqlite3 the conversation, for resume
+```
+
+`agent_report.md` and `run.json`'s `usage` block are both recent additions, and both close gaps
+rather than add control:
+
+- **The account.** `mission_request` asks the agent to say how it checked itself, and `write_missions`
+  used to discard the answer. It is the only record of the self-verification — the report counts
+  files and keys and cannot see reasoning.
+- **The cost.** `usage.top_level_model_calls`, `input_tokens`, `output_tokens` and
+  `top_level_tool_calls`. Read the names literally: work inside a `slice-reader` or `mission-writer`
+  runs on its own message list and is **not** counted, so a delegating run really costs more. The
+  undercount is in the field name rather than hidden behind it. Recording is not limiting — nothing
+  reads these numbers to stop or shape anything.
+
 ---
 
 ## Running it
@@ -246,7 +329,23 @@ Exit code is 0 when every check passed, 1 otherwise. Offline tests:
 & 'C:\src\anaconda3\envs\compute\python.exe' -m unittest discover -s tests -v
 ```
 
-`test_layer2_agent.py` builds the graph and inspects it — tool surface, no middleware, both helpers
-carrying their own prompt, the 20k rule present in the prompt. `test_layer2_inputs.py` covers the
-roster, the input checks and the fact count. `test_checks.py` covers the report, including that
-emptying a mission's context still passes. No test calls a model.
+| Test file | Covers |
+|---|---|
+| `test_layer2_agent.py` | Tool surface, no ceiling middleware, both helpers carrying their own prompt, no helper able to delegate, and the prompt's summarisation numbers checked **against the installed package** rather than restated |
+| `test_layer2_inputs.py` | The roster, the input checks, the fact count, `agent_count` derived from the roster |
+| `test_layer2_robustness.py` | Every malformed-context shape fails cleanly; an empty one still passes; `final_message` across provider content shapes; the usage summary |
+| `test_checks.py` | The report, including that emptying a mission's context still passes |
+| `test_layer3_handoff.py` | Layer 3 records what Layer 2 actually reported, and no module restates a check count |
+
+No test calls a model or the public web.
+
+## What only a real run can settle
+
+Everything above was verified offline. Three things cannot be:
+
+1. **Does it measure before reading?** The prompt says to. Whether the agent does it, or reads
+   straight in, is behaviour.
+2. **Does it over-engineer a small sheet?** On the ~16,000-token sheet the one-sitting path is
+   correct. If it stages anyway, the prompt is nudging too hard toward the large-sheet shape.
+3. **What does a run actually cost?** `usage` now records the top-level half of the answer. The
+   subagent half needs a run with delegation to observe at all.

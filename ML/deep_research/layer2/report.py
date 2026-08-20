@@ -71,6 +71,30 @@ def fact_blocks(text: str) -> list[str]:
     ]
 
 
+def _context_of(mission: Any) -> list[Any] | None:
+    """The mission's `context` list, or `None` if it is not a list at all.
+
+    The agent writes these files, so `context` can arrive as anything JSON
+    allows: `null` for "no facts" is the likeliest, but an object or a string are
+    possible too. None of those is the contract -- and none of them may crash the
+    report either.
+
+    That distinction is the whole point of this function. A crash happens
+    *before* `check_report.md` is written and before `run.json` is stamped, so it
+    leaves the run with no record at all and `status` stuck at `"started"` -- the
+    worst possible outcome, because it looks like a run that never finished
+    rather than one that produced malformed output. A wrong shape has to become a
+    **failed check**, which is readable.
+
+    This is not a judgement about content. An empty list is a normal, passing
+    outcome: coverage is never gated here.
+    """
+    if not isinstance(mission, dict):
+        return None
+    context = mission.get("context")
+    return context if isinstance(context, list) else None
+
+
 def run_checks(run_dir: Path) -> list[Check]:
     """Check one run folder, write both artefacts, and return the results.
 
@@ -90,7 +114,20 @@ def run_checks(run_dir: Path) -> list[Check]:
     it is how a run whose report was interrupted is completed without another
     model call.
     """
-    run = load_json(run_dir / "run.json")
+    record_path = run_dir / "run.json"
+    if not record_path.is_file():
+        # Operator error -- the wrong folder was passed. Raising names the
+        # problem; writing a report into an unrelated directory would not.
+        raise FileNotFoundError(f"not a CDI run folder: {run_dir}")
+    try:
+        run = load_json(record_path)
+    except (OSError, ValueError):
+        # The agent can write inside /run/, so a corrupt record is reachable.
+        # Reported as a failed check rather than crashing: the run still gets a
+        # report, and check 1 fails because no hashes can be matched.
+        run = {}
+    if not isinstance(run, dict):
+        run = {}
     fact_copy = run_dir / "inputs" / "fact_sheet.md"
     planner_copy = run_dir / "inputs" / "planner_prompt.md"
     missions = _load_missions(run_dir)
@@ -173,14 +210,16 @@ def _build_checks(
         """Append one check. `detail` is the numbers a human reads after it."""
         checks.append((number, label, bool(ok), detail))
 
-    add(
-        1,
-        "Both inputs are present and match their recorded hashes",
-        fact_copy.is_file()
-        and planner_copy.is_file()
-        and sha256(fact_copy) == run.get("fact_sheet", {}).get("sha256")
-        and sha256(planner_copy) == run.get("planner_prompt", {}).get("sha256"),
-    )
+    try:
+        inputs_ok = (
+            fact_copy.is_file()
+            and planner_copy.is_file()
+            and sha256(fact_copy) == run.get("fact_sheet", {}).get("sha256")
+            and sha256(planner_copy) == run.get("planner_prompt", {}).get("sha256")
+        )
+    except OSError:
+        inputs_ok = False
+    add(1, "Both inputs are present and match their recorded hashes", inputs_ok)
 
     try:
         _, definitions = load_planner(planner_copy)
@@ -195,14 +234,20 @@ def _build_checks(
         len(missions) == len(AGENT_NAMES),
         f"found={len(missions)} of {len(AGENT_NAMES)}",
     )
+    # Resolved once, before any check reads it. `None` here means the agent wrote
+    # a `context` that is not a list, which check 4 reports and check 6 skips.
+    contexts = {name: _context_of(value) for name, value in missions.items()}
+    malformed = sorted(name for name, value in contexts.items() if value is None)
     add(
         4,
-        "Every mission parses and has exactly the three top-level keys",
+        "Every mission parses, has the three top-level keys, and a list context",
         bool(missions)
         and all(
             isinstance(value, dict) and set(value) == MISSION_KEYS
             for value in missions.values()
-        ),
+        )
+        and not malformed,
+        f"malformed={len(malformed)}" + (f" ({malformed[0]}...)" if malformed else ""),
     )
     add(
         5,
@@ -215,10 +260,7 @@ def _build_checks(
     )
 
     entries = [
-        item
-        for value in missions.values()
-        if isinstance(value, dict)
-        for item in value.get("context", [])
+        item for value in contexts.values() if value is not None for item in value
     ]
     add(
         6,
@@ -236,8 +278,13 @@ def _build_checks(
     # three subjects appears three times, so `context_entries` exceeding
     # `sheet` is normal and `distinct_facts` is the closer comparison. Numbers
     # far apart are worth a human's attention; no number here is worth a gate.
-    sheet_blocks = len(fact_blocks(read_text(fact_copy))) if fact_copy.is_file() else 0
-    distinct = len({str(item.get("fact", "")) for item in entries})
+    try:
+        sheet_blocks = len(fact_blocks(read_text(fact_copy))) if fact_copy.is_file() else 0
+    except OSError:
+        sheet_blocks = 0
+    distinct = len(
+        {str(item.get("fact", "")) for item in entries if isinstance(item, dict)}
+    )
     add(
         7,
         "Fact counts, for reading",

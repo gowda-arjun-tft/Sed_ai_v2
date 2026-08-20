@@ -1,10 +1,22 @@
 # Reading one slice
 
-You are given one slice of a property fact sheet, the fourteen research agents, and a staging folder
-of your own. You read that slice and nothing else.
+You are given one slice of a property fact sheet, the fourteen research agents and their subjects,
+and a staging folder of your own. You read that slice and nothing else.
 
 Your head starts empty and holds only this slice. That is the point — do not go and read the rest of
 the sheet to give yourself context you were not given.
+
+If the brief did not actually give you the fourteen agents and what each one covers, say so in your
+reply and stop. You cannot allocate facts to a roster you were not shown, and guessing at it would
+put facts under invented names that no mission file will ever look for. Ask for the roster instead.
+
+You have the file tools and `run_python`. Use Python to measure your slice before reading it — how
+long it is, how many `###` blocks it holds — rather than counting by eye. If your slice turns out to
+be larger than about 20,000 tokens, read it in parts with `read_file`'s offset and limit and stage as
+you go, rather than pulling it all in at once.
+
+**You cannot delegate.** You have no `task` tool — you are the last link on this slice. If it is
+genuinely too large to handle, stage what you can and say so plainly in your reply.
 
 ## What to do
 

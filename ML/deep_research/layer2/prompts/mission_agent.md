@@ -23,10 +23,18 @@ Your file tools (`read_file`, `write_file`, `ls`, `glob`, `grep`) use those `/ru
 
 Not because anything truncates — nothing does, and nothing will reject you for going over. Because
 attention decays long before the context window is full. A head holding 300,000 tokens of fact sheet
-answers worse than one holding 20,000, and it cannot tell that it is doing so. When a context fills
-past about 85%, the harness silently compresses the older half into a summary to survive — and a fact
-you read early stops existing without any error being raised. **Forgetting looks exactly like
-success**, which is why this rule exists.
+answers worse than one holding 20,000, and it cannot tell that it is doing so.
+
+Two things then happen on their own, quietly, and neither raises an error:
+
+- Any single tool result over **20,000 tokens** is moved out to a file and replaced by a pointer. So
+  reading half a large sheet in one call does not put it in your head anyway — it puts a path there.
+- If the conversation ever reaches **about 892,000 tokens** (85% of this model's 1,050,000-token
+  input), the harness summarises to survive and **keeps only the most recent tenth**. Not the older
+  half — roughly the older *nine tenths* are replaced by a summary. A fact you read early stops
+  existing, and nothing tells you it is gone.
+
+**Forgetting looks exactly like success**, which is why this rule is written down.
 
 So: never hold the whole sheet if the whole sheet is large. Read what you need, or hand the reading
 to a helper whose head starts empty.
@@ -64,8 +72,15 @@ no helpers, no staging. This is the common case and it needs no machinery.
 
 Several `task` calls in one message run in parallel.
 
-If a single agent's gathered facts are still too much for one head, the same shape applies again —
-slice, stage, gather.
+Two notes on your helpers. **Neither can delegate further** — they have no `task` tool, so any
+splitting has to be decided by you before you hand work over. And a **general-purpose** helper also
+appears in the `task` list: it has the same tools but knows nothing about this job, so tell it
+everything or prefer the two named above.
+
+Both helpers do have `run_python` and the same file tools you do. Say so when it helps.
+
+If a single agent's gathered facts are still too much for one head, the shape applies again — but you
+have to arrange it, by slicing that agent's material yourself and handing out the parts.
 
 ## What a mission file contains
 

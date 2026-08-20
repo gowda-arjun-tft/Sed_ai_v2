@@ -217,18 +217,18 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
 
   <div class="grp">
     <div class="grplabel">Layer 3 · research</div>
-    <a href="#s8"><span class="n">8</span>Five researchers</a>
+    <a href="#s8"><span class="n">8</span>Mission supervisors</a>
     <a href="#s9"><span class="n">9</span>The five lenses</a>
-    <a href="#s10"><span class="n">10</span>The second round</a>
+    <a href="#s10"><span class="n">10</span>Question follow-up</a>
     <a href="#s11"><span class="n">11</span>Where to look</a>
     <a href="#s12"><span class="n">12</span>How long an answer should be</a>
-    <a href="#s13"><span class="n">13</span>The aggregator</a>
+    <a href="#s13"><span class="n">13</span>The supervisor</a>
   </div>
 
   <div class="grp">
     <div class="grplabel">Reference</div>
-    <a href="#s14"><span class="n">14</span>Every model call</a>
-    <a href="#s15"><span class="n">15</span>What comes out</a>
+    <a href="#s14"><span class="n">14</span>Execution and calls</a>
+    <a href="#s15"><span class="n">15</span>Artifacts and resume</a>
     <a href="#s16"><span class="n">16</span>Before going online</a>
   </div>
 </nav>
@@ -240,10 +240,10 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
   <h1>Deep Research Module</h1>
   <p>This module researches one property. It has two stages. <b>Layer 2</b> reads one summary
      document about the property and writes fourteen research briefs, one per subject area.
-     <b>Layer 3</b> gives each brief to five researchers at once and combines their work into one
-     answer.</p>
+     <b>Layer 3</b> gives each brief to a stable mission supervisor. That supervisor delegates to
+     five fixed lens researchers and combines their work into one answer.</p>
   <p>Layer 3 is the only stage that uses the internet. The module runs once per property.</p>
-  <div class="meta">in: 1 fact sheet &nbsp;·&nbsp; out: 14 answers, 70 researcher files, stored sources, a status table</div>
+  <div class="meta">in: 1 fact sheet &nbsp;·&nbsp; out: 14 answers, 70 required lens files, optional additional lenses, stored sources</div>
 </div>
 
 <!-- ============ 1 ============ -->
@@ -256,10 +256,11 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
 <pre class="block"><b>Input</b>     assets/&lt;uuid&gt;/fact_sheet.md
 
 <b>Output</b>    research/&lt;agent&gt;.md              <i>14 answers, one per subject area</i>
-          lenses/&lt;agent&gt;/&lt;lens&gt;.md         <i>70 researcher files</i>
-          questions/&lt;agent&gt;/&lt;lens&gt;.md      <i>the questions passed between researchers</i>
+          lenses/&lt;agent&gt;/&lt;lens&gt;.md         <i>70 required lens files</i>
+          lenses/&lt;agent&gt;/&lt;additional&gt;.md   <i>up to 14 optional additional-lens files</i>
           sources/                         <i>a stored copy of every page read</i>
-          register                         <i>a status row per researcher and per agent</i></pre>
+          checkpoints.sqlite3              <i>resumable mission memory</i>
+          run.json                         <i>status for each of the 14 missions</i></pre>
 
 <p>Each of the fourteen answers reports what its researchers established, the evidence behind it,
    and what they could not find. This module does not compare findings across the fourteen agents
@@ -272,12 +273,13 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
   <thead><tr><th>Word</th><th>Meaning</th></tr></thead>
   <tbody>
   <tr><td><span class="f">fact sheet</span></td><td>one file listing everything the property's documents say, with the page each fact came from</td></tr>
-  <tr><td><span class="f">mission</span></td><td>the job given to one researcher, written in plain prose</td></tr>
-  <tr><td><span class="f">lens</span></td><td>one of five researchers, each looking at the same job from a different angle</td></tr>
-  <tr><td><span class="f">aggregator</span></td><td>the step that reads all five researchers and writes one answer</td></tr>
+  <tr><td><span class="f">mission</span></td><td>the job owned by one stable supervisor, written in plain prose</td></tr>
+  <tr><td><span class="f">lens</span></td><td>one of five fixed custom subagents, each looking at the same job from a different angle</td></tr>
+  <tr><td><span class="f">mission supervisor</span></td><td>the resumable agent that delegates one mission, compares the returns and writes its answer</td></tr>
   <tr><td><span class="f">system prompt</span></td><td>the standing instruction that tells one researcher who it is and how to look at the job</td></tr>
   <tr><td><span class="f">locator</span></td><td>file name, page number and document date — how a fact is traced back to where it came from</td></tr>
-  <tr><td><span class="f">register</span></td><td>a table with one row per researcher, recording how it ended</td></tr>
+  <tr><td><span class="f">mission memory</span></td><td>thread-scoped StateBackend scratch restored from SQLite for that mission only</td></tr>
+  <tr><td><span class="f">atomic commit</span></td><td>application code validates the full bundle, replaces each file atomically, then marks the mission complete</td></tr>
   <tr><td><span class="f">tier</span></td><td>how trustworthy a source is, 1 (official) to 4 (interested party)</td></tr>
   </tbody>
 </table>
@@ -289,8 +291,8 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
 <!-- ============ 2 ============ -->
 <h2 id="s2"><span class="num">02</span>End to end</h2>
 
-<p>One planning request for the whole property, then seventy research sessions and two combining
-   passes per subject area.</p>
+<p>One planning request for the whole property, then fourteen resumable mission supervisors. Each
+   supervisor delegates to the five fixed lenses and performs its own follow-up and synthesis.</p>
 
 <p>The two diagrams below show the same pipeline: the first is the planning stage, the second is
    what happens to one of the fourteen briefs.</p>
@@ -333,77 +335,92 @@ td.owner{font-size:12.8px;color:var(--ink-2)}
    Fourteen briefs come back in one response and are saved as fourteen files.</p>
 
 <div class="svgwrap">
-<svg viewBox="0 0 760 292" role="img" aria-label="Layer 3: one mission fans to five lenses, then an aggregator pass that writes questions, a second round, and a final aggregator pass">
+<svg viewBox="0 0 920 330" role="img" aria-label="Layer 3: one stable mission supervisor delegates to five fixed lens subagents, sends direct question-only follow-ups, may use one additional lens, and returns a bundle for atomic application commit">
   <defs>
     <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
       <path d="M0,1 L7,4.5 L0,8 z" fill="currentColor"/>
     </marker>
   </defs>
   <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill="currentColor">
-    <text x="0" y="11" font-size="10" letter-spacing="1.3" fill="#6B7684">LAYER 3 · RESEARCH &#160;·&#160; per agent, ×14</text>
+    <text x="0" y="11" font-size="10" letter-spacing="1.3" fill="#6B7684">LAYER 3 · RESEARCH &#160;·&#160; one stable supervisor per mission, ×14</text>
 
-    <rect x="0" y="98" width="98" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="11" y="119">mission</text>
+    <rect x="0" y="112" width="88" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="11" y="134">mission</text>
 
-    <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#a2)">
-      <path d="M98,115 L124,115 L124,40 L142,40"/>
-      <path d="M98,115 L124,115 L124,73 L142,73"/>
-      <path d="M98,115 L124,115 L142,115"/>
-      <path d="M98,115 L124,115 L124,148 L142,148"/>
-      <path d="M98,115 L124,115 L124,183 L142,183"/>
-    </g>
+    <rect x="116" y="96" width="158" height="68" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
+    <text x="128" y="119" font-size="10.5" font-weight="700">MISSION SUPERVISOR</text>
+    <text x="128" y="138" font-size="9.5" fill="#6B7684">dispatches five tasks</text>
+    <text x="128" y="154" font-size="9.5" fill="#6B7684">stable thread</text>
 
     <g stroke="currentColor" stroke-width="1.2" fill="none">
-      <rect x="144" y="26" width="128" height="28" rx="5"/>
-      <rect x="144" y="59" width="128" height="28" rx="5"/>
-      <rect x="144" y="101" width="128" height="28" rx="5"/>
-      <rect x="144" y="134" width="128" height="28" rx="5"/>
+      <rect x="324" y="20" width="138" height="30" rx="5"/>
+      <rect x="324" y="62" width="138" height="30" rx="5"/>
+      <rect x="324" y="104" width="138" height="30" rx="5"/>
+      <rect x="324" y="146" width="138" height="30" rx="5"/>
     </g>
-    <rect x="144" y="169" width="128" height="28" rx="5" fill="none" stroke="#9A3B32" stroke-width="1.7"/>
-    <text x="154" y="45">practitioner</text>
-    <text x="154" y="78">academic</text>
-    <text x="154" y="120">economist</text>
-    <text x="154" y="153">historian</text>
-    <text x="154" y="188" fill="#9A3B32" font-weight="700">skeptic</text>
+    <rect x="324" y="188" width="138" height="30" rx="5" fill="none" stroke="#9A3B32" stroke-width="1.7"/>
+    <text x="335" y="40">practitioner</text>
+    <text x="335" y="82">academic</text>
+    <text x="335" y="124">economist</text>
+    <text x="335" y="166">historian</text>
+    <text x="335" y="208" fill="#9A3B32" font-weight="700">skeptic</text>
+
+    <rect x="532" y="96" width="168" height="68" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
+    <text x="544" y="119" font-size="10.5" font-weight="700">SAME SUPERVISOR</text>
+    <text x="544" y="138" font-size="9.5" fill="#6B7684">compares · follows up</text>
+    <text x="544" y="154" font-size="9.5" fill="#6B7684">synthesizes</text>
+
+    <rect x="738" y="103" width="104" height="54" rx="7" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="750" y="124" font-size="10" font-weight="700">APPLICATION</text>
+    <text x="750" y="142" font-size="9.5" fill="#6B7684">atomic commit</text>
+
+    <rect x="866" y="111" width="52" height="38" rx="6" fill="none" stroke="#2F6B4F" stroke-width="1.5"/>
+    <text x="875" y="134" fill="#2F6B4F">files</text>
 
     <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#a2)">
-      <path d="M272,40 L296,40 L296,112 L316,112"/>
-      <path d="M272,73 L296,73 L296,112 L316,112"/>
-      <path d="M272,115 L296,115 L316,115"/>
-      <path d="M272,148 L296,148 L296,118 L316,118"/>
-      <path d="M272,183 L296,183 L296,121 L316,121"/>
-      <path d="M454,115 L482,115"/>
-      <path d="M618,115 L646,115"/>
+      <path d="M88,130 L114,130"/>
+      <path d="M274,130 L298,130 L298,35 L322,35"/>
+      <path d="M274,130 L298,130 L298,77 L322,77"/>
+      <path d="M274,130 L322,119"/>
+      <path d="M274,130 L298,130 L298,161 L322,161"/>
+      <path d="M274,130 L298,130 L298,203 L322,203"/>
+      <path d="M462,35 L496,35 L496,117 L530,117"/>
+      <path d="M462,77 L496,77 L496,121 L530,121"/>
+      <path d="M462,119 L530,126"/>
+      <path d="M462,161 L496,161 L496,135 L530,135"/>
+      <path d="M462,203 L496,203 L496,139 L530,139"/>
+      <path d="M700,130 L736,130"/>
+      <path d="M842,130 L864,130"/>
     </g>
 
-    <rect x="318" y="90" width="136" height="50" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
-    <text x="329" y="110" font-size="10.5" font-weight="700">AGGREGATOR · 1</text>
-    <text x="329" y="126" font-size="9.5" fill="#6B7684">writes questions</text>
+    <text x="125" y="186" font-size="9.5" fill="#6B7684">StateBackend + SQLite checkpoint</text>
 
-    <rect x="484" y="90" width="134" height="50" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
-    <text x="495" y="110" font-size="10.5" font-weight="700">AGGREGATOR · 2</text>
-    <text x="495" y="126" font-size="9.5" fill="#6B7684">reads all five again</text>
-
-    <rect x="648" y="97" width="90" height="36" rx="6" fill="none" stroke="#2F6B4F" stroke-width="1.5"/>
-    <text x="658" y="119" fill="#2F6B4F">answer</text>
-
-    <path d="M386,140 L386,238 L208,238 L208,201" stroke="currentColor" stroke-width="1.2"
+    <path d="M582,164 L582,292 L392,292 L392,220" stroke="currentColor" stroke-width="1.2"
           fill="none" stroke-dasharray="5 3" marker-end="url(#a2)"/>
-    <text x="222" y="256" font-size="10" fill="#6B7684">SECOND ROUND &#8212; the questions raised</text>
-    <text x="222" y="272" font-size="9.5" fill="#9A3B32">questions only. Never another lens&#39;s text, conclusions, or which lens asked</text>
+    <text x="210" y="312" font-size="9.5" fill="#9A3B32">DIRECT FOLLOW-UP &#8212; bare question only, never another lens&#39;s report or identity</text>
+
+    <rect x="532" y="220" width="168" height="34" rx="6" fill="none" stroke="#6B7684" stroke-width="1.1" stroke-dasharray="5 3"/>
+    <text x="544" y="241" font-size="9.5" fill="#6B7684">optional additional lens · ≤1</text>
+    <path d="M650,164 L650,218" stroke="currentColor" stroke-width="1.1" fill="none"
+          stroke-dasharray="5 3" marker-end="url(#a2)"/>
+    <path d="M700,237 L718,237 L718,178 L684,178" stroke="currentColor" stroke-width="1.1"
+          fill="none" stroke-dasharray="5 3" marker-end="url(#a2)"/>
   </g>
 </svg>
 </div>
-<p class="cap">Layer 3, for one brief. Five researchers work at the same time and never read each
-   other. Questions written by the aggregator go back to the researchers, and only then is the
-   answer written.</p>
+<p class="cap">Layer 3, for one brief. One stable supervisor delegates to five fixed custom lens
+   subagents. It may ask a lens a direct unattributed question or invoke one additional lens. The
+   application writes durable files only after the complete mission bundle returns.</p>
 
 <pre class="block">per property   <b>1</b> planning request
-               <b>70</b> research sessions             <i>14 agents × 5 researchers</i>
-               <b>14</b> aggregator pass 1             <i>writes the questions</i>
-               <b>0–70</b> short second rounds         <i>researchers with questions</i>
-               <b>14</b> aggregator pass 2             <i>writes the answer</i>
-               <b>0–14</b> sixth researchers           <i>added by an aggregator</i></pre>
+               <b>14</b> mission-supervisor graph runs <i>one stable thread per mission</i>
+               <b>70</b> required lens delegations     <i>14 missions × 5 fixed lenses</i>
+               <b>adaptive</b> direct question follow-ups <i>only where evidence needs testing</i>
+               <b>0–14</b> additional-lens delegations <i>at most one per mission</i>
+               <b>14</b> atomic application commits   <i>five lens files plus one answer each</i></pre>
+
+<p>The number of model turns and web-search requests is not fixed: each supervisor and subagent may
+   take several turns before it has enough evidence.</p>
 
 <!-- ============ 3 ============ -->
 <h2 id="s3"><span class="num">03</span>What goes in</h2>
@@ -721,49 +738,62 @@ a section heading   <i>the subject the fact was filed under</i></pre>
    they are checked by reading them.</p>
 
 <!-- ============ 8 ============ -->
-<h2 id="s8"><span class="num">08</span>Layer 3 — five researchers per brief</h2>
+<h2 id="s8"><span class="num">08</span>Layer 3 — one mission supervisor per brief</h2>
 
-<p>Each brief goes to five researchers at once. They receive the identical mission and never read
-   each other's work. Each writes its own file.</p>
+<p>Each brief has one stable mission supervisor and one SQLite-checkpointed thread. The supervisor
+   delegates the identical mission to five fixed custom lens subagents. Lens subagents never read
+   one another's work; their scratch files and returns remain inside that mission's
+   <span class="f">StateBackend</span> until the supervisor finishes.</p>
 
 <div class="contract">
-  <div class="contract-h"><b>Layer 3 · one researcher</b><span>70 sessions per property</span></div>
+  <div class="contract-h"><b>Layer 3 · one mission supervisor</b><span>14 stable threads per property</span></div>
   <div class="io">
     <div class="io-col">
       <b>Input</b>
       <ul>
         <li><span class="f">mission.json</span>
-            <i>unchanged — all five receive the identical file</i></li>
-        <li>its <strong>system prompt</strong>
-            <i>who it is and how to look at the job. The only thing that differs between the
-               five</i></li>
-        <li><span class="f">do_not_cover</span> and <span class="f">take_as_given</span>
-            <i>added by the surrounding software</i></li>
-        <li>web search</li>
+            <i>the stable mission, boundaries and supplied facts</i></li>
+        <li>five named custom subagents
+            <i>one fixed system prompt per lens</i></li>
+        <li>mission-scoped <span class="f">StateBackend</span>
+            <i>restored from the same SQLite thread on resume</i></li>
       </ul>
     </div>
     <div class="io-col mid">
       <b>What happens</b>
       <ul>
-        <li>one query at a time, each chosen from the previous result</li>
-        <li>stops when a round adds no new source</li>
-        <li>every source is checked before anything is written</li>
+        <li>delegates the first investigation to all five lenses</li>
+        <li>compares their returns and asks direct question-only follow-ups</li>
+        <li>may invoke one additional lens for an indispensable gap</li>
+        <li>synthesizes one complete mission bundle</li>
       </ul>
     </div>
     <div class="io-col out">
       <b>Output</b>
       <ul>
-        <li><span class="f">lenses/&lt;agent&gt;/&lt;lens&gt;.md</span>
-            <i>free-form prose, not a filled-in form</i></li>
-        <li>every statement cited</li>
-        <li>every page read, listed with its date</li>
-        <li>what it could not find, and the searches tried</li>
+        <li>five required free-form lens reports</li>
+        <li>zero or one additional-lens report</li>
+        <li>one cited final answer</li>
+        <li>one structured return to application code</li>
       </ul>
     </div>
   </div>
 </div>
 
-<p>The output is free-form prose because a fixed field structure encourages filling in fields
+<p>The model cannot write the durable run folder. Application code validates the complete returned
+   bundle, atomically replaces each lens report and answer, and marks the mission complete in
+   <span class="f">run.json</span> only after every file succeeds. If a process stops during that
+   publication step, the same completed SQLite checkpoint republishes the bundle on resume.</p>
+
+<h3>Three research tools</h3>
+<p>The lens subagents receive only <span class="f">search_web</span>,
+   <span class="f">read_source</span> and <span class="f">cite</span>. The first finds public-source
+   candidates, the second fetches and stores one candidate, and the third records the exact support
+   for a claim. There is no host shell, <span class="f">run_python</span>, model-writable run folder,
+   general-purpose subagent or <span class="f">StoreBackend</span>. Deep Agents' task delegation and
+   StateBackend file operations are harness plumbing, not additional research capabilities.</p>
+
+<p>Lens reports remain free-form prose because a fixed field structure encourages filling in fields
    rather than researching.</p>
 
 <h3>How a researcher works</h3>
@@ -802,8 +832,9 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 <!-- ============ 9 ============ -->
 <h2 id="s9"><span class="num">09</span>The five lenses</h2>
 
-<p>All five run on every brief. Lenses are not chosen per brief, for the same reason agents are not
-   skipped. Each receives the identical mission and writes one file.</p>
+<p>All five custom lens subagents run on every brief. Lenses are not chosen per brief, for the same
+   reason agents are not skipped. Each receives the identical mission and returns one report to the
+   mission supervisor.</p>
 
 <div class="lensgrid">
   <div class="lens-c"><span class="nm">practitioner</span>
@@ -818,8 +849,9 @@ a section heading   <i>the subject the fact was filed under</i></pre>
     <span>Reasons the answer may be wrong. <strong>Always included.</strong></span></div>
 </div>
 
-<p>The aggregator may add a <strong>sixth</strong> researcher, but only after reading the five and
-   seeing what none of them covered.</p>
+<p>The mission supervisor may invoke the dedicated <strong>additional-lens</strong> subagent once,
+   but only after reading the five returns and identifying an indispensable perspective none of
+   them covered. This is not a general-purpose subagent and cannot delegate again.</p>
 
 <div class="call stop">
   <p><b>Purpose of the skeptic.</b> The main error to guard against is a false connection between
@@ -828,32 +860,36 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 </div>
 
 <!-- ============ 10 ============ -->
-<h2 id="s10"><span class="num">10</span>The second round</h2>
+<h2 id="s10"><span class="num">10</span>Direct question-only follow-up</h2>
 
-<p>Researchers work independently and exchange information only through the aggregator, in one
-   direction, as questions.</p>
+<p>Question follow-up is part of the mission supervisor's work, not a separate pipeline stage. Once
+   the five first returns are present in mission memory, the supervisor may send a bare,
+   unattributed question directly to the relevant fixed lens subagent.</p>
 
 <div class="contract">
-  <div class="contract-h"><b>Layer 3 · the second round</b><span>0–70 per property</span></div>
+  <div class="contract-h"><b>Layer 3 · direct follow-up</b><span>adaptive, inside the mission thread</span></div>
   <div class="io">
     <div class="io-col">
       <b>Input</b>
       <ul>
-        <li><span class="f">questions/&lt;agent&gt;/&lt;lens&gt;.md</span>
-            <i>questions raised by the other four, without attribution</i></li>
+        <li>a bare question from the supervisor
+            <i>the thing to establish, without attribution</i></li>
+        <li>the same mission, assigned lens and that lens's own first report</li>
       </ul>
     </div>
     <div class="io-col mid">
       <b>What happens</b>
       <ul>
-        <li>one short round of research on those questions</li>
-        <li>a researcher with no questions is skipped</li>
+        <li>the lens researches the answer itself</li>
+        <li>a lens with no question receives no follow-up</li>
+        <li>no question file or intermediate stage is created</li>
       </ul>
     </div>
     <div class="io-col out">
       <b>Output</b>
       <ul>
-        <li>added to the same researcher file, below the first round</li>
+        <li>an addendum returned to the same supervisor thread</li>
+        <li>preserved below that lens's first-round report at commit</li>
       </ul>
     </div>
   </div>
@@ -861,7 +897,8 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 
 <p>Independence has two costs: five researchers may open the same registers, and one may find
    something another needed without either knowing. Both are accepted, and the questions are how
-   the second is addressed. The order of steps is in the second diagram in section 2.</p>
+   the second is addressed. Questions exist only in checkpointed mission state; they are not a
+   durable artifact. The order is shown in the second diagram in section 2.</p>
 
 <h3>Information permitted between researchers</h3>
 
@@ -878,7 +915,7 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 </table>
 </div>
 
-<p>A researcher receives a question and researches the answer itself.</p>
+<p>A lens receives the question from the supervisor and researches the answer itself.</p>
 
 <h3>Reasons researchers stay independent</h3>
 
@@ -898,10 +935,10 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 <h4>Rules</h4>
 <ul>
   <li>questions carry no attribution — a researcher is never told who raised one</li>
-  <li>the aggregator may write no questions for a researcher</li>
-  <li>a researcher with no questions skips the second round</li>
+  <li>the supervisor may ask no follow-up question of a lens</li>
+  <li>a lens with no question receives no second task</li>
   <li>a researcher that cannot answer a question says so, naming the searches it tried</li>
-  <li>the second round is added below the first and never rewrites it, so what a researcher
+  <li>the follow-up is added below the first return and never rewrites it, so what a researcher
       established alone stays separable from what it found after being asked</li>
 </ul>
 
@@ -942,7 +979,7 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 <!-- ============ 12 ============ -->
 <h2 id="s12"><span class="num">12</span>How long an answer should be</h2>
 
-<p>This applies to all five researcher files and to the aggregator's answer. Each must be as short
+<p>This applies to all five researcher files and to the supervisor's answer. Each must be as short
    as it can be without losing a fact. Long outputs make individual findings harder to find.</p>
 
 <p>No fact may be removed. Three methods of shortening are permitted:</p>
@@ -972,46 +1009,21 @@ a section heading   <i>the subject the fact was filed under</i></pre>
 </div>
 
 <!-- ============ 13 ============ -->
-<h2 id="s13"><span class="num">13</span>The aggregator</h2>
+<h2 id="s13"><span class="num">13</span>The mission supervisor</h2>
 
-<p>Two passes over the same five researcher files, once per agent.</p>
+<p>The same supervisor that dispatched the lenses compares their returns, performs any follow-up,
+   decides whether one additional lens is indispensable, and writes the answer inside the same
+   continuous mission graph.</p>
 
 <div class="contract">
-  <div class="contract-h"><b>Aggregator · pass 1</b><span>14 per property</span></div>
+  <div class="contract-h"><b>Mission supervisor · compare and synthesize</b><span>one per mission</span></div>
   <div class="io">
     <div class="io-col">
       <b>Input</b>
       <ul>
-        <li><span class="f">lenses/&lt;agent&gt;/&lt;lens&gt;.md</span>
-            <i>all five files</i></li>
-      </ul>
-    </div>
-    <div class="io-col mid">
-      <b>What happens</b>
-      <ul>
-        <li>reads all five together</li>
-        <li>for each researcher, writes the questions the other four raised for it</li>
-        <li>produces nothing else</li>
-      </ul>
-    </div>
-    <div class="io-col out">
-      <b>Output</b>
-      <ul>
-        <li><span class="f">questions/&lt;agent&gt;/&lt;lens&gt;.md</span>
-            <i>one list per researcher. May be empty</i></li>
-      </ul>
-    </div>
-  </div>
-</div>
-
-<div class="contract">
-  <div class="contract-h"><b>Aggregator · pass 2</b><span>14 per property</span></div>
-  <div class="io">
-    <div class="io-col">
-      <b>Input</b>
-      <ul>
-        <li><span class="f">lenses/&lt;agent&gt;/&lt;lens&gt;.md</span>
-            <i>all five files, after the second round</i></li>
+        <li>five lens returns in mission-scoped StateBackend</li>
+        <li>any direct question-only follow-up returns</li>
+        <li>zero or one additional-lens return</li>
         <li><span class="f">mission.json</span>
             <i>the brief they were answering</i></li>
       </ul>
@@ -1019,9 +1031,10 @@ a section heading   <i>the subject the fact was filed under</i></pre>
     <div class="io-col mid">
       <b>What happens</b>
       <ul>
-        <li>reads all five again</li>
+        <li>maps conflicts, missing evidence and unused material</li>
+        <li>asks the relevant lens bare follow-up questions directly</li>
         <li>follows up material no researcher used</li>
-        <li>may add a sixth researcher</li>
+        <li>may invoke the additional-lens subagent once</li>
         <li>settles the disagreements it can settle</li>
         <li>records the rest with both readings</li>
       </ul>
@@ -1031,7 +1044,8 @@ a section heading   <i>the subject the fact was filed under</i></pre>
       <ul>
         <li><span class="f">research/&lt;agent&gt;.md</span>
             <i>one answer</i></li>
-        <li>a register row</li>
+        <li>five required lens reports and any additional-lens report</li>
+        <li>a complete mission bundle returned to application code</li>
       </ul>
     </div>
   </div>
@@ -1049,89 +1063,86 @@ a section heading   <i>the subject the fact was filed under</i></pre>
   <p><b>Required disclosure.</b> We wrote all five researcher prompts, so their agreement is not
      independent confirmation and is not the consensus of a field. The answer must say so where it
      relies on their agreement.</p>
-  <p>The two rounds are also weighted differently: something all five reached independently in the
-     first round is stronger than something four adopted in the second after being asked.</p>
+  <p>The two modes are also weighted differently: something all five reached independently in their
+     first returns is stronger than something four adopted after a supervisor follow-up.</p>
 </div>
 
 <h3>Retention</h3>
-<p>The five researcher files are retained alongside the answer, so the answer can be checked
-   against what it was based on.</p>
+<p>The five required lens files and any additional-lens file are committed alongside the answer, so
+   the answer can be checked against what it was based on.</p>
 
 <!-- ============ 14 ============ -->
-<h2 id="s14"><span class="num">14</span>Every model call</h2>
+<h2 id="s14"><span class="num">14</span>Execution and model calls</h2>
 
-<p>What runs, how often, and what each request receives and returns.</p>
+<p>Layer 3 has fourteen stable top-level graph runs, not a fixed chain of model-call stages. Each
+   supervisor and subagent may take several model turns and research-tool calls.</p>
 
 <div class="scroll">
 <table>
-  <thead><tr><th>Call</th><th>Stage</th><th class="n0">Per property</th><th>Input</th><th>Output</th></tr></thead>
+  <thead><tr><th>Work</th><th>Owner</th><th class="n0">Per property</th><th>Input</th><th>Output</th></tr></thead>
   <tbody>
   <tr><td><strong>mission call</strong></td><td>Layer 2</td><td class="n0">1</td>
       <td>the whole fact sheet plus all fourteen agent definitions, in one request</td>
       <td>fourteen missions, in a fixed order</td></tr>
-  <tr><td><strong>researcher</strong></td><td>Layer 3</td><td class="n0">70</td>
-      <td>one mission and one system prompt. Web search available</td>
-      <td>one markdown file each</td></tr>
-  <tr><td><strong>aggregator pass 1</strong></td><td>Layer 3</td><td class="n0">14</td>
-      <td>the five researcher files for one agent</td>
-      <td>a question list per researcher</td></tr>
-  <tr><td><strong>second round</strong></td><td>Layer 3</td><td class="n0">0–70</td>
-      <td>a researcher's question list</td>
-      <td>added to the same markdown file</td></tr>
-  <tr><td><strong>aggregator pass 2</strong></td><td>Layer 3</td><td class="n0">14</td>
-      <td>the five files again, plus the mission</td>
-      <td>one answer per agent</td></tr>
-  <tr><td><strong>sixth researcher</strong></td><td>Layer 3</td><td class="n0">0–14</td>
-      <td>the mission and a new system prompt, decided by an aggregator</td>
-      <td>one markdown file</td></tr>
+  <tr><td><strong>mission supervisor graph</strong></td><td>Deep Agents</td><td class="n0">14</td>
+      <td>one mission, five fixed custom lens subagents and mission-scoped checkpoint state</td>
+      <td>one complete mission bundle</td></tr>
+  <tr><td><strong>fixed-lens delegation</strong></td><td>custom subagent</td><td class="n0">70 required</td>
+      <td>one mission, one lens prompt and three guarded research tools</td>
+      <td>one free-form lens report returned to its supervisor</td></tr>
+  <tr><td><strong>question-only follow-up</strong></td><td>same custom subagent</td><td class="n0">adaptive</td>
+      <td>the mission, its own first report and one bare unattributed question</td>
+      <td>a lens addendum returned inside the same mission thread</td></tr>
+  <tr><td><strong>additional lens</strong></td><td>dedicated custom subagent</td><td class="n0">0–14</td>
+      <td>the mission and one narrowly defined uncovered perspective</td>
+      <td>one additional-lens report</td></tr>
+  <tr><td><strong>atomic commit</strong></td><td>application code</td><td class="n0">14</td>
+      <td>one validated mission bundle</td>
+      <td>durable lens files, answer and mission status</td></tr>
   </tbody>
 </table>
 </div>
 
-<p>The seventy researcher sessions are the largest cost. Each is a back-and-forth session with
-   live retrieval and has no round limit, so the cost per property is not fixed in advance.</p>
+<p>The exact provider request count and cost are not fixed in advance. A graph invocation is not one
+   model request: supervisors and subagents are multi-turn, and web search is an additional provider
+   request whenever a lens uses it.</p>
 
 <!-- ============ 15 ============ -->
-<h2 id="s15"><span class="num">15</span>What comes out</h2>
+<h2 id="s15"><span class="num">15</span>Artifacts and resume</h2>
 
 <pre class="block">research/&lt;agent&gt;.md            <i>one answer per agent, in prose</i>
-lenses/&lt;agent&gt;/&lt;lens&gt;.md       <i>the five researcher files, retained</i>
-questions/&lt;agent&gt;/&lt;lens&gt;.md    <i>the questions from pass 1, retained</i>
+lenses/&lt;agent&gt;/&lt;lens&gt;.md       <i>70 required fixed-lens files, retained</i>
+lenses/&lt;agent&gt;/&lt;additional&gt;.md <i>zero or one additional-lens file per mission</i>
 sources/                       <i>every page and document read, stored with the date and a
                                fingerprint proving the copy is unaltered</i>
-register                       <i>a status table</i></pre>
+checkpoints.sqlite3            <i>messages and StateBackend scratch for 14 stable mission threads</i>
+run.json                       <i>application-owned status for each mission</i>
+check_report.md                <i>deterministic artifact and source checks</i></pre>
 
-<h3>The register</h3>
+<h3>Mission status and memory</h3>
 
-<p>One row per researcher and one per agent: 70 + 14 = <strong>84 rows minimum</strong>, plus one
-   row for each sixth researcher an aggregator adds. A researcher's row records the two rounds
-   separately.</p>
+<p><span class="f">run.json</span> records the current status of each of the fourteen missions and
+   maps it to a stable thread. SQLite checkpoints preserve that thread's messages and StateBackend
+   scratch, so an interrupted supervisor resumes the same mission instead of starting from zero.
+   A new mission cannot read another mission's thread, and no StateBackend data crosses to another
+   property.</p>
 
-<div class="scroll">
-<table>
-  <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
-  <tbody>
-  <tr><td><span class="f">answered</span></td><td>the question was answered and the answer is here</td></tr>
-  <tr><td><span class="f">half done</span></td><td>something came back, but not everything ran. What did not, and why</td></tr>
-  <tr><td><span class="f">failed</span></td><td>it broke. The reason, in plain words</td></tr>
-  <tr><td><span class="f">never started</span></td><td>it did not run at all, and that is recorded rather than left blank</td></tr>
-  <tr><td><span class="f">cannot be answered</span></td><td>researched, and no answer is available, with the search trail</td></tr>
-  </tbody>
-</table>
-</div>
+<p>The deterministic checks require fourteen answers and all seventy fixed-lens files. They allow
+   at most one additional-lens file per mission and also verify source records, hashes, citations,
+   mission completion and the Layer 2 handoff.</p>
 
 <div class="call stop">
-  <p><b>A technical failure is recorded separately from a nil result.</b> This stage is the
-     longest-running part of the system — seventy researchers, many rounds, live searches, rate
-     limits. Without a status on every row, the next stage cannot tell <em>nothing was found</em>
-     from <em>nobody looked</em>.</p>
+  <p><b>Durable output is an application commit.</b> The model writes only mission-scoped scratch.
+     After a supervisor returns a valid complete bundle, application code atomically replaces each
+     required lens file, any additional-lens file and the answer, then updates mission status. A
+     technical failure remains visible and resumable without presenting partial files as complete.</p>
 </div>
 
 <!-- ============ 16 ============ -->
 <h2 id="s16"><span class="num">16</span>Before going online</h2>
 
-<p>Layer 3 makes internet requests. Layer 2 makes none. Three rules apply only to the seventy
-   researcher sessions.</p>
+<p>Layer 3 makes internet requests. Layer 2 makes none. Three rules apply to every fixed lens and
+   optional additional-lens task.</p>
 
 <div class="rules">
   <div class="rule-c"><span class="k">rule 1</span><b>What may leave in a query</b>

@@ -18,6 +18,23 @@ class StructureTests(unittest.TestCase):
             for module in pkgutil.walk_packages(package.__path__, prefix):
                 importlib.import_module(module.name)
 
+    def test_retired_layer3_phase_controller_is_gone(self):
+        root = REPO_ROOT / "ML" / "deep_research" / "layer3"
+        retired = [
+            "aggregator_runner.py",
+            "calculation_tool.py",
+            "question_files.py",
+            "register.py",
+            "sessions.py",
+            "providers/fixture.py",
+            "pipeline/run_researchers.py",
+            "pipeline/run_second_round.py",
+            "pipeline/state.py",
+            "pipeline/write_answers.py",
+            "pipeline/write_questions.py",
+        ]
+        self.assertEqual([name for name in retired if (root / name).exists()], [])
+
     def test_executable_source_files_do_not_exceed_350_lines(self):
         violations = []
         for path in REPO_ROOT.rglob("*"):

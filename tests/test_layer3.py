@@ -1,270 +1,166 @@
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from ML.deep_research.layer2.fs import load_json, now_iso, read_text, slug
-from ML.deep_research.layer3.cli import main
-from ML.deep_research.layer3.contracts import Document, QuestionSet, SessionSpec
-from ML.deep_research.layer3.mission import load_inputs
+from ML.deep_research.layer2.fs import load_json, now_iso, sha256, slug
+from ML.deep_research.layer2.agent import create_mission_agent
+from ML.deep_research.layer3.contracts import Document
+from ML.deep_research.layer3.llm import create_mission_supervisor
+from ML.deep_research.layer3.mission import load_inputs, mission_thread_id
+from ML.deep_research.layer3.pipeline.create_run import create_run
 from ML.deep_research.layer3.pipeline.run_checks import run_checks
-from ML.deep_research.layer3.register import add_sixth_row, read_rows, researcher_id
-from ML.deep_research.layer3.research_tools import session_result_path
-from ML.deep_research.layer3.retrieval import validate_public_url
-from ML.deep_research.layer3.sessions import commit_session_result, second_round_path
+from ML.deep_research.layer3.research_tools import make_research_tools
+from ML.deep_research.layer3.runner import _run_one, commit_outputs
 from ML.deep_research.layer3.settings import AGENT_NAMES, LENSES
 from ML.deep_research.layer3.sources import SourceStore, load_jsonl
 
 from tests.common import create_complete_l3_run, create_complete_run
 
 
-class Layer3PipelineTests(unittest.TestCase):
-    def test_sqlite_checkpointer_and_harness_construct_without_api_call(self):
-        import asyncio
-        from typing import TypedDict
+def _new_l3(root: Path) -> Path:
+    return create_run(
+        create_complete_run(root),
+        root / "l3-runs",
+        public_input_confirmed=True,
+    )
 
-        from langgraph.graph import END, START, StateGraph
-        from ML.deep_research.layer3.llm import create_research_agent
-        from ML.deep_research.layer3.sessions import checkpoint_saver
 
-        class CounterState(TypedDict):
-            count: int
-
-        builder = StateGraph(CounterState)
-        builder.add_node("increment", lambda state: {"count": state["count"] + 1})
-        builder.add_edge(START, "increment")
-        builder.add_edge("increment", END)
-
-        async def scenario(root: Path) -> None:
-            config = {"configurable": {"thread_id": "durable-test-thread"}}
-            with patch.dict(os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}):
-                async with checkpoint_saver(root) as saver:
-                    graph = create_research_agent("skeptic", "", saver)
-                    self.assertIn("tools", graph.get_graph().nodes)
-                    counter = builder.compile(checkpointer=saver)
-                    self.assertEqual((await counter.ainvoke({"count": 1}, config))["count"], 2)
-                async with checkpoint_saver(root) as saver:
-                    counter = builder.compile(checkpointer=saver)
-                    self.assertEqual((await counter.aget_state(config)).values["count"], 2)
-
+class Layer3HarnessTests(unittest.TestCase):
+    def test_create_run_snapshots_prompts_and_stable_mission_records(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            asyncio.run(scenario(root))
-            self.assertGreater((root / "checkpoints.sqlite3").stat().st_size, 0)
+            run_dir = _new_l3(Path(temporary))
+            run = load_json(run_dir / "run.json")
+            prompt_root = run_dir / "inputs" / "prompts"
 
-    def test_research_tools_complete_one_offline_evidence_round(self):
-        import asyncio
+            self.assertEqual(run["schema_version"], 2)
+            self.assertEqual(run["harness"], "mission_supervisor")
+            self.assertEqual(run["provider"], "online")
+            self.assertTrue(run["public_input_confirmed"])
+            self.assertEqual(set(run["missions"]), {slug(name) for name in AGENT_NAMES})
+            for name in AGENT_NAMES:
+                record = run["missions"][slug(name)]
+                self.assertEqual(record["status"], "pending")
+                self.assertEqual(
+                    record["thread_id"],
+                    mission_thread_id(run["run_id"], name, 1),
+                )
 
-        from langchain.tools import ToolRuntime
+            skill = run["skill"]
+            self.assertEqual(sha256(run_dir / skill["path"]), skill["sha256"])
+            actual = {
+                path.relative_to(prompt_root).as_posix(): sha256(path)
+                for path in prompt_root.rglob("*.md")
+                if path.name != "SKILL.md"
+            }
+            self.assertEqual(actual, run["prompt_hashes"])
+            self.assertFalse((run_dir / "questions").exists())
+            self.assertFalse((run_dir / "register.csv").exists())
 
-        from ML.deep_research.layer2.fs import text_hash
-        from ML.deep_research.layer3.contracts import ResearchContext
-        from ML.deep_research.layer3.providers.fixture import FixtureRetriever
-        from ML.deep_research.layer3.research_tools import (
-            cite,
-            finish_round,
-            read_source,
-            search_web,
-        )
+    def test_graph_has_only_supervisor_tools_and_fixed_subagents(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = _new_l3(Path(temporary))
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}):
+                graph = create_mission_supervisor(run_dir)
 
-        async def scenario(root: Path, run_dir: Path) -> None:
-            query = "public building standard"
-            url = "https://example.com/public-standard"
-            fixtures = root / "tool-fixtures"
-            (fixtures / "queries").mkdir(parents=True)
-            (fixtures / "pages").mkdir()
-            (fixtures / "queries" / f"{text_hash(query)}.json").write_text(
-                json.dumps([{"url": url, "title": "Public standard"}]),
-                encoding="utf-8",
+            tools = graph.nodes["tools"].bound._tools_by_name
+            self.assertEqual(set(tools), {"task", "ls", "read_file", "write_file"})
+            description = tools["task"].description
+            for lens in LENSES:
+                self.assertIn(f"- {lens}:", description)
+            self.assertIn("- additional-researcher:", description)
+            self.assertNotIn("- general-purpose:", description)
+            subgraphs = next(
+                cell.cell_contents
+                for cell in tools["task"].coroutine.__closure__
+                if isinstance(cell.cell_contents, dict)
             )
-            (fixtures / "pages" / f"{text_hash(url)}.bin").write_bytes(
-                b"<p>Verified public fact.</p>"
-            )
-            mission, _ = load_inputs(run_dir)[0]
-            context = ResearchContext(
-                run_dir=run_dir,
-                agent=mission["agent"],
-                lens="skeptic",
-                round_name="first",
-                session_id="tool-session",
-                retriever=FixtureRetriever(fixtures),
-            )
-            state = {
-                "messages": [],
-                "query_count": 0,
+            expected = {"ls", "read_file", "write_file", "search_web", "read_source", "cite"}
+            for name, subgraph in subgraphs.items():
+                self.assertEqual(
+                    set(subgraph.nodes["tools"].bound._tools_by_name), expected, name
+                )
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}):
+                layer2 = create_mission_agent(
+                    Path(load_json(run_dir / "run.json")["source_l2"]["path"])
+                )
+            layer2_task = layer2.nodes["tools"].bound.tools_by_name["task"]
+            self.assertIn("- general-purpose:", layer2_task.description)
+
+    def test_commit_preserves_first_report_prefix_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = _new_l3(Path(temporary))
+            agent = AGENT_NAMES[0]
+            first = "First-round bytes stay exactly here.\n"
+            files = {
+                f"/lenses/{lens}/first.md": {"content": first}
+                for lens in LENSES
             }
 
-            def runtime(call_id: str):
-                return ToolRuntime(
-                    state=state,
-                    context=context,
-                    config={},
-                    stream_writer=lambda _: None,
-                    tool_call_id=call_id,
-                    store=None,
-                )
+            with self.assertRaisesRegex(ValueError, "answer"):
+                commit_outputs(run_dir, agent, {"files": files})
+            self.assertFalse((run_dir / "lenses" / slug(agent)).exists())
 
-            def apply(command) -> None:
-                state.update(
-                    {key: value for key, value in command.update.items() if key != "messages"}
-                )
+            files["/lenses/practitioner/followup.md"] = {
+                "content": "One direct follow-up answer.\n"
+            }
+            files["/lenses/additional/report.md"] = {
+                "content": "One optional perspective.\n"
+            }
+            files["/answer.md"] = {"content": "Final answer.\n"}
+            state = {"files": files}
+            commit_outputs(run_dir, agent, state)
 
-            apply(await search_web.coroutine(query=query, runtime=runtime("search-1")))
-            apply(await read_source.coroutine(url=url, runtime=runtime("read-1")))
-            source_id = load_jsonl(run_dir / "sources" / "index.jsonl")[-1]["source_sha256"]
-            marker = cite.func(
-                source_id=source_id,
-                exact_quote="Verified public fact.",
-                tier="1",
-                runtime=runtime("cite-1"),
-            )
-            apply(await search_web.coroutine(query=query, runtime=runtime("search-2")))
-            apply(
-                finish_round.func(
-                    report=f"Verified result {marker}",
-                    status="answered",
-                    reason="",
-                    runtime=runtime("finish-1"),
-                )
-            )
-            self.assertTrue(session_result_path(run_dir, "tool-session").is_file())
-
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            run_dir = create_complete_l3_run(root)
-            asyncio.run(scenario(root, run_dir))
-
-    def test_fixture_run_builds_the_complete_run_shape(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = create_complete_l3_run(Path(temporary))
-            checks = run_checks(run_dir)
-            self.assertEqual(sum(ok for _, _, ok, _ in checks), len(checks))
-            self.assertEqual(len(list((run_dir / "lenses").glob("*/*.md"))), 70)
-            self.assertEqual(len(list((run_dir / "questions").glob("*/*.md"))), 70)
-            self.assertEqual(len(list((run_dir / "research").glob("*.md"))), 14)
-            self.assertEqual(len(read_rows(run_dir)), 84)
-            self.assertTrue((run_dir / "checkpoints.sqlite3").is_file())
-
-    def test_completed_layer3_run_remains_checkable(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = create_complete_l3_run(Path(temporary))
-            self.assertEqual(main(["--check-only", str(run_dir)]), 0)
-
-    def test_public_fixture_cli_runs_without_api_key(self):
-        from ML.deep_research.layer2.report import run_checks as run_l2_checks
-
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            l2_run = create_complete_run(root)
-            l2_checks = run_l2_checks(l2_run)
-            self.assertEqual(sum(ok for _, _, ok, _ in l2_checks), len(l2_checks))
-            fixtures = root / "fixtures"
-            fixtures.mkdir()
-            with patch("ML.deep_research.layer3.cli.RUNS_DIR", root / "l3-runs"):
-                self.assertEqual(
-                    main(["--research", str(l2_run), "--fixtures", str(fixtures)]),
-                    0,
-                )
-            runs = list((root / "l3-runs").glob("L3_*"))
-            self.assertEqual(len(runs), 1)
-            recorded = load_json(runs[0] / "run.json")["checks"]
-            self.assertEqual(recorded["failed"], 0)
-            self.assertEqual(recorded["passed"], recorded["run"])
-
-    def test_second_round_is_written_beside_the_first_and_never_into_it(self):
-        """The first round is never reopened, so it cannot be corrupted."""
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = create_complete_l3_run(Path(temporary))
-            mission, definition = load_inputs(run_dir)[0]
-            lens = next(iter(LENSES))
-            row = next(
-                item
-                for item in read_rows(run_dir)
-                if item["row_id"] == researcher_id(mission["agent"], lens)
-            )
-            target = run_dir / "lenses" / slug(mission["agent"]) / f"{lens}.md"
-            original = target.read_bytes()
-            session_result_path(run_dir, row["second_thread_id"]).write_text(
-                json.dumps(
-                    {
-                        "status": "cannot be answered",
-                        "reason": "No new fixture evidence.",
-                        "report": "No new fixture evidence.\n## Second round\n",
-                    }
-                ),
-                encoding="utf-8",
-            )
-            spec = SessionSpec(
-                agent=mission["agent"],
-                lens=lens,
-                round_name="second",
-                thread_id=row["second_thread_id"],
-                target=target,
-                mission=mission,
-                definition=definition,
-                questions=("What changed?",),
-            )
-            commit_session_result(run_dir, spec)
-            self.assertEqual(target.read_bytes(), original)
-            second = second_round_path(target)
-            self.assertTrue(second.is_file())
-            # Stored byte for byte, heading and all.
+            lens_dir = run_dir / "lenses" / slug(agent)
+            practitioner = (lens_dir / "practitioner.md").read_bytes()
+            self.assertTrue(practitioner.startswith(first.encode("utf-8")))
+            self.assertIn(b"## Follow-up\n\nOne direct follow-up answer.", practitioner)
             self.assertEqual(
-                second.read_text(encoding="utf-8"),
-                "No new fixture evidence.\n## Second round\n",
+                (lens_dir / "additional.md").read_text(encoding="utf-8"),
+                "One optional perspective.\n",
             )
-
-    def test_sixth_row_is_idempotent(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = create_complete_l3_run(Path(temporary))
-            run = load_json(run_dir / "run.json")
-            first = add_sixth_row(run_dir, run["run_id"], AGENT_NAMES[0], "Engineer")
-            second = add_sixth_row(run_dir, run["run_id"], AGENT_NAMES[0], "Engineer")
-            self.assertEqual(first["row_id"], second["row_id"])
-            self.assertEqual(
-                sum(item["lens"] == "Engineer" for item in read_rows(run_dir)),
-                1,
-            )
-
-    def test_question_set_has_no_field_for_attribution(self):
-        """Attribution is prevented by shape, not by inspecting wording."""
-        self.assertEqual(set(QuestionSet.model_fields), set(LENSES))
+            commit_outputs(run_dir, agent, state)
+            self.assertEqual((lens_dir / "practitioner.md").read_bytes(), practitioner)
+            del files["/lenses/additional/report.md"]
+            commit_outputs(run_dir, agent, state)
+            self.assertFalse((lens_dir / "additional.md").exists())
 
 
 class Layer3EvidenceTests(unittest.TestCase):
-    def test_citations_are_recorded_as_given_and_are_idempotent(self):
-        """Nothing verifies a citation. It is stored exactly as supplied."""
+    def test_three_tools_and_exact_idempotent_citations(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
+            tools = make_research_tools("skeptic")
+            self.assertEqual({tool.name for tool in tools}, {"search_web", "read_source", "cite"})
+
             store = SourceStore(run_dir)
             record = store.store(
                 Document(
                     url="https://example.com/report",
                     content_type="text/html; charset=utf-8",
-                    body=b"<html><script>ignore</script><p>Verified public fact.</p></html>",
+                    body=b"<p>Verified public fact.</p>",
                     fetched_at=now_iso(),
                 )
             )
-            values = dict(
+            citation = dict(
                 source_id=record["source_sha256"],
                 quote="Verified public fact.",
-                tier="1",
+                tier=1,
                 agent=AGENT_NAMES[0],
                 lens="skeptic",
-                round_name="first",
                 session_id="session-1",
             )
-            marker = store.record_citation(**values)
-            store.record_citation(**values)
-            self.assertEqual(marker, f"[source:{record['source_sha256']}]")
+            marker = store.record_citation(**citation)
+            self.assertEqual(store.record_citation(**citation), marker)
+            self.assertRegex(marker, r"^\[citation:[0-9a-f]{64}\]$")
             self.assertEqual(len(store.citations()), 1)
 
-            # A quote absent from the page, an unusual grade, and a source with
-            # no extracted text are all accepted without complaint.
+            with self.assertRaisesRegex(ValueError, "does not occur"):
+                store.record_citation(**{**citation, "quote": "Invented words."})
             binary = store.store(
                 Document(
                     url="https://example.com/file.pdf",
@@ -273,43 +169,112 @@ class Layer3EvidenceTests(unittest.TestCase):
                     fetched_at=now_iso(),
                 )
             )
-            store.record_citation(
-                source_id=binary["source_sha256"],
-                quote="a quote that appears nowhere in the source",
-                tier="mixed provenance",
+            with self.assertRaisesRegex(ValueError, "cannot be cited"):
+                store.record_citation(
+                    **{**citation, "source_id": binary["source_sha256"]}
+                )
+
+            query = dict(
+                session_id="session-1",
                 agent=AGENT_NAMES[0],
                 lens="skeptic",
-                round_name="first",
-                session_id="session-2",
-            )
-            self.assertEqual(len(store.citations()), 2)
-
-    def test_query_log_replay_does_not_duplicate(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            store = SourceStore(Path(temporary))
-            values = dict(
-                session_id="s1",
-                sequence=1,
-                agent=AGENT_NAMES[0],
-                lens="academic",
                 query="public building standard",
             )
-            store.record_query(**values)
-            store.record_query(**values)
-            records = load_jsonl(Path(temporary) / "sources" / "queries.jsonl")
-            self.assertEqual(len(records), 1)
+            store.record_query(**query)
+            store.record_query(**query)
+            self.assertEqual(len(load_jsonl(run_dir / "sources" / "queries.jsonl")), 1)
 
-    def test_the_fetcher_still_refuses_internal_addresses(self):
-        """The one guard kept: it protects the network, not the model.
 
-        Nothing here constrains what the researcher may search for, quote or
-        conclude. It stops the fetcher being pointed at infrastructure that is
-        not on the public web.
-        """
-        with self.assertRaisesRegex(ValueError, "non-public"):
-            validate_public_url("http://127.0.0.1/admin")
-        with self.assertRaisesRegex(ValueError, "non-public"):
-            validate_public_url("http://169.254.169.254/latest/meta-data/")
+class Layer3ChecksTests(unittest.TestCase):
+    def test_fabricated_complete_run_passes_every_derived_check(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = create_complete_l3_run(Path(temporary))
+            checks = run_checks(run_dir)
+            recorded = load_json(run_dir / "run.json")["checks"]
+
+            self.assertTrue(all(ok for _, _, ok, _ in checks))
+            self.assertEqual(recorded["run"], len(checks))
+            self.assertEqual(recorded["passed"], len(checks))
+            self.assertEqual(recorded["failed"], 0)
+            self.assertEqual(len(list((run_dir / "lenses").glob("*/*.md"))), 70)
+            self.assertEqual(len(list((run_dir / "research").glob("*.md"))), 14)
+
+    def test_unknown_answer_citation_fails_marker_and_answer_checks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = create_complete_l3_run(Path(temporary))
+            answer = run_dir / "research" / f"{slug(AGENT_NAMES[0])}.md"
+            answer.write_text(
+                f"Unsupported answer [citation:{'0' * 64}]\n",
+                encoding="utf-8",
+            )
+            failures = [label for _, label, ok, _ in run_checks(run_dir) if not ok]
+
+            self.assertTrue(any("marker" in label.lower() for label in failures))
+            self.assertTrue(any("answered mission" in label.lower() for label in failures))
+
+
+class Layer3ResumeTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def _state() -> dict:
+        files = {
+            f"/lenses/{lens}/first.md": {"content": f"{lens} report\n"}
+            for lens in LENSES
+        }
+        files["/answer.md"] = {"content": "Final answer\n"}
+        return {
+            "files": files,
+            "structured_response": {"status": "cannot_be_answered", "reason": "No evidence."},
+        }
+
+    async def test_completed_checkpoint_commits_without_another_model_call(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = _new_l3(Path(temporary))
+            run = load_json(run_dir / "run.json")
+            mission, definition = load_inputs(run_dir)[0]
+            run["missions"][slug(mission["agent"])]["status"] = "running"
+
+            class Graph:
+                async def aget_state(self, _):
+                    return SimpleNamespace(values=Layer3ResumeTests._state(), next=())
+
+                async def ainvoke(self, *_args, **_kwargs):
+                    raise AssertionError("completed checkpoint must not be invoked")
+
+            await _run_one(
+                Graph(), run_dir, run, mission, definition, object(), retry_failed=False
+            )
+            self.assertEqual(
+                load_json(run_dir / "run.json")["missions"][slug(mission["agent"])]["status"],
+                "complete",
+            )
+
+    async def test_retry_failed_uses_a_clean_attempt_thread(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = _new_l3(Path(temporary))
+            run = load_json(run_dir / "run.json")
+            mission, definition = load_inputs(run_dir)[0]
+            record = run["missions"][slug(mission["agent"])]
+            record["status"] = "failed"
+            seen = {}
+
+            class Graph:
+                async def aget_state(self, config):
+                    seen["thread"] = config["configurable"]["thread_id"]
+                    return SimpleNamespace(values={}, next=())
+
+                async def ainvoke(self, value, **_kwargs):
+                    self.value = value
+                    return Layer3ResumeTests._state()
+
+            graph = Graph()
+            await _run_one(
+                graph, run_dir, run, mission, definition, object(), retry_failed=True
+            )
+            self.assertEqual(record["attempt"], 2)
+            self.assertEqual(
+                seen["thread"], mission_thread_id(run["run_id"], mission["agent"], 2)
+            )
+            self.assertIsNotNone(graph.value)
 
 
 if __name__ == "__main__":

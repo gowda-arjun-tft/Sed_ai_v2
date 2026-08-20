@@ -5,7 +5,10 @@ where the code previously assumed one country, one currency, one script or one
 character encoding, and silently produced a wrong result rather than an error.
 """
 
+import socket
 import unittest
+import urllib.request
+from unittest.mock import MagicMock, patch
 
 
 class GlobalReadinessTests(unittest.TestCase):
@@ -39,18 +42,78 @@ class GlobalReadinessTests(unittest.TestCase):
         table = b"<table><tr><td>Unit 1</td><td>1,200</td></tr></table>"
         self.assertIn("Unit 1 | 1,200", canonical_text(table, "text/html"))
 
-    def test_python_runs_as_written_and_output_is_not_clipped(self):
-        from ML.deep_research.layer3.calculation_tool import run_python_code
+    def test_source_urls_must_be_public_http_without_credentials(self):
+        from ML.deep_research.layer3.retrieval import validate_public_url
 
-        result = run_python_code("print(round(702668.06 * 1.19, 2))")
-        self.assertTrue(result.ok)
-        self.assertIn("836174.99", result.stdout)
+        for url in (
+            "file:///etc/passwd",
+            "https://user:password@example.com/report",
+            "https://example.com:wrong/report",
+        ):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                validate_public_url(url)
 
-        # Nothing is imported away, and nothing truncates what comes back.
-        long_output = run_python_code("print('x' * 100000)")
-        self.assertTrue(long_output.ok)
-        self.assertGreaterEqual(len(long_output.stdout), 100000)
-        self.assertNotIn("truncated", long_output.stdout)
+        private = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))]
+        with patch("socket.getaddrinfo", return_value=private):
+            with self.assertRaisesRegex(ValueError, "non-public"):
+                validate_public_url("https://example.com/report")
+
+    def test_redirect_targets_are_revalidated(self):
+        from ML.deep_research.layer3.providers.openai_search import _SafeRedirectHandler
+
+        expected = MagicMock()
+        with (
+            patch(
+                "ML.deep_research.layer3.providers.openai_search.validate_public_url"
+            ) as validate,
+            patch.object(
+                urllib.request.HTTPRedirectHandler,
+                "redirect_request",
+                return_value=expected,
+            ),
+        ):
+            actual = _SafeRedirectHandler().redirect_request(
+                urllib.request.Request("https://public.example/start"),
+                None,
+                302,
+                "Found",
+                {},
+                "http://127.0.0.1/private",
+            )
+
+        validate.assert_called_once_with("http://127.0.0.1/private")
+        self.assertIs(actual, expected)
+
+    def test_fetch_rejects_declared_and_streamed_oversize_sources(self):
+        from ML.deep_research.layer3.providers.openai_search import _fetch
+
+        for declared, body in (("11", b""), (None, b"x" * 11)):
+            response = MagicMock()
+            response.geturl.return_value = "https://public.example/report"
+            response.headers.get.side_effect = lambda name, default="": {
+                "Content-Length": declared,
+                "Last-Modified": "",
+            }.get(name, default)
+            response.read.return_value = body
+            opener = MagicMock()
+            opener.open.return_value.__enter__.return_value = response
+            with (
+                self.subTest(declared=declared),
+                patch(
+                    "ML.deep_research.layer3.providers.openai_search.validate_public_url",
+                    side_effect=lambda url: url,
+                ),
+                patch(
+                    "ML.deep_research.layer3.providers.openai_search.urllib.request.build_opener",
+                    return_value=opener,
+                ),
+                patch(
+                    "ML.deep_research.layer3.providers.openai_search.MAX_SOURCE_BYTES",
+                    10,
+                ),
+                self.assertRaisesRegex(ValueError, "10 MiB"),
+            ):
+                _fetch("https://public.example/report")
 
 
 if __name__ == "__main__":

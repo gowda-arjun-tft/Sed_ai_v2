@@ -1,30 +1,35 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from ML.deep_research.layer2.fs import read_text
 
-from .settings import LENSES, PROMPTS_DIR
+from .settings import LENSES
 
 
-def lens_system_prompt(lens: str, focus: str = "") -> str:
-    shared = read_text(PROMPTS_DIR / "shared_rules.md")
-    if lens in LENSES:
-        specific = read_text(PROMPTS_DIR / "lenses" / f"{lens}.md")
-    else:
-        specific = (
-            f"You are the additional research lens named {lens}.\n"
-            f"Your unique focus is: {focus}"
-        )
-    return f"{shared.strip()}\n\n{specific.strip()}\n"
+def _snapshot(run_dir: Path) -> Path:
+    return run_dir / "inputs" / "prompts"
 
 
-def mission_message(
-    mission: dict[str, Any],
-    definition: dict[str, Any],
-    questions: tuple[str, ...] = (),
-) -> str:
+def supervisor_system_prompt(run_dir: Path) -> str:
+    """Use the immutable procedure copied into this run."""
+    return read_text(_snapshot(run_dir) / "SKILL.md")
+
+
+def lens_system_prompt(run_dir: Path, lens: str) -> str:
+    name = lens if lens in LENSES else "additional"
+    root = _snapshot(run_dir)
+    return (
+        read_text(root / "shared_rules.md").strip()
+        + "\n\n"
+        + read_text(root / "lenses" / f"{name}.md").strip()
+        + "\n"
+    )
+
+
+def mission_message(mission: dict[str, Any], definition: dict[str, Any]) -> str:
     payload = {
         "mission": mission,
         "boundaries": {
@@ -34,15 +39,9 @@ def mission_message(
             "web_sources": definition.get("web_sources", []),
         },
     }
-    text = "Research this mission:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
-    if questions:
-        text += (
-            "\n\nThis is a question-only second round. Research these questions yourself. "
-            "They have no attribution and contain no other researcher's report:\n- "
-            + "\n- ".join(questions)
-        )
-    return text
-
-
-def aggregator_prompt(name: str) -> str:
-    return read_text(PROMPTS_DIR / f"{name}.md")
+    return (
+        "Complete this mission using the mandatory procedure. Stage every report "
+        "and /answer.md before returning MissionOutcome.\n\n<mission_data>\n"
+        + json.dumps(payload, ensure_ascii=False, indent=2)
+        + "\n</mission_data>"
+    )

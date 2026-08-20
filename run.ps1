@@ -2,7 +2,6 @@ param(
     [string]$FactSheet,
     [string]$Resume,
     [string]$Research,
-    [string]$Fixtures,
     [switch]$Online,
     [switch]$PublicInputConfirmed,
     [string]$ResumeL3,
@@ -23,8 +22,14 @@ if (-not (Test-Path -LiteralPath $Python)) {
     throw "Required compute interpreter not found: $Python"
 }
 
-if (($Fixtures -or $Online -or $PublicInputConfirmed) -and -not $Research) {
-    throw '-Fixtures, -Online and -PublicInputConfirmed require -Research.'
+if (($Online -or $PublicInputConfirmed) -and -not $Research) {
+    throw '-Online and -PublicInputConfirmed require -Research.'
+}
+if ($Research -and -not $Online) {
+    throw '-Research requires -Online.'
+}
+if ($Research -and -not $PublicInputConfirmed) {
+    throw '-Research requires -PublicInputConfirmed.'
 }
 if ($RetryFailed -and -not $ResumeL3) {
     throw '-RetryFailed requires -ResumeL3.'
@@ -35,9 +40,6 @@ if (@($FactSheet, $Resume, $Research, $ResumeL3).Where({ $_ }).Count -gt 1) {
 
 if ($Research) {
     $Layer3Args = @('--research', $Research)
-    if ($Fixtures) {
-        $Layer3Args += @('--fixtures', $Fixtures)
-    }
     if ($Online) {
         $Layer3Args += '--online'
     }

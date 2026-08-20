@@ -48,9 +48,16 @@ this subject, and set out what has to be established from public sources instead
 
 ## If your facts are too many for one head
 
-Keep the source text in your context under about 20,000 tokens. If what you gathered is larger than
-that, do not try to hold it all — read it in parts and build the file up, or delegate the parts the
-same way the caller delegated to you.
+Keep the source text in your context under about 20,000 tokens — and note that a single tool result
+over that size is moved out to a file and replaced by a pointer, so reading everything in one call
+does not actually put it in your head.
+
+If what you gathered is larger than that, read it in parts and build the file up: `read_file` takes
+an offset and a limit, and `run_python` will tell you how large each staged file is before you open
+it. Append to the mission file across several writes rather than holding it all at once.
+
+**You cannot delegate.** You have no `task` tool — you are the last link. Splitting the work further
+is not available to you, so plan on reading in parts.
 
 ## Reporting back
 

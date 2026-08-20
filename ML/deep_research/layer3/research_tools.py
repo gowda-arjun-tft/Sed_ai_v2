@@ -1,46 +1,31 @@
-"""The researcher's tools.
-
-Every tool here does what it is asked and reports what happened. None of them
-refuses, second-guesses, rate-limits or edits the researcher. There is no search
-budget, no obligation to review a result before searching again, no requirement
-to search before finishing, no citation verification and no check on the wording
-of a report.
-
-The researcher decides what to search, what to open, what to quote, how it grades
-a source, when it has enough, and what to write.
-"""
+"""Evidence tools exposed to one Layer 3 research lens."""
 
 from __future__ import annotations
 
-from pathlib import Path
+import asyncio
+from typing import Any
 
-from langchain.messages import ToolMessage
 from langchain.tools import ToolRuntime, tool
-from langgraph.types import Command
 
 from ML.deep_research.layer2.fs import load_json, write_json
 
-from .contracts import ResearchContext, ResearchState, SearchHit
+from .contracts import ResearchContext, SearchHit
+from .retrieval import normalize_url
 from .sources import SourceStore
 
 
-def tool_command(
-    runtime: ToolRuntime[ResearchContext, ResearchState],
-    content: str,
-    **updates: object,
-) -> Command:
-    return Command(
-        update={
-            **updates,
-            "messages": [
-                ToolMessage(content, tool_call_id=runtime.tool_call_id or "tool")
-            ],
-        }
-    )
+_QUERY_LOCKS: dict[tuple[int, str], asyncio.Lock] = {}
+_SOURCE_LOCKS: dict[tuple[int, str], asyncio.Lock] = {}
 
 
-def session_result_path(run_dir: Path, session_id: str) -> Path:
-    return run_dir / "session_results" / f"{session_id}.json"
+def _lock(table: dict[tuple[int, str], asyncio.Lock], key: str) -> asyncio.Lock:
+    """Return a loop-local lock so concurrent checkpoint replays share one effect."""
+    loop_key = (id(asyncio.get_running_loop()), key)
+    lock = table.get(loop_key)
+    if lock is None:
+        lock = asyncio.Lock()
+        table[loop_key] = lock
+    return lock
 
 
 def _hit_dict(hit: SearchHit) -> dict[str, str]:
@@ -55,145 +40,109 @@ def _hit_dict(hit: SearchHit) -> dict[str, str]:
 async def _search(context: ResearchContext, query: str) -> list[SearchHit]:
     store = SourceStore(context.run_dir)
     cache = store.cache_path(query)
-    if cache.is_file():
-        return [SearchHit(**item) for item in load_json(cache).get("hits", [])]
-    hits = await context.retriever.search(query)
-    write_json(cache, {"query": query, "hits": [_hit_dict(hit) for hit in hits]})
-    return hits
+    lock = _lock(_QUERY_LOCKS, str(cache.resolve()))
+    async with lock:
+        if cache.is_file():
+            return [SearchHit(**item) for item in load_json(cache).get("hits", [])]
+        hits = await context.retriever.search(query)
+        write_json(cache, {"query": query, "hits": [_hit_dict(hit) for hit in hits]})
+        return hits
 
 
-@tool(parse_docstring=True)
-async def search_web(
-    query: str,
-    runtime: ToolRuntime[ResearchContext, ResearchState],
-) -> Command:
-    """Search the public web.
+def _source_result(store: SourceStore, record: dict[str, Any]) -> str:
+    source_id = str(record["source_sha256"])
+    text = store.source_text(source_id)
+    if text is not None:
+        return f"SOURCE {source_id}\nURL {record['url']}\n\n{text}"
+    return (
+        f"Stored {source_id} ({record['content_type']}, {record['bytes']} bytes). "
+        "This source has no canonical text and cannot be cited."
+    )
 
-    Search as often as you find useful. There is no query budget and no
-    requirement to open anything before searching again.
 
-    Args:
-        query: The search query.
-    """
-    state = runtime.state
-    context = runtime.context
+async def _read(context: ResearchContext, url: str) -> str:
     store = SourceStore(context.run_dir)
-    sequence = int(state.get("query_count", 0)) + 1
-
-    hits = await _search(context, query)
-    store.record_query(
-        session_id=context.session_id,
-        sequence=sequence,
-        agent=context.agent,
-        lens=context.lens,
-        query=query,
-        new_sources=len(hits),
+    lock = _lock(
+        _SOURCE_LOCKS,
+        f"{context.run_dir.resolve()}::{normalize_url(url)}",
     )
+    async with lock:
+        record = store.record_for_url(url)
+        if record is None:
+            document = await context.retriever.fetch(url)
+            record = store.store(document)
+        return _source_result(store, record)
 
-    listing = "\n".join(
-        f"- {hit.hit_id}: {hit.title} — {hit.url}" for hit in hits
-    ) or "This query returned no results."
-    return tool_command(runtime, listing, query_count=sequence)
 
+def make_research_tools(lens: str) -> list[Any]:
+    """Build the three tools for a lens, binding attribution outside the model."""
 
-@tool(parse_docstring=True)
-async def read_source(
-    url: str,
-    runtime: ToolRuntime[ResearchContext, ResearchState],
-) -> Command:
-    """Fetch and store a page, and return its text.
+    @tool("search_web", parse_docstring=True)
+    async def search_web(
+        query: str,
+        runtime: ToolRuntime[ResearchContext, Any],
+    ) -> str:
+        """Search the public web and return source URLs.
 
-    Any URL is accepted, whether or not a search returned it.
-
-    Args:
-        url: The address to fetch.
-    """
-    context = runtime.context
-    try:
-        document = await context.retriever.fetch(url)
-        store = SourceStore(context.run_dir)
-        record = store.store(document)
-        text = store.source_text(record["source_sha256"])
-        content = (
-            f"SOURCE {record['source_sha256']}\nURL {document.url}\n\n{text}"
-            if text is not None
-            else (
-                f"Stored {record['source_sha256']} ({document.content_type}, "
-                f"{len(document.body)} bytes). No text extraction was available "
-                "for this content type."
-            )
+        Args:
+            query: The research query to send to the search provider.
+        """
+        context = runtime.context
+        hits = await _search(context, query)
+        SourceStore(context.run_dir).record_query(
+            session_id=context.session_id,
+            agent=context.agent,
+            lens=lens,
+            query=query,
+            new_sources=len(hits),
         )
-    except Exception as error:
-        content = f"Fetching {url} failed: {type(error).__name__}: {error}"
-    return tool_command(runtime, content)
+        return "\n".join(
+            f"- {hit.hit_id}: {hit.title} — {hit.url}" for hit in hits
+        ) or "This query returned no results."
+
+    @tool("read_source", parse_docstring=True)
+    async def read_source(
+        url: str,
+        runtime: ToolRuntime[ResearchContext, Any],
+    ) -> str:
+        """Fetch, retain, and read one public source.
+
+        Args:
+            url: The HTTP or HTTPS source address.
+        """
+        try:
+            return await _read(runtime.context, url)
+        except Exception as error:
+            return f"Fetching {url} failed: {type(error).__name__}: {error}"
+
+    @tool("cite", parse_docstring=True)
+    def cite(
+        source_id: str,
+        exact_quote: str,
+        tier: int,
+        runtime: ToolRuntime[ResearchContext, Any],
+    ) -> str:
+        """Verify and record an exact quotation, returning its citation marker.
+
+        Args:
+            source_id: The SHA-256 source identifier returned by read_source.
+            exact_quote: Words copied from the retained canonical source text.
+            tier: Evidence tier from 1 (strongest) through 4 (weakest).
+        """
+        context = runtime.context
+        try:
+            return SourceStore(context.run_dir).record_citation(
+                source_id=source_id,
+                quote=exact_quote,
+                tier=tier,
+                agent=context.agent,
+                lens=lens,
+                session_id=context.session_id,
+            )
+        except ValueError as error:
+            return f"Citation rejected: {error}"
+
+    return [search_web, read_source, cite]
 
 
-@tool(parse_docstring=True)
-def skip_source(
-    url: str,
-    reason: str,
-    runtime: ToolRuntime[ResearchContext, ResearchState],
-) -> Command:
-    """Note a result you have decided not to open.
-
-    Args:
-        url: The address you are passing over.
-        reason: Why it is not worth opening.
-    """
-    context = runtime.context
-    SourceStore(context.run_dir).record_skip(
-        session_id=context.session_id,
-        agent=context.agent,
-        lens=context.lens,
-        url=url,
-        reason=reason,
-    )
-    return tool_command(runtime, f"Noted. Skipped {url}.")
-
-
-@tool(parse_docstring=True)
-def cite(
-    source_id: str,
-    exact_quote: str,
-    tier: str,
-    runtime: ToolRuntime[ResearchContext, ResearchState],
-) -> str:
-    """Record a citation and return its marker for your report.
-
-    Args:
-        source_id: The source hash returned by read_source.
-        exact_quote: The words you are relying on.
-        tier: How you grade this source, in your own words.
-    """
-    context = runtime.context
-    return SourceStore(context.run_dir).record_citation(
-        source_id=source_id,
-        quote=exact_quote,
-        tier=tier,
-        agent=context.agent,
-        lens=context.lens,
-        round_name=context.round_name,
-        session_id=context.session_id,
-    )
-
-
-@tool(parse_docstring=True)
-def finish_round(
-    report: str,
-    status: str,
-    reason: str,
-    runtime: ToolRuntime[ResearchContext, ResearchState],
-) -> Command:
-    """Store your report and end this round.
-
-    Args:
-        report: Your report, exactly as you want it kept.
-        status: How this round ended, in your own words.
-        reason: Anything further worth recording. May be empty.
-    """
-    context = runtime.context
-    write_json(
-        session_result_path(context.run_dir, context.session_id),
-        {"status": status, "reason": reason, "report": report},
-    )
-    return tool_command(runtime, "Stored.")
+__all__ = ["make_research_tools"]

@@ -42,14 +42,23 @@ def hit_id(url: str) -> str:
 
 def validate_public_url(url: str) -> str:
     parts = urlsplit(url)
-    if parts.scheme.casefold() not in {"http", "https"}:
+    scheme = parts.scheme.casefold()
+    if scheme not in {"http", "https"}:
         raise ValueError("only http and https sources are allowed")
     if parts.username or parts.password or not parts.hostname:
         raise ValueError("source URL credentials or missing hosts are not allowed")
     try:
+        port = parts.port or (443 if scheme == "https" else 80)
+    except ValueError as error:
+        raise ValueError("source URL has a malformed port") from error
+    try:
         addresses = {
             item[4][0]
-            for item in socket.getaddrinfo(idna_host(parts.hostname), parts.port or 443)
+            for item in socket.getaddrinfo(
+                idna_host(parts.hostname),
+                port,
+                type=socket.SOCK_STREAM,
+            )
         }
     except socket.gaierror as error:
         raise ValueError(f"source host could not be resolved: {parts.hostname}") from error

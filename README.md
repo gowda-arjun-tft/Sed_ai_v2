@@ -7,13 +7,13 @@ evidence-backed subject reports. Python runs through the `compute` Conda interpr
 ## Structure
 
 - `ML/deep_research/layer2/` converts `fact_sheet.md` into fourteen mission JSON files. One agent
-  reads the sheet and writes the missions itself; it never accesses the web, and a run is complete
+  reads the sheet and writes the missions itself; it does no web research, and a run is complete
   when its report records no failures.
-- `ML/deep_research/layer3/` runs five independent research lenses per mission, writes unattributed
-  questions, performs question-only second rounds, optionally adds one sixth lens, and produces
-  fourteen answers. It is complete only when its report records every check passed and none failed.
+- `ML/deep_research/layer3/` runs fourteen stable mission supervisors. Each delegates to five fixed
+  lens subagents, may send direct question-only follow-ups, may add one narrowly scoped lens, and
+  returns one complete mission bundle for the application to commit atomically.
 - `ML/deep_research/docs/` contains the Layer 2 code walkthrough and the global-readiness notes.
-- `tests/` contains model-free unit and end-to-end fixture tests.
+- `tests/` contains model-free unit and fabricated end-to-end run tests.
 
 Generated `runs/`, `.env`, caches, sources, and checkpoint databases remain local and are ignored.
 
@@ -30,8 +30,9 @@ OPENAI_API_KEY=your-key
 ```
 
 The model is fixed in code to `gpt-5.6-luna` with high reasoning effort. Layer 3 uses Deep Agents
-0.7.7 with thread-scoped SQLite checkpoints; it intentionally has no cross-property memory,
-subagents, host shell, or model-writable run directory.
+0.7.7. Each mission has a stable SQLite-checkpointed thread and thread-scoped `StateBackend`
+scratch shared with its fixed lens subagents. It has no general-purpose subagent, `StoreBackend`,
+host shell, `run_python`, model-writable run directory, or cross-property memory.
 
 ## Layer 2
 
@@ -48,28 +49,27 @@ The report that follows counts and records; it never rejects.
 
 ## Layer 3
 
-Run the whole six-phase pipeline offline. Fixture mode makes no model or web API calls:
-
-```powershell
-.\run.ps1 -Research '.\runs\L2_YYYYMMDD_xxxx' -Fixtures '.\tests\fixtures\web'
-```
-
 Enable live research only for public or invented input:
 
 ```powershell
 .\run.ps1 -Research '.\runs\L2_YYYYMMDD_xxxx' -Online -PublicInputConfirmed
 ```
 
-Resume an interrupted run, or explicitly retry failed sessions and dependent aggregation:
+Resume an interrupted run, or explicitly retry failed mission supervisors:
 
 ```powershell
 .\run.ps1 -ResumeL3 '.\runs\L3_YYYYMMDD_xxxx'
 .\run.ps1 -ResumeL3 '.\runs\L3_YYYYMMDD_xxxx' -RetryFailed
 ```
 
-Layer 3 retains raw page bytes, canonical text, hashes, exact-quote citations, query decisions,
-usage, stable thread IDs, and an 84+ row register. Binary/PDF sources are retained but cannot
-support claims until deterministic PDF extraction is added.
+Layer 3 exposes only `search_web`, `read_source`, and `cite` as research tools. Five required lens
+files per mission produce exactly 70 base files; an optional additional-lens file may be present for
+each mission, and fourteen final answers are required. `run.json` records mission status, while
+SQLite preserves each mission's resumable agent state. The model never writes the run folder:
+application code validates and atomically commits each complete mission bundle.
+
+Raw page bytes, canonical text, hashes, citations, query decisions, and usage remain retained.
+Binary/PDF sources cannot support claims until deterministic PDF extraction is added.
 
 ## Validation
 
@@ -79,6 +79,6 @@ support claims until deterministic PDF extraction is added.
 & 'C:\src\anaconda3\envs\compute\python.exe' -m pip check
 ```
 
-The suite makes no model calls. It covers both complete check reports, citation verification,
-egress rejection, private-host rejection, idempotent logs, checkpoint construction, second-round
-byte preservation, and the 350-line executable-source limit.
+The suite makes no model calls. It covers both complete check reports, mission handoff, fixed-lens
+isolation, direct question-only follow-up, citation and egress controls, checkpoint recovery,
+atomic mission commits, and the 350-line executable-source limit.

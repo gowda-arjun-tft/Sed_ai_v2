@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from deepagents.graph import DeepAgentState
-from pydantic import BaseModel, Field
-
-
+from pydantic import BaseModel
 
 @dataclass(frozen=True)
 class SearchHit:
@@ -27,61 +24,18 @@ class Document:
     publication_date: str = ""
 
 
-class ResearchState(DeepAgentState):
-    query_count: int
-
-
 @dataclass(frozen=True)
 class ResearchContext:
     run_dir: Path
     agent: str
-    lens: str
-    round_name: str
     session_id: str
     retriever: Any
 
 
-@dataclass(frozen=True)
-class SessionSpec:
-    agent: str
-    lens: str
-    round_name: str
-    thread_id: str
-    target: Path
-    mission: dict[str, Any]
-    definition: dict[str, Any]
-    questions: tuple[str, ...] = ()
-    focus: str = ""
+class MissionOutcome(BaseModel):
+    """The small machine-readable result returned after all Markdown is staged."""
 
-
-class QuestionSet(BaseModel):
-    """Questions for each lens.
-
-    Attribution cannot leak because the schema has nowhere to put it: a question
-    is a bare string, and no field records which lens raised it.
-    """
-
-    practitioner: list[str] = Field(default_factory=list)
-    academic: list[str] = Field(default_factory=list)
-    economist: list[str] = Field(default_factory=list)
-    historian: list[str] = Field(default_factory=list)
-    skeptic: list[str] = Field(default_factory=list)
-
-
-class GapDecision(BaseModel):
-    """Whether the aggregator wants a sixth lens, and what it should look at.
-
-    No length limit, no required-field rule, no clearing of fields the model
-    chose to fill. It is recorded as given.
-    """
-
-    needed: bool
-    name: str = ""
-    focus: str = ""
+    status: Literal["answered", "cannot_be_answered"]
     reason: str = ""
-
-
-class AnswerDraft(BaseModel):
-    """The aggregator's answer, exactly as written."""
-
-    markdown: str = ""
+    additional_lens: str = ""
+    additional_focus: str = ""

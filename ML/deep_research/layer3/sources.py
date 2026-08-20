@@ -17,6 +17,11 @@ from .text_extraction import canonical_text, detect_encoding, encoding_was_decla
 _LOCK = threading.RLock()
 
 
+def _normalize_whitespace(value: str) -> str:
+    """Collapse whitespace without changing words, case, or punctuation."""
+    return " ".join(value.split())
+
+
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -86,19 +91,20 @@ class SourceStore:
         self,
         *,
         session_id: str,
-        sequence: int,
         agent: str,
         lens: str,
         query: str,
         new_sources: int = 0,
     ) -> None:
-        query_id = text_hash(f"{session_id}\n{sequence}\n{query}")
+        normalized_query = _normalize_whitespace(query)
+        query_id = text_hash(
+            f"{session_id}\n{agent}\n{lens}\n{normalized_query}"
+        )
         _append_unique(
             self.root / "queries.jsonl",
             {
                 "query_id": query_id,
                 "session_id": session_id,
-                "sequence": sequence,
                 "agent": agent,
                 "lens": lens,
                 "query": query,
@@ -112,94 +118,89 @@ class SourceStore:
         *,
         source_id: str,
         quote: str,
-        tier: str,
+        tier: int,
         agent: str,
         lens: str,
-        round_name: str,
         session_id: str,
     ) -> str:
-        """Record a citation exactly as the researcher gave it.
-
-        The quote is stored verbatim and is not checked against the source, the
-        tier is whatever the researcher called it, and a source with no extracted
-        text can be cited like any other.
-        """
-        citation_id = text_hash(f"{session_id}\n{source_id}\n{quote}\n{tier}")
+        """Verify a retained exact quote and record it once."""
+        citation = {
+            "source_sha256": source_id,
+            "quote": quote,
+            "tier": tier,
+            "agent": agent,
+            "lens": lens,
+            "session_id": session_id,
+        }
+        valid, detail = self.validate_citation(citation)
+        if not valid:
+            raise ValueError(detail)
+        normalized_quote = _normalize_whitespace(quote)
+        citation_id = text_hash(
+            f"{session_id}\n{agent}\n{lens}\n{source_id}\n{normalized_quote}\n{tier}"
+        )
+        citation["citation_id"] = citation_id
         _append_unique(
             self.root / "citations.jsonl",
-            {
-                "citation_id": citation_id,
-                "source_sha256": source_id,
-                "quote": quote,
-                "tier": tier,
-                "agent": agent,
-                "lens": lens,
-                "round": round_name,
-                "session_id": session_id,
-            },
+            citation,
             "citation_id",
         )
-        return f"[source:{source_id}]"
+        return f"[citation:{citation_id}]"
 
-    def record_skip(
-        self,
-        *,
-        session_id: str,
-        agent: str,
-        lens: str,
-        url: str,
-        reason: str,
-    ) -> None:
-        """A source the researcher judged not worth opening."""
-        skip_id = text_hash(f"{session_id}\n{url}")
-        _append_unique(
-            self.root / "skips.jsonl",
-            {
-                "skip_id": skip_id,
-                "session_id": session_id,
-                "agent": agent,
-                "lens": lens,
-                "url": url,
-                "reason": reason,
-            },
-            "skip_id",
+    def validate_citation(self, citation: dict[str, Any]) -> tuple[bool, str]:
+        """Revalidate a citation record against retained canonical source text."""
+        source_id = str(citation.get("source_sha256", ""))
+        record = self.source_record(source_id)
+        if record is None:
+            return False, f"unknown source: {source_id}"
+        quote = citation.get("quote")
+        if not isinstance(quote, str) or not _normalize_whitespace(quote):
+            return False, "citation quote cannot be empty"
+        tier = citation.get("tier")
+        if type(tier) is not int or tier not in range(1, 5):
+            return False, "citation tier must be an integer from 1 through 4"
+        if not all(
+            str(citation.get(field, "")).strip()
+            for field in ("session_id", "agent", "lens")
+        ):
+            return False, "citation identity fields cannot be empty"
+        text = self.source_text(source_id)
+        if not record.get("citation_supported") or text is None:
+            return False, "source has no canonical text and cannot be cited"
+        if _normalize_whitespace(quote) not in _normalize_whitespace(text):
+            return False, "citation quote does not occur in the canonical source text"
+        expected_id = text_hash(
+            f"{citation.get('session_id', '')}\n{citation.get('agent', '')}\n"
+            f"{citation.get('lens', '')}\n{source_id}\n"
+            f"{_normalize_whitespace(quote)}\n{tier}"
+        )
+        if citation.get("citation_id") not in (None, expected_id):
+            return False, "citation ID does not match its evidence record"
+        return True, ""
+
+    def source_record(self, source_id: str) -> dict[str, Any] | None:
+        return next(
+            (
+                item
+                for item in load_jsonl(self.root / "index.jsonl")
+                if item.get("source_sha256") == source_id
+            ),
+            None,
         )
 
-    def record_calculation(
-        self,
-        *,
-        session_id: str,
-        agent: str,
-        lens: str,
-        purpose: str,
-        code: str,
-        stdout: str,
-        stderr: str,
-        ok: bool,
-    ) -> None:
-        """A derived figure and the code that produced it, kept for audit."""
-        calculation_id = text_hash(f"{session_id}\n{code}")
-        _append_unique(
-            self.root / "calculations.jsonl",
-            {
-                "calculation_id": calculation_id,
-                "session_id": session_id,
-                "agent": agent,
-                "lens": lens,
-                "purpose": purpose,
-                "code": code,
-                "stdout": stdout,
-                "stderr": stderr,
-                "ok": ok,
-            },
-            "calculation_id",
+    def record_for_url(self, url: str) -> dict[str, Any] | None:
+        normalized = normalize_url(url)
+        return next(
+            (
+                item
+                for item in load_jsonl(self.root / "index.jsonl")
+                if item.get("normalized_url") == normalized
+            ),
+            None,
         )
 
     def source_text(self, source_id: str) -> str | None:
-        record = next(
-            (item for item in load_jsonl(self.root / "index.jsonl") if item.get("source_sha256") == source_id),
-            None,
-        )
+        record = self.source_record(source_id)
         if not record or not record.get("text_path"):
             return None
         path = self.run_dir / str(record["text_path"])

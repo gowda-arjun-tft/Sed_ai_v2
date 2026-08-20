@@ -9,16 +9,22 @@ from pathlib import Path
 from ML.deep_research.layer2.fs import load_json, now_iso, sha256, slug, write_json
 from ML.deep_research.layer2.planner import load_planner
 
-from ..register import seed_register
+from ..mission import mission_thread_id
 from ..settings import (
     AGENT_NAMES,
     CHECKPOINT_PACKAGE_VERSION,
     DEEPAGENTS_VERSION,
+    FETCH_TIMEOUT_SECONDS,
+    HARNESS_NAME,
+    MAX_SOURCE_BYTES,
+    MODEL_MAX_RETRIES,
     MODEL_NAME,
+    MODEL_TIMEOUT_SECONDS,
     PROMPTS_DIR,
     REASONING_EFFORT,
     RUN_PREFIX,
-    WORKERS,
+    SCHEMA_VERSION,
+    SKILL_PATH,
 )
 
 
@@ -27,8 +33,6 @@ def _validate_l2(run_dir: Path) -> tuple[dict, Path, list[Path]]:
     if not metadata_path.is_file():
         raise ValueError("Layer 2 run has no run.json")
     metadata = load_json(metadata_path)
-    # Derived, not a hardcoded count: the Layer 2 report is free to grow or
-    # shrink, and what matters is that it recorded no failures.
     checks = metadata.get("checks") or {}
     complete = (
         isinstance(checks.get("run"), int)
@@ -51,87 +55,122 @@ def _validate_l2(run_dir: Path) -> tuple[dict, Path, list[Path]]:
     return metadata, planner, missions
 
 
-def create_run(
-    l2_run: Path,
-    runs_dir: Path,
-    *,
-    fixture_root: Path | None = None,
-    online: bool = False,
-    public_input_confirmed: bool = False,
-) -> Path:
-    l2_run = l2_run.resolve()
-    source, planner, missions = _validate_l2(l2_run)
-    if online == bool(fixture_root):
-        raise ValueError("choose exactly one of fixture or online retrieval")
-    if online and not public_input_confirmed:
-        raise ValueError("online research requires public-input confirmation")
-    if fixture_root is not None and not fixture_root.resolve().is_dir():
-        raise ValueError(f"fixture root is not a directory: {fixture_root}")
+def _new_run_dir(runs_dir: Path) -> tuple[str, Path]:
     runs_dir.mkdir(parents=True, exist_ok=True)
     while True:
         run_id = f"{RUN_PREFIX}_{datetime.now(UTC):%Y%m%d}_{secrets.token_hex(2)}"
         run_dir = runs_dir / run_id
         try:
             run_dir.mkdir()
-            break
+            return run_id, run_dir
         except FileExistsError:
-            continue
-    inputs = run_dir / "inputs"
-    mission_dir = inputs / "missions"
+            pass
+
+
+def _copy_prompts(run_dir: Path) -> tuple[str, dict[str, str]]:
+    target = run_dir / "inputs" / "prompts"
+    (target / "lenses").mkdir(parents=True)
+    skill_copy = target / "SKILL.md"
+    shutil.copy2(SKILL_PATH, skill_copy)
+    for source in sorted(PROMPTS_DIR.rglob("*.md")):
+        relative = source.relative_to(PROMPTS_DIR)
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    prompt_hashes = {
+        str(path.relative_to(target)).replace("\\", "/"): sha256(path)
+        for path in sorted(target.rglob("*.md"))
+        if path.name != "SKILL.md"
+    }
+    return sha256(skill_copy), prompt_hashes
+
+
+def create_run(
+    l2_run: Path,
+    runs_dir: Path,
+    *,
+    public_input_confirmed: bool = False,
+) -> Path:
+    l2_run = l2_run.resolve()
+    source, planner, missions = _validate_l2(l2_run)
+    if not public_input_confirmed:
+        raise ValueError("online research requires public-input confirmation")
+    run_id, run_dir = _new_run_dir(runs_dir)
+    mission_dir = run_dir / "inputs" / "missions"
     for path in (
         mission_dir,
         run_dir / "lenses",
-        run_dir / "questions",
         run_dir / "research",
         run_dir / "sources" / "raw",
         run_dir / "sources" / "text",
-        run_dir / "session_results",
-        run_dir / "gap_decisions",
     ):
         path.mkdir(parents=True, exist_ok=True)
-    planner_copy = inputs / "planner_prompt.md"
+    planner_copy = run_dir / "inputs" / "planner_prompt.md"
     shutil.copy2(planner, planner_copy)
-    mission_hashes = {}
+    mission_hashes: dict[str, str] = {}
     for mission in missions:
         target = mission_dir / mission.name
         shutil.copy2(mission, target)
         if sha256(mission) != sha256(target):
             raise RuntimeError(f"mission copy hash mismatch: {mission.name}")
         mission_hashes[mission.name] = sha256(target)
+    skill_hash, prompt_hashes = _copy_prompts(run_dir)
     for name in ("index.jsonl", "citations.jsonl", "queries.jsonl"):
         (run_dir / "sources" / name).touch()
     (run_dir / "usage.jsonl").touch()
     sqlite3.connect(run_dir / "checkpoints.sqlite3").close()
+    started = now_iso()
     write_json(
         run_dir / "run.json",
         {
+            "schema_version": SCHEMA_VERSION,
+            "harness": HARNESS_NAME,
             "run_id": run_id,
-            "status": "phase_0_complete",
-            "started_at": now_iso(),
-            "updated_at": now_iso(),
+            "status": "created",
+            "started_at": started,
+            "updated_at": started,
             "source_l2": {
                 "run_id": source.get("run_id"),
                 "path": str(l2_run),
-                "checks": {"passed": 19, "failed": 0},
+                "status": source.get("status"),
+                "checks": source.get("checks") or {},
+                "facts": source.get("facts") or {},
                 "mission_hashes": mission_hashes,
             },
             "planner_prompt": {"sha256": sha256(planner_copy)},
-            "provider": "online" if online else "fixture",
-            "fixture_root": str(fixture_root.resolve()) if fixture_root else "",
-            "public_input_confirmed": bool(public_input_confirmed),
+            "skill": {"path": "inputs/prompts/SKILL.md", "sha256": skill_hash},
+            "prompt_hashes": prompt_hashes,
+            "provider": "online",
+            "public_input_confirmed": True,
             "model": MODEL_NAME,
             "reasoning_effort": REASONING_EFFORT,
             "deepagents_version": DEEPAGENTS_VERSION,
             "checkpoint_package_version": CHECKPOINT_PACKAGE_VERSION,
-            "prompt_hashes": {
-                str(path.relative_to(PROMPTS_DIR)).replace("\\", "/"): sha256(path)
-                for path in sorted(PROMPTS_DIR.rglob("*.md"))
+            "limits": {
+                "model_and_search_timeout_seconds": MODEL_TIMEOUT_SECONDS,
+                "transient_retries": MODEL_MAX_RETRIES,
+                "fetch_timeout_seconds": FETCH_TIMEOUT_SECONDS,
+                "maximum_source_bytes": MAX_SOURCE_BYTES,
             },
-            # Scheduling only. There are no research limits to record.
-            "concurrency": {"workers": WORKERS},
-            "usage": {"model_calls": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
-            "phases": {str(index): ("complete" if index == 0 else "pending") for index in range(6)},
+            "usage": {
+                "model_calls": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+            },
+            "missions": {
+                slug(name): {
+                    "agent": name,
+                    "thread_id": mission_thread_id(run_id, name, 1),
+                    "attempt": 1,
+                    "status": "pending",
+                    "outcome": "",
+                    "reason": "",
+                    "error": "",
+                    "updated_at": started,
+                }
+                for name in AGENT_NAMES
+            },
         },
     )
-    seed_register(run_dir, run_id, AGENT_NAMES)
     return run_dir

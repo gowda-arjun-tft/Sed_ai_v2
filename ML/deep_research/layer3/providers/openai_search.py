@@ -13,7 +13,13 @@ from ML.deep_research.layer2.fs import now_iso
 
 from ..contracts import Document, SearchHit
 from ..retrieval import hit_id, validate_public_url
-from ..settings import MODEL_NAME
+from ..settings import (
+    FETCH_TIMEOUT_SECONDS,
+    MAX_SOURCE_BYTES,
+    MODEL_MAX_RETRIES,
+    MODEL_NAME,
+    MODEL_TIMEOUT_SECONDS,
+)
 from ..usage import record_search_usage
 
 
@@ -45,9 +51,19 @@ def _fetch(url: str) -> Document:
             "Accept-Language": "*",
         },
     )
-    with opener.open(request) as response:
+    with opener.open(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
         final_url = response.geturl()
         validate_public_url(final_url)
+        declared_length = response.headers.get("Content-Length")
+        try:
+            declared_bytes = int(declared_length) if declared_length else 0
+        except ValueError:
+            declared_bytes = 0
+        if declared_bytes > MAX_SOURCE_BYTES:
+            raise ValueError("source exceeds the 10 MiB download limit")
+        body = response.read(MAX_SOURCE_BYTES + 1)
+        if len(body) > MAX_SOURCE_BYTES:
+            raise ValueError("source exceeds the 10 MiB download limit")
         return Document(
             url=final_url,
             content_type=response.headers.get_content_type()
@@ -56,7 +72,7 @@ def _fetch(url: str) -> Document:
                 if response.headers.get_content_charset()
                 else ""
             ),
-            body=response.read(),
+            body=body,
             fetched_at=now_iso(),
             publisher=urlsplit(final_url).hostname or "",
             publication_date=response.headers.get("Last-Modified", ""),
@@ -97,7 +113,10 @@ def _hits(response: Any) -> list[SearchHit]:
 class OpenAISearchRetriever:
     def __init__(self, run_dir: Path) -> None:
         self.run_dir = run_dir
-        self.client = AsyncOpenAI()
+        self.client = AsyncOpenAI(
+            timeout=MODEL_TIMEOUT_SECONDS,
+            max_retries=MODEL_MAX_RETRIES,
+        )
 
     async def search(self, query: str) -> list[SearchHit]:
         response = await self.client.responses.create(
