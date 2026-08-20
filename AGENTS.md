@@ -2,11 +2,14 @@
 
 ## Project Structure & Module Organization
 
-`ML/deep_research/layer2/` converts Markdown fact sheets into fourteen checked mission files.
+`ML/deep_research/layer2/` converts Markdown fact sheets into fourteen checked mission files
+through three flat steps — `create_run.py`, `agent.py`, `report.py` — wired by `cli.py`. It has no
+`pipeline/` package: there are no phases between them. `fs.py`, `planner.py` and `settings.py` are
+shared with Layer 3 and are not private to Layer 2.
 `ML/deep_research/layer3/` consumes those missions through six phases: run creation, five-lens
-research, question aggregation, question-only second rounds, final aggregation, and 24 checks.
+research, question aggregation, question-only second rounds, final aggregation, and its own checks.
 Shared Layer 3 contracts, tools, source storage, register logic, and providers sit beside its
-`pipeline/` directory. Prompts are under `layer3/prompts/`; specifications remain in
+`pipeline/` directory. Prompts are under `layer2/prompts/` and `layer3/prompts/`; documentation is in
 `ML/deep_research/docs/`. Model-free tests live in `tests/`.
 
 Generated `runs/`, `.env`, caches, sources, and checkpoint databases are local-only.
@@ -37,8 +40,8 @@ exempt. Never compress formatting to evade the limit.
 ## Testing Guidelines
 
 Tests use `unittest` and must not call a model or the public web. Add focused coverage for parser,
-resume, egress, citation, register, or schema changes. Layer 2 must pass 19/19 checks; Layer 3 must
-pass 24/24. Preserve first-round bytes when appending a second round.
+resume, egress, citation, register, or schema changes. Both layers must record every check passed
+and none failed; never hardcode the count, since both check lists are expected to change.
 
 ## Commit & Pull Request Guidelines
 

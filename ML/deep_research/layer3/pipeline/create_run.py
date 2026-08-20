@@ -27,9 +27,17 @@ def _validate_l2(run_dir: Path) -> tuple[dict, Path, list[Path]]:
     if not metadata_path.is_file():
         raise ValueError("Layer 2 run has no run.json")
     metadata = load_json(metadata_path)
-    checks = metadata.get("checks", {})
-    if checks.get("passed") != 19 or checks.get("failed") != 0:
-        raise ValueError("Layer 2 run must record 19 passed and 0 failed")
+    # Derived, not a hardcoded count: the Layer 2 report is free to grow or
+    # shrink, and what matters is that it recorded no failures.
+    checks = metadata.get("checks") or {}
+    complete = (
+        isinstance(checks.get("run"), int)
+        and checks.get("run") > 0
+        and checks.get("failed") == 0
+        and checks.get("passed") == checks.get("run")
+    )
+    if not complete:
+        raise ValueError("Layer 2 run must record every check passed and none failed")
     planner = run_dir / "inputs" / "planner_prompt.md"
     _, definitions = load_planner(planner)
     if [item["name"] for item in definitions] != AGENT_NAMES:

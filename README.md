@@ -6,12 +6,13 @@ evidence-backed subject reports. Python runs through the `compute` Conda interpr
 
 ## Structure
 
-- `ML/deep_research/layer2/` converts `fact_sheet.md` into fourteen mission JSON files. It never
-  accesses the web and is complete only at `19 passed · 0 failed`.
+- `ML/deep_research/layer2/` converts `fact_sheet.md` into fourteen mission JSON files. One agent
+  reads the sheet and writes the missions itself; it never accesses the web, and a run is complete
+  when its report records no failures.
 - `ML/deep_research/layer3/` runs five independent research lenses per mission, writes unattributed
   questions, performs question-only second rounds, optionally adds one sixth lens, and produces
-  fourteen answers. It is complete only at `24 passed · 0 failed`.
-- `ML/deep_research/docs/` contains the Layer 2 phase specifications.
+  fourteen answers. It is complete only when its report records every check passed and none failed.
+- `ML/deep_research/docs/` contains the Layer 2 code walkthrough and the global-readiness notes.
 - `tests/` contains model-free unit and end-to-end fixture tests.
 
 Generated `runs/`, `.env`, caches, sources, and checkpoint databases remain local and are ignored.
@@ -39,8 +40,11 @@ subagents, host shell, or model-writable run directory.
 .\run.ps1 -Resume '.\runs\L2_YYYYMMDD_xxxx'
 ```
 
-Layer 2 splits only on Markdown `##` sections, routes exact fact blocks, writes fourteen missions,
-and preserves the existing nineteen deterministic checks.
+Layer 2 is one harness agent. It is given the fact sheet, the frozen roster, a filesystem, Python
+and two kinds of helper it can spawn, and told what the output must contain rather than how to
+produce it — it decides how to read the sheet, how to allocate facts and how to check its own work.
+The report that follows counts and records; it never rejects.
+`ML/deep_research/docs/260820_Layer2_Code_Walkthrough_ENG.md` walks the code end to end.
 
 ## Layer 3
 

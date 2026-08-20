@@ -12,8 +12,9 @@ prose.
 
 from __future__ import annotations
 
-from functools import cache
 from typing import Any
+
+from ML.deep_research.layer2.agent import configure_provider
 
 from .calculation_tool import run_python
 from .contracts import (
@@ -31,25 +32,21 @@ from .research_tools import (
     search_web,
     skip_source,
 )
-from .settings import MODEL_SPEC, REASONING_EFFORT
+from .settings import MODEL_SPEC
 
 
-@cache
 def configure_deepagents() -> None:
-    from deepagents import ProviderProfile, register_provider_profile
+    """Register the provider profile both layers share.
 
-    register_provider_profile(
-        MODEL_SPEC,
-        ProviderProfile(
-            init_kwargs={
-                "reasoning_effort": REASONING_EFFORT,
-                "store": False,
-                "use_responses_api": True,
-            }
-        ),
-    )
-    # No harness profile is registered. Nothing is excluded from the tool
-    # surface, and the general-purpose subagent stays available.
+    deepagents' profile registry is global and keyed by model spec, and both
+    layers run on the same `MODEL_SPEC`. Registering separately from each layer
+    meant whichever imported first shaped the other's model kwargs. One owner
+    removes the collision.
+
+    No harness profile is registered anywhere: nothing is excluded from the tool
+    surface and the general-purpose subagent stays available.
+    """
+    configure_provider()
 
 
 def create_research_agent(lens: str, focus: str, checkpointer: Any) -> Any:

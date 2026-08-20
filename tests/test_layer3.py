@@ -155,12 +155,13 @@ class Layer3PipelineTests(unittest.TestCase):
             self.assertEqual(main(["--check-only", str(run_dir)]), 0)
 
     def test_public_fixture_cli_runs_without_api_key(self):
-        from ML.deep_research.layer2.pipeline.run_checks import run_checks as run_l2_checks
+        from ML.deep_research.layer2.report import run_checks as run_l2_checks
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             l2_run = create_complete_run(root)
-            self.assertEqual(sum(ok for _, _, ok, _ in run_l2_checks(l2_run)), 19)
+            l2_checks = run_l2_checks(l2_run)
+            self.assertEqual(sum(ok for _, _, ok, _ in l2_checks), len(l2_checks))
             fixtures = root / "fixtures"
             fixtures.mkdir()
             with patch("ML.deep_research.layer3.cli.RUNS_DIR", root / "l3-runs"):

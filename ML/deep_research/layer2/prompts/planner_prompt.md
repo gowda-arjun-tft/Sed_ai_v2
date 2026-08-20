@@ -2,9 +2,9 @@
 
 All fourteen agents run for every property. A silent fact sheet is a valid starting point. Never
 claim that something does not exist merely because it was not found. A general fact is context,
-not automatically a finding. Layer 2 allocates facts and writes missions; it performs no research.
+not automatically a finding. This layer allocates facts and writes missions; it performs no research.
 
-Facts may be routed to several agents. Copy evidence, source locators and interpretations exactly.
+A fact may belong to several agents. Copy evidence, source locators and interpretations exactly.
 Do not resolve disagreements or remove either side of a disagreement.
 
 <!-- AGENTS_JSON_START -->
@@ -124,5 +124,6 @@ Write exactly one JSON mission per agent, in roster order:
 }
 ```
 
-Every routed fact becomes one context entry. Do not shorten, rank or drop facts. An empty bucket
-still receives a non-empty mission that explicitly says the fact sheet is silent on the subject.
+Every fact an agent needs becomes one context entry. Do not shorten, rank or drop facts. An agent
+the sheet says nothing about still receives a non-empty mission that says the sheet is silent on
+the subject.
