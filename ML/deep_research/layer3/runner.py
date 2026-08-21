@@ -117,13 +117,9 @@ async def _run_stage(
 def _questions(outcome: ReviewOutcome) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
     for item in outcome.questions:
-        if item.domain not in DOMAIN_NAMES:
-            raise ValueError(f"review returned an unknown domain: {item.domain}")
-        if item.domain in result:
-            raise ValueError(f"review returned duplicate domain questions: {item.domain}")
         values = [question.strip() for question in item.questions if question.strip()]
         if values:
-            result[item.domain] = values
+            result.setdefault(item.domain, []).extend(values)
     return result
 
 

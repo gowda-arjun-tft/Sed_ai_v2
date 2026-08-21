@@ -11,10 +11,10 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage
 
 from ML.deep_research.layer2.fs import load_json, read_text, slug, write_json
-from ML.deep_research.layer3.contracts import ResearchOutcome
+from ML.deep_research.layer3.contracts import DomainQuestions, ResearchOutcome, ReviewOutcome
 from ML.deep_research.layer3.pipeline.create_run import create_run
 from ML.deep_research.layer3.research_tools import _append_fragment
-from ML.deep_research.layer3.runner import _run_stage, run_research
+from ML.deep_research.layer3.runner import _questions, _run_stage, run_research
 from ML.deep_research.layer3.settings import DOMAIN_NAMES, SCHEMA_VERSION
 from tests.common import create_complete_run
 
@@ -150,6 +150,17 @@ class ProgressiveRunnerTests(unittest.IsolatedAsyncioTestCase):
                 f"{name} initial\n\n## Clarification\n\n{name} clarification\n",
             )
         self.assertEqual(reports[DOMAIN_NAMES[2]], f"{DOMAIN_NAMES[2]} initial\n")
+
+    async def test_duplicate_question_groups_merge_without_rejecting_the_review(self):
+        domain = DOMAIN_NAMES[0]
+        outcome = ReviewOutcome(
+            review_markdown="# Review",
+            questions=[
+                DomainQuestions(domain=domain, questions=["First?"]),
+                DomainQuestions(domain=domain, questions=["Second?"]),
+            ],
+        )
+        self.assertEqual(_questions(outcome), {domain: ["First?", "Second?"]})
 
     async def test_failure_keeps_partial_and_published_peer_reports(self):
         FakeGraph.failing_actor = DOMAIN_NAMES[0]

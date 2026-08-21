@@ -6,6 +6,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from .settings import DOMAIN_NAMES
+
+
+DomainName = Literal[*DOMAIN_NAMES]
+
 
 @dataclass(frozen=True)
 class SearchHit:
@@ -45,7 +50,7 @@ class ResearchOutcome(BaseModel):
 class DomainQuestions(BaseModel):
     """Bare questions for one known domain."""
 
-    domain: str
+    domain: DomainName
     questions: list[str]
 
 

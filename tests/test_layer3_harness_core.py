@@ -10,7 +10,7 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage
 
 from ML.deep_research.layer2.fs import slug
-from ML.deep_research.layer3.contracts import ResearchContext, SearchHit
+from ML.deep_research.layer3.contracts import DomainQuestions, ResearchContext, SearchHit
 from ML.deep_research.layer3.llm import (
     build_layer3_model,
     create_domain_harness,
@@ -24,7 +24,7 @@ from ML.deep_research.layer3.research_tools import (
     partial_report_path,
     read_partial_report,
 )
-from ML.deep_research.layer3.settings import DOMAIN_NAMES
+from ML.deep_research.layer3.settings import DOMAIN_NAMES, REASONING_EFFORT
 from ML.deep_research.layer3.sources import load_jsonl
 
 
@@ -38,6 +38,10 @@ def _graph_model(graph):
 
 
 class Layer3ModelAndSurfaceTests(unittest.TestCase):
+    def test_reviewer_domain_is_provider_constrained_to_the_frozen_roster(self):
+        schema = DomainQuestions.model_json_schema()
+        self.assertEqual(schema["properties"]["domain"]["enum"], list(DOMAIN_NAMES))
+
     def test_synthesis_reads_plain_markdown_without_a_schema_wrapper(self):
         self.assertEqual(
             final_text({"messages": [AIMessage(content="# Decision\n\nProceed.")]}),
@@ -47,7 +51,7 @@ class Layer3ModelAndSurfaceTests(unittest.TestCase):
     def test_every_harness_model_is_low_with_request_resilience(self):
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}):
             model = build_layer3_model()
-        self.assertEqual(model.reasoning_effort, "low")
+        self.assertEqual(model.reasoning_effort, REASONING_EFFORT)
         self.assertEqual(model.request_timeout, 600.0)
         self.assertEqual(model.max_retries, 2)
 
@@ -81,7 +85,7 @@ class Layer3ModelAndSurfaceTests(unittest.TestCase):
             self.assertFalse(
                 any("ModelCallLimitMiddleware" in name for name in graph.nodes)
             )
-            self.assertEqual(_graph_model(graph).reasoning_effort, "low")
+            self.assertEqual(_graph_model(graph).reasoning_effort, REASONING_EFFORT)
 
 
 class ProgressiveReportTests(unittest.TestCase):
@@ -187,7 +191,7 @@ class SearchContractTests(unittest.IsolatedAsyncioTestCase):
         ):
             hits = await retriever.search("official record", actor=DOMAIN_NAMES[0])
 
-        self.assertEqual(seen["reasoning"], {"effort": "low"})
+        self.assertEqual(seen["reasoning"], {"effort": REASONING_EFFORT})
         self.assertEqual(
             seen["tools"], [{"type": "web_search", "search_context_size": "low"}]
         )

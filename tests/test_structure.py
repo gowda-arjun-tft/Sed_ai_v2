@@ -7,6 +7,7 @@ import unittest
 import ML.deep_research.layer2 as layer2
 import ML.deep_research.layer3 as layer3
 from ML.deep_research.layer2.settings import PLANNER_PATH, REPO_ROOT
+from ML.deep_research.layer3.settings import REASONING_EFFORT
 
 
 class StructureTests(unittest.TestCase):
@@ -19,7 +20,7 @@ class StructureTests(unittest.TestCase):
         )
         self.assertEqual(len(cells), 2)
         self.assertEqual(notebook["metadata"]["kernelspec"]["display_name"], "compute")
-        self.assertIn("Layer 3 currently uses low reasoning", notebook_text)
+        self.assertIn(f"Layer 3 currently uses {REASONING_EFFORT} reasoning", notebook_text)
         self.assertIn("one optional clarification batch", notebook_text)
         self.assertNotIn("Source Scout", notebook_text)
         for cell in cells:
