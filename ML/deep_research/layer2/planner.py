@@ -1,13 +1,12 @@
 """Loading and verifying the roster.
 
 `prompts/planner_prompt.md` is two things at once: prose the agent reads as part
-of its system prompt, and a machine-readable list of the fourteen agent
+of its system prompt, and a machine-readable list of the eight agent
 definitions embedded in it between two HTML comments.
 
 ```markdown
 <!-- AGENTS_JSON_START -->
-[{"name": "...", "establishes": "...", "do_not_cover": "...",
-  "take_as_given": "...", "web_sources": "..."}, ...]
+[{"name": "...", "mandate": "...", "handoffs": ["..."]}, ...]
 <!-- AGENTS_JSON_END -->
 ```
 
@@ -28,16 +27,10 @@ from typing import Any
 from .settings import AGENT_NAMES
 from .fs import read_text
 
-# The five keys every agent definition must carry, no more and no fewer.
-# `do_not_cover` and `take_as_given` are what keep the fourteen research agents
-# from duplicating each other's work in Layer 3.
-REQUIRED_KEYS = {
-    "name",
-    "establishes",
-    "do_not_cover",
-    "take_as_given",
-    "web_sources",
-}
+# The three keys every agent definition must carry, no more and no fewer.
+# `mandate` assigns accountability; `handoffs` preserve facts needed at the
+# interfaces between the eight subjects.
+REQUIRED_KEYS = {"name", "mandate", "handoffs"}
 
 
 def load_planner(path: Path) -> tuple[str, list[dict[str, Any]]]:
@@ -50,7 +43,7 @@ def load_planner(path: Path) -> tuple[str, list[dict[str, Any]]]:
     human-authored file rather than judgements about model output:
 
     1. the `AGENTS_JSON` block exists and parses as JSON,
-    2. it holds exactly the fourteen `AGENT_NAMES`, in that order,
+    2. it holds exactly the eight `AGENT_NAMES`, in that order,
     3. every definition carries exactly `REQUIRED_KEYS`.
 
     Raises `ValueError` on any of the three. Called at three points in a run's
@@ -70,10 +63,19 @@ def load_planner(path: Path) -> tuple[str, list[dict[str, Any]]]:
     names = [agent.get("name") for agent in agents]
     if len(agents) != len(AGENT_NAMES) or names != AGENT_NAMES:
         raise ValueError(
-            "planner_prompt.md must contain the fourteen frozen agent names in order"
+            "planner_prompt.md must contain the eight frozen agent names in order"
         )
     if any(set(agent) != REQUIRED_KEYS for agent in agents):
         raise ValueError(
             f"every planner agent must contain exactly {sorted(REQUIRED_KEYS)}"
         )
+    if any(
+        not isinstance(agent["mandate"], str)
+        or not agent["mandate"].strip()
+        or not isinstance(agent["handoffs"], list)
+        or not agent["handoffs"]
+        or any(not isinstance(item, str) or not item.strip() for item in agent["handoffs"])
+        for agent in agents
+    ):
+        raise ValueError("every planner mandate and handoff must be non-empty text")
     return text, agents

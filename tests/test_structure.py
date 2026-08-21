@@ -1,4 +1,6 @@
+import ast
 import importlib
+import json
 import pkgutil
 import unittest
 
@@ -8,6 +10,31 @@ from ML.deep_research.layer2.settings import PLANNER_PATH, REPO_ROOT
 
 
 class StructureTests(unittest.TestCase):
+    def test_demo_notebook_has_two_compilable_cells(self):
+        notebook_path = REPO_ROOT / "CDI_Layer2_Layer3.ipynb"
+        notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+        cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
+        notebook_text = "\n".join(
+            "".join(cell.get("source", [])) for cell in notebook["cells"]
+        )
+        self.assertEqual(len(cells), 2)
+        self.assertEqual(notebook["metadata"]["kernelspec"]["display_name"], "compute")
+        self.assertIn("Layer 3 currently uses low reasoning", notebook_text)
+        self.assertIn("one optional clarification batch", notebook_text)
+        self.assertNotIn("Source Scout", notebook_text)
+        for cell in cells:
+            # Execution state is deliberately not asserted. A notebook the human
+            # actually ran carries an `execution_count` and captured `outputs`,
+            # and failing the suite for that punished normal use -- it fired the
+            # moment the demo was run. What matters is that both cells still
+            # compile.
+            compile(
+                "".join(cell["source"]),
+                str(notebook_path),
+                "exec",
+                flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+            )
+
     def test_planner_has_one_authoritative_location(self):
         self.assertTrue(PLANNER_PATH.is_file())
         self.assertFalse((REPO_ROOT / "planner_prompt.md").exists())

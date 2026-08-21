@@ -4,44 +4,76 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ML.deep_research.layer2.fs import read_text
+from ML.deep_research.layer2.fs import read_text, slug
+from ML.deep_research.layer2.planner import load_planner
 
-from .settings import LENSES
+from .settings import DOMAIN_NAMES
 
 
-def _snapshot(run_dir: Path) -> Path:
+def _root(run_dir: Path) -> Path:
     return run_dir / "inputs" / "prompts"
 
 
-def supervisor_system_prompt(run_dir: Path) -> str:
-    """Use the immutable procedure copied into this run."""
-    return read_text(_snapshot(run_dir) / "SKILL.md")
+def _joined(*paths: Path) -> str:
+    return "\n\n".join(read_text(path).strip() for path in paths) + "\n"
 
 
-def lens_system_prompt(run_dir: Path, lens: str) -> str:
-    name = lens if lens in LENSES else "additional"
-    root = _snapshot(run_dir)
+def domain_system_prompt(run_dir: Path, domain: str) -> str:
+    if domain not in DOMAIN_NAMES:
+        raise ValueError(f"unknown Layer 3 domain: {domain}")
+    root = _root(run_dir)
+    _, definitions = load_planner(run_dir / "inputs" / "planner_prompt.md")
+    definition = next(item for item in definitions if item["name"] == domain)
+    handoffs = "\n".join(f"- {item}" for item in definition["handoffs"])
     return (
-        read_text(root / "shared_rules.md").strip()
-        + "\n\n"
-        + read_text(root / "lenses" / f"{name}.md").strip()
-        + "\n"
+        _joined(root / "shared_rules.md", root / "five_questions.md")
+        + f"\n# {domain}\n\n## Positive mandate\n\n{definition['mandate'].strip()}"
+        + f"\n\n## Handoffs\n\n{handoffs}\n"
     )
 
 
-def mission_message(mission: dict[str, Any], definition: dict[str, Any]) -> str:
+def reviewer_system_prompt(run_dir: Path) -> str:
+    return _joined(_root(run_dir) / "reviewer.md")
+
+
+def synthesis_system_prompt(run_dir: Path) -> str:
+    return _joined(_root(run_dir) / "synthesis.md")
+
+
+def domain_message(
+    assignment: dict[str, Any],
+    *,
+    batch: int,
+    questions: list[str] | None = None,
+    previous_report: str = "",
+) -> str:
     payload = {
-        "mission": mission,
-        "boundaries": {
-            "establishes": definition.get("establishes", []),
-            "do_not_cover": definition.get("do_not_cover", []),
-            "take_as_given": definition.get("take_as_given", []),
-            "web_sources": definition.get("web_sources", []),
-        },
+        "round": "initial" if batch == 0 else f"clarification-{batch}",
+        "mission": assignment.get("mission", {}),
+        "questions": questions or [],
+        "previous_report": previous_report,
     }
     return (
-        "Complete this mission using the mandatory procedure. Stage every report "
-        "and /answer.md before returning MissionOutcome.\n\n<mission_data>\n"
+        "Research only this domain. Append every decision-relevant unit immediately with "
+        "append_report(fragment_id, markdown). Return ResearchOutcome after all five ledger "
+        "facets have a terminal status.\n\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
-        + "\n</mission_data>"
+    )
+
+
+def review_message() -> str:
+    paths = [f"/domains/{slug(name)}.md" for name in DOMAIN_NAMES]
+    return (
+        f"Review all eight initial reports once: {paths}. Return ReviewOutcome with the complete "
+        "review_markdown and one optional batch of bare clarification questions by domain. Return "
+        "no questions when the remaining gaps should be reported honestly as unknowns."
+    )
+
+
+def synthesis_message() -> str:
+    paths = [f"/domains/{slug(name)}.md" for name in DOMAIN_NAMES]
+    return (
+        f"Read the eight reports, including appended clarification: {paths}. Read /review.md. "
+        "Return the final property decision as Markdown directly. Do not return JSON, a schema, "
+        "field names, or commentary outside the document."
     )

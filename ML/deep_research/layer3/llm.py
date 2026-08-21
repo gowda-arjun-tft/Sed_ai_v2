@@ -1,4 +1,4 @@
-"""Build the one reusable mission-scoped Deep Agents graph."""
+"""Build the direct Layer 3 Deep Agent graphs."""
 
 from __future__ import annotations
 
@@ -6,105 +6,148 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from ML.deep_research.layer2.agent import configure_provider
+from ML.deep_research.layer2.harness import (
+    configure_harness,
+    configure_provider,
+    context_middleware,
+)
 
-from .contracts import MissionOutcome, ResearchContext
-from .prompts import lens_system_prompt, supervisor_system_prompt
+from .contracts import (
+    ResearchContext,
+    ResearchOutcome,
+    ReviewOutcome,
+)
+from .prompts import domain_system_prompt, reviewer_system_prompt, synthesis_system_prompt
 from .research_tools import make_research_tools
-from .settings import LENSES, MODEL_SPEC
+from .settings import (
+    DOMAIN_NAMES,
+    MODEL_MAX_RETRIES,
+    MODEL_SPEC,
+    MODEL_TIMEOUT_SECONDS,
+    REASONING_EFFORT,
+)
 
 
 @cache
 def configure_deepagents() -> None:
-    """Share the provider profile and remove the implicit general-purpose helper."""
-    from deepagents import (
-        GeneralPurposeSubagentProfile,
-        HarnessProfile,
-        register_harness_profile,
-    )
+    configure_provider()
+    configure_harness()
+
+
+def build_layer3_model() -> Any:
+    """Build the shared model policy with Layer 3's low reasoning effort."""
+    from deepagents.profiles.provider import apply_provider_profile
+    from langchain.chat_models import init_chat_model
 
     configure_provider()
-    register_harness_profile(
-        MODEL_SPEC,
-        HarnessProfile(
-            general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False)
-        ),
+    options = apply_provider_profile(MODEL_SPEC)
+    options.update(
+        reasoning_effort=REASONING_EFFORT,
+        timeout=MODEL_TIMEOUT_SECONDS,
+        max_retries=MODEL_MAX_RETRIES,
     )
+    return init_chat_model(MODEL_SPEC, **options)
 
 
-def _permissions(prefix: str) -> list[Any]:
+def _permissions(*, read: tuple[str, ...]) -> list[Any]:
     from deepagents import FilesystemPermission
 
+    internal = ("/large_tool_results/**", "/conversation_history/**")
     return [
-        FilesystemPermission(operations=["read"], paths=[f"{prefix}/**"], mode="allow"),
-        FilesystemPermission(
-            operations=["read"],
-            paths=["/large_tool_results/**", "/conversation_history/**"],
-            mode="allow",
+        *(
+            FilesystemPermission(operations=["read"], paths=[path], mode="allow")
+            for path in (*read, *internal)
         ),
         FilesystemPermission(operations=["read"], paths=["/**"], mode="deny"),
-        FilesystemPermission(operations=["write"], paths=[f"{prefix}/**"], mode="allow"),
         FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
     ]
 
 
-def _filesystem(backend: Any, permissions: list[Any]) -> Any:
-    from deepagents.middleware import FilesystemMiddleware
-
-    return FilesystemMiddleware(
-        backend=backend,
-        tools=["ls", "read_file", "write_file"],
-        _permissions=permissions,
-    )
-
-
-def _subagent(run_dir: Path, backend: Any, lens: str) -> dict[str, Any]:
-    name = lens if lens in LENSES else "additional-researcher"
-    prefix = f"/lenses/{lens}"
-    permissions = _permissions(prefix)
-    return {
-        "name": name,
-        "description": (
-            f"Researches only the {lens} perspective for one mission. "
-            "Give it the mission, boundaries, round, exact output path, and for "
-            "follow-up only its own first report path plus bare questions."
-        ),
-        "system_prompt": lens_system_prompt(run_dir, lens),
-        "tools": make_research_tools(lens),
-        "middleware": [_filesystem(backend, permissions)],
-        "permissions": permissions,
-    }
-
-
-def create_mission_supervisor(run_dir: Path, checkpointer: Any = None) -> Any:
-    from deepagents import FilesystemPermission, create_deep_agent
+def _graph(
+    *,
+    system_prompt: str,
+    tools: list[Any],
+    read: tuple[str, ...],
+    response_format: type | None,
+    name: str,
+    checkpointer: Any,
+) -> Any:
+    from deepagents import create_deep_agent
     from deepagents.backends import StateBackend
+    from deepagents.middleware import FilesystemMiddleware
+    from langchain.agents.structured_output import ProviderStrategy
 
     configure_deepagents()
     backend = StateBackend()
-    parent_permissions = [
-        FilesystemPermission(
-            operations=["write"], paths=["/answer.md", "/notes/**"], mode="allow"
-        ),
-        FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
-    ]
-    subagents = [_subagent(run_dir, backend, lens) for lens in LENSES]
-    subagents.append(_subagent(run_dir, backend, "additional"))
+    model = build_layer3_model()
+    permissions = _permissions(read=read)
     return create_deep_agent(
-        model=MODEL_SPEC,
-        system_prompt=supervisor_system_prompt(run_dir),
-        tools=[],
-        middleware=[_filesystem(backend, parent_permissions)],
+        model=model,
+        system_prompt=system_prompt,
+        tools=tools,
+        middleware=[
+            FilesystemMiddleware(
+                backend=backend,
+                tools=["read_file"],
+                _permissions=permissions,
+            ),
+            context_middleware(model, backend),
+        ],
         backend=backend,
-        permissions=parent_permissions,
-        subagents=subagents,
+        permissions=permissions,
+        subagents=[],
         context_schema=ResearchContext,
         checkpointer=checkpointer,
-        response_format=MissionOutcome,
-        name="cdi-layer3-mission-supervisor",
+        response_format=ProviderStrategy(response_format) if response_format else None,
+        name=name,
     )
 
 
-def structured_value(result: dict[str, Any]) -> MissionOutcome:
+def create_domain_harness(run_dir: Path, domain: str, checkpointer: Any = None) -> Any:
+    if domain not in DOMAIN_NAMES:
+        raise ValueError(f"unknown Layer 3 domain: {domain}")
+    return _graph(
+        system_prompt=domain_system_prompt(run_dir, domain),
+        tools=make_research_tools(domain),
+        read=(),
+        response_format=ResearchOutcome,
+        name=domain,
+        checkpointer=checkpointer,
+    )
+
+
+def create_reviewer_harness(run_dir: Path, checkpointer: Any = None) -> Any:
+    return _graph(
+        system_prompt=reviewer_system_prompt(run_dir),
+        tools=[],
+        read=("/domains/**",),
+        response_format=ReviewOutcome,
+        name="property-reviewer",
+        checkpointer=checkpointer,
+    )
+
+
+def create_synthesis_harness(run_dir: Path, checkpointer: Any = None) -> Any:
+    return _graph(
+        system_prompt=synthesis_system_prompt(run_dir),
+        tools=[],
+        read=("/domains/**", "/review.md"),
+        response_format=None,
+        name="property-synthesis",
+        checkpointer=checkpointer,
+    )
+
+
+def structured_value(result: dict[str, Any], schema: type) -> Any:
     value = result.get("structured_response")
-    return value if isinstance(value, MissionOutcome) else MissionOutcome.model_validate(value)
+    return value if isinstance(value, schema) else schema.model_validate(value)
+
+
+def final_text(result: dict[str, Any]) -> str:
+    """Return the final assistant Markdown from a completed graph."""
+    for message in reversed(result.get("messages", [])):
+        if getattr(message, "type", "") == "ai":
+            value = str(message.text).strip()
+            if value:
+                return value
+    raise ValueError("synthesis returned no final Markdown")

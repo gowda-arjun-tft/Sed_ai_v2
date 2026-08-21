@@ -10,18 +10,37 @@ from ML.deep_research.layer2.planner import load_planner
 from .settings import AGENT_NAMES
 
 
-def mission_thread_id(run_id: str, agent: str, attempt: int) -> str:
-    """Stable checkpoint identity; a retry gets a clean thread."""
-    return str(uuid5(NAMESPACE_URL, f"cdi:{run_id}:{agent}:{attempt}"))
+def stage_thread_id(
+    run_id: str,
+    stage: str,
+    actor: str,
+    batch: int,
+    attempt: int,
+) -> str:
+    """Stable isolated checkpoint identity for one direct stage attempt."""
+    return str(uuid5(NAMESPACE_URL, f"cdi:{run_id}:{stage}:{actor}:{batch}:{attempt}"))
 
 
-def load_inputs(run_dir: Path) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+def _boundaries(definition: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "mandate": definition["mandate"],
+        "handoffs": definition["handoffs"],
+    }
+
+
+def load_research_input(run_dir: Path) -> list[dict[str, Any]]:
+    """Load the eight isolated domain assignments."""
     _, definitions = load_planner(run_dir / "inputs" / "planner_prompt.md")
     by_name = {item["name"]: item for item in definitions}
-    values = []
+    missions = []
     for name in AGENT_NAMES:
         mission = load_json(run_dir / "inputs" / "missions" / f"{slug(name)}.json")
-        if mission.get("agent") != name:
-            raise ValueError(f"mission agent mismatch: {name}")
-        values.append((mission, by_name[name]))
-    return values
+        missions.append(mission)
+    return [
+        {
+            "name": name,
+            "mission": mission,
+            "boundaries": _boundaries(by_name[name]),
+        }
+        for name, mission in zip(AGENT_NAMES, missions, strict=True)
+    ]

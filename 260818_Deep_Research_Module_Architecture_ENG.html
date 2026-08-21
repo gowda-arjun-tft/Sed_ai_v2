@@ -1,1173 +1,347 @@
-<title>Deep Research Module</title>
-<style>
-
-:root{
-  --paper:#F7F8FA;--paper-2:#FFFFFF;--sunk:#EDEFF3;
-  --ink:#161B22;--ink-2:#3C4652;--ink-3:#6B7684;--ink-4:#98A2AF;
-  --rule:#D8DDE4;--rule-2:#C2C9D3;
-  --accent:#1F5C6E;--accent-wash:#E4EEF1;
-  --liab:#9A3B32;--liab-wash:#F6E7E5;--on-liab:#FFFFFF;
-  --warn:#8A6410;--warn-wash:#F7EFDC;
-  --ok:#2F6B4F;--ok-wash:#E3EFE8;
-  --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
-  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --mono:ui-monospace,SFMono-Regular,"Cascadia Mono",Consolas,"Liberation Mono",monospace;
-}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --paper:#11151B;--paper-2:#171C24;--sunk:#1D232C;
-  --ink:#E6EAF0;--ink-2:#BFC8D4;--ink-3:#8D98A6;--ink-4:#6B7684;
-  --rule:#2A323C;--rule-2:#3A4450;
-  --accent:#6FB3C6;--accent-wash:#16303A;
-  --liab:#E08A80;--liab-wash:#3A1F1C;--on-liab:#2A1210;
-  --warn:#D9AC55;--warn-wash:#332813;
-  --ok:#7FBF9C;--ok-wash:#16301F;
-}}
-:root[data-theme="dark"]{
-  --paper:#11151B;--paper-2:#171C24;--sunk:#1D232C;
-  --ink:#E6EAF0;--ink-2:#BFC8D4;--ink-3:#8D98A6;--ink-4:#6B7684;
-  --rule:#2A323C;--rule-2:#3A4450;
-  --accent:#6FB3C6;--accent-wash:#16303A;
-  --liab:#E08A80;--liab-wash:#3A1F1C;--on-liab:#2A1210;
-  --warn:#D9AC55;--warn-wash:#332813;
-  --ok:#7FBF9C;--ok-wash:#16301F;
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth;scroll-padding-top:20px}
-body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
-     font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
-
-.wrap{display:grid;grid-template-columns:230px minmax(0,1fr);gap:44px;
-      max-width:1320px;margin:0 auto;padding:0 28px}
-@media(max-width:1000px){.wrap{grid-template-columns:1fr;gap:0}}
-
-nav{position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto;
-    padding:34px 0 40px;font-size:13px}
-@media(max-width:1000px){nav{position:static;max-height:none;border-bottom:1px solid var(--rule);
-    margin-bottom:24px;padding-bottom:20px}}
-nav .navtitle{font-family:var(--mono);font-size:10px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--ink-4);margin:0 0 12px}
-nav a{display:block;color:var(--ink-3);text-decoration:none;padding:4px 0 4px 10px;
-      border-left:2px solid var(--rule);line-height:1.35}
-nav a:hover{color:var(--accent);border-left-color:var(--accent)}
-nav a .n{font-family:var(--mono);font-size:11px;color:var(--ink-4);margin-right:7px}
-nav .grp{margin-top:16px}
-nav .grp:first-of-type{margin-top:0}
-nav .grplabel{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;
-      text-transform:uppercase;color:var(--accent);padding-left:10px;margin-bottom:5px}
-
-.doc{padding:34px 0 100px;min-width:0}
-.hero{border-bottom:2px solid var(--accent);padding-bottom:26px;margin-bottom:34px}
-.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--accent);margin:0 0 12px}
-h1{font-family:var(--serif);font-weight:400;font-size:clamp(2rem,4.4vw,3rem);
-   line-height:1.12;margin:0 0 14px;letter-spacing:-.01em}
-.hero p{font-size:1.08rem;color:var(--ink-2);margin:0 0 8px;max-width:66ch}
-.meta{font-family:var(--mono);font-size:11.5px;color:var(--ink-4);margin-top:16px}
-
-h2{font-family:var(--serif);font-weight:400;font-size:1.72rem;line-height:1.2;
-   margin:56px 0 6px;padding-top:14px;border-top:1px solid var(--rule);
-   display:flex;gap:14px;align-items:baseline;text-wrap:balance}
-h2 .num{font-family:var(--mono);font-size:12px;color:var(--accent);flex:0 0 auto;
-        letter-spacing:.08em}
-h2 + .sub{color:var(--ink-3);font-size:14.5px;margin:0 0 22px;max-width:70ch}
-h3{font-size:1.06rem;font-weight:650;margin:30px 0 9px;color:var(--ink)}
-h4{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;
-   color:var(--accent);margin:24px 0 8px;font-weight:650}
-p{margin:0 0 14px;max-width:74ch}
-ul,ol{margin:0 0 15px;padding-left:22px;max-width:74ch}
-li{margin-bottom:6px}
-strong{font-weight:650}
-em{font-style:italic;color:var(--ink-2)}
-code,.f{font-family:var(--mono);font-size:.855em;background:var(--sunk);
-        padding:.13em .4em;border-radius:3px;color:var(--ink-2);
-        white-space:nowrap;word-break:keep-all}
-.f{color:var(--accent);font-weight:600}
-
-.contract{border:1.8px solid var(--accent);border-radius:10px;overflow:hidden;
-          margin:22px 0 26px;background:var(--paper-2)}
-.contract-h{background:var(--accent-wash);padding:11px 16px;border-bottom:1px solid var(--accent);
-            display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:baseline}
-.contract-h b{font-family:var(--mono);font-size:11px;letter-spacing:.12em;
-            text-transform:uppercase;color:var(--accent)}
-.contract-h span{font-size:13px;color:var(--ink-2)}
-.io{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
-@media(max-width:820px){.io{grid-template-columns:1fr}}
-.io-col{padding:14px 16px 16px;border-right:1px solid var(--rule);min-width:0}
-.io-col:last-child{border-right:none}
-@media(max-width:820px){.io-col{border-right:none;border-bottom:1px solid var(--rule)}
-  .io-col:last-child{border-bottom:none}}
-.io-col > b{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.13em;
-            text-transform:uppercase;color:var(--ink-4);margin-bottom:10px}
-.io-col.mid{background:var(--sunk)}
-.io-col.out > b{color:var(--ok)}
-.io-col ul{margin:0;padding-left:0;list-style:none;max-width:none}
-.io-col li{margin-bottom:8px;font-size:13.2px;line-height:1.45;color:var(--ink-2)}
-.io-col li .f{white-space:normal}
-.io-col li i{font-style:normal;color:var(--ink-4);display:block;font-size:12px;margin-top:1px}
-.none{font-family:var(--mono);font-size:12px;color:var(--ink-4)}
-
-.payload{border:1px solid var(--rule-2);border-radius:8px;background:var(--paper-2);
-         margin:16px 0 22px;overflow:hidden}
-.payload-h{background:var(--sunk);padding:8px 14px;font-family:var(--mono);font-size:10px;
-           letter-spacing:.12em;text-transform:uppercase;color:var(--accent);
-           border-bottom:1px solid var(--rule-2);display:flex;justify-content:space-between;
-           gap:12px;flex-wrap:wrap}
-.payload-h em{font-style:normal;color:var(--ink-3);letter-spacing:.06em}
-.payload pre{margin:0;padding:13px 15px;font-family:var(--mono);font-size:12.3px;
-             line-height:1.6;color:var(--ink-2);overflow-x:auto}
-.payload pre b{color:var(--accent);font-weight:600}
-.payload pre i{color:var(--ink-4);font-style:normal}
-.payload pre u{text-decoration:none;color:var(--ok);font-weight:600}
-
-pre.block{margin:0 0 20px;padding:14px 16px;font-family:var(--mono);font-size:12.3px;
-     line-height:1.6;background:var(--paper-2);border:1px solid var(--rule-2);
-     border-radius:8px;color:var(--ink-2);overflow-x:auto}
-pre.block b{color:var(--accent);font-weight:600}
-pre.block i{color:var(--ink-4);font-style:normal}
-
-.scroll{overflow-x:auto;margin:0 0 22px;border:1px solid var(--rule);border-radius:8px;
-        background:var(--paper-2)}
-table{border-collapse:collapse;width:100%;font-size:13.6px;line-height:1.45}
-th,td{padding:9px 13px;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top}
-thead th{background:var(--sunk);font-family:var(--mono);font-size:10px;letter-spacing:.09em;
-         text-transform:uppercase;color:var(--ink-2);font-weight:650;white-space:nowrap}
-tbody tr:last-child td{border-bottom:none}
-td .f{white-space:nowrap}
-td.owner{font-size:12.8px;color:var(--ink-2)}
-.n0{font-family:var(--mono);font-size:12px;color:var(--ink-4);text-align:right;
-    font-variant-numeric:tabular-nums}
-
-.tier{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;
-    width:20px;height:20px;line-height:20px;text-align:center;border-radius:4px;
-    background:var(--accent);color:var(--paper-2)}
-.tier.t2{background:var(--ok)}
-.tier.t3{background:var(--warn)}
-.tier.t4{background:var(--liab);color:var(--on-liab)}
-.dash{color:var(--ink-4)}
-
-.call{border-left:3px solid var(--accent);background:var(--accent-wash);
-      padding:12px 16px;border-radius:0 7px 7px 0;margin:0 0 20px;max-width:76ch}
-.call.warn{border-left-color:var(--warn);background:var(--warn-wash)}
-.call.stop{border-left-color:var(--liab);background:var(--liab-wash)}
-.call.ok{border-left-color:var(--ok);background:var(--ok-wash)}
-.call p{margin:0;font-size:14.2px;max-width:none}
-.call p + p{margin-top:8px}
-.call b{color:inherit}
-
-.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin:0 0 22px}
-.rule-c{border:1px solid var(--rule-2);border-radius:8px;background:var(--paper-2);padding:13px 15px}
-.rule-c b{display:block;font-size:14.5px;margin-bottom:5px;color:var(--ink)}
-.rule-c span{font-size:13.2px;color:var(--ink-2);line-height:1.45;display:block}
-.rule-c .k{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--accent);
-           display:block;margin-bottom:6px}
-
-.lensgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:0 0 22px}
-.lens-c{border:1px solid var(--rule-2);border-radius:8px;background:var(--paper-2);padding:13px 15px}
-.lens-c .nm{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;
-     color:var(--accent);display:block;margin-bottom:6px;font-weight:650}
-.lens-c span{font-size:13.4px;color:var(--ink-2);line-height:1.45;display:block}
-.lens-c.hard{border-color:var(--liab)}
-.lens-c.hard .nm{color:var(--liab)}
-
-.svgwrap{margin:0 0 24px;padding:16px;border:1px solid var(--rule);border-radius:9px;
-         background:var(--paper-2);overflow-x:auto}
-.svgwrap svg{display:block;width:100%;height:auto;min-width:660px}
-.svgwrap + .cap{font-size:13px;color:var(--ink-3);margin:-14px 0 24px;max-width:74ch}
-
-.foot{margin-top:60px;padding-top:20px;border-top:1px solid var(--rule);
-      font-family:var(--mono);font-size:11.5px;color:var(--ink-4)}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-@media print{
-  :root,:root[data-theme="dark"]{color-scheme:light;
-    --paper:#fff;--paper-2:#fff;--sunk:#F0F2F5;--ink:#111;--ink-2:#333;--ink-3:#5A626C;
-    --ink-4:#8A929B;--rule:#D5DAE0;--rule-2:#BCC3CC;--accent:#1F5C6E;--accent-wash:#EAF2F4;
-    --liab:#8E362D;--liab-wash:#F8ECEA;--warn:#7E5B0E;--warn-wash:#F9F2E0;
-    --ok:#2A6248;--ok-wash:#E9F2EC;}
-  nav{display:none}
-  .wrap{grid-template-columns:1fr;max-width:none;padding:0}
-  h2{page-break-after:avoid}
-  .contract,.payload,.scroll,.svgwrap{page-break-inside:avoid}
-}
-
-</style>
-
-<div class="wrap">
-<nav>
-  <p class="navtitle">Contents</p>
-
-  <div class="grp">
-    <div class="grplabel">Overview</div>
-    <a href="#s1"><span class="n">1</span>What it does</a>
-    <a href="#s2"><span class="n">2</span>End to end</a>
-    <a href="#s3"><span class="n">3</span>What goes in</a>
-  </div>
-
-  <div class="grp">
-    <div class="grplabel">The agents</div>
-    <a href="#s4"><span class="n">4</span>The fourteen agents</a>
-    <a href="#s5"><span class="n">5</span>Adding an agent later</a>
-  </div>
-
-  <div class="grp">
-    <div class="grplabel">Layer 2 · planning</div>
-    <a href="#s6"><span class="n">6</span>The mission call</a>
-    <a href="#s7"><span class="n">7</span>The mission</a>
-  </div>
-
-  <div class="grp">
-    <div class="grplabel">Layer 3 · research</div>
-    <a href="#s8"><span class="n">8</span>Mission supervisors</a>
-    <a href="#s9"><span class="n">9</span>The five lenses</a>
-    <a href="#s10"><span class="n">10</span>Question follow-up</a>
-    <a href="#s11"><span class="n">11</span>Where to look</a>
-    <a href="#s12"><span class="n">12</span>How long an answer should be</a>
-    <a href="#s13"><span class="n">13</span>The supervisor</a>
-  </div>
-
-  <div class="grp">
-    <div class="grplabel">Reference</div>
-    <a href="#s14"><span class="n">14</span>Execution and calls</a>
-    <a href="#s15"><span class="n">15</span>Artifacts and resume</a>
-    <a href="#s16"><span class="n">16</span>Before going online</a>
-  </div>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CDI Deep Research Module Architecture</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f141b;
+      --panel: #171e28;
+      --panel-2: #1d2733;
+      --ink: #eef3f8;
+      --muted: #9aabba;
+      --line: #354352;
+      --blue: #67b8ff;
+      --green: #59d39b;
+      --amber: #f5c46b;
+      --red: #f47d72;
+      --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.65 var(--sans);
+    }
+    a { color: inherit; }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      gap: 18px;
+      overflow-x: auto;
+      padding: 13px max(20px, calc((100vw - 1100px) / 2));
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--bg) 94%, transparent);
+      backdrop-filter: blur(10px);
+      font: 11px var(--mono);
+      white-space: nowrap;
+    }
+    nav a { color: var(--muted); text-decoration: none; }
+    nav a:hover { color: var(--blue); }
+    main { width: min(1100px, calc(100% - 40px)); margin: 0 auto 80px; }
+    header { padding: 72px 0 48px; border-bottom: 1px solid var(--line); }
+    .eyebrow {
+      color: var(--blue);
+      font: 700 11px var(--mono);
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+    h1 { max-width: 850px; margin: 12px 0; font-size: clamp(38px, 7vw, 72px); line-height: 1.02; }
+    h2 { margin: 64px 0 10px; font-size: clamp(26px, 4vw, 40px); line-height: 1.15; }
+    h3 { margin: 0 0 8px; font-size: 16px; }
+    p { max-width: 78ch; margin: 0 0 14px; }
+    .lead { color: var(--muted); font-size: 19px; max-width: 70ch; }
+    .meta { margin-top: 28px; color: var(--muted); font: 12px var(--mono); }
+    .num { color: var(--blue); margin-right: 10px; font: 12px var(--mono); vertical-align: middle; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 24px 0; }
+    .domains { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+    .card p { margin: 0; color: var(--muted); }
+    .tag { color: var(--amber); font: 700 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+    .diagram {
+      margin: 26px 0 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      overflow-x: auto;
+    }
+    svg { display: block; width: 100%; min-width: 820px; height: auto; }
+    .caption { color: var(--muted); font-size: 13px; }
+    pre {
+      overflow-x: auto;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #0b1016;
+      color: #d6e4f0;
+      font: 12px/1.6 var(--mono);
+    }
+    code { color: #c9e7ff; font-family: var(--mono); }
+    table { width: 100%; border-collapse: collapse; margin: 22px 0; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font: 700 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; }
+    ul, ol { max-width: 82ch; padding-left: 22px; }
+    li { margin: 7px 0; }
+    .callout { padding: 17px 18px; border-left: 3px solid var(--green); background: var(--panel-2); }
+    .warn { border-left-color: var(--amber); }
+    footer { margin-top: 70px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); }
+    @media (max-width: 720px) {
+      main { width: min(100% - 24px, 1100px); }
+      header { padding-top: 44px; }
+      .grid, .domains { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<nav aria-label="Architecture sections">
+  <a href="#s1">01 Purpose</a>
+  <a href="#s2">02 Flow</a>
+  <a href="#s3">03 Layer 2</a>
+  <a href="#s4">04 Domains</a>
+  <a href="#s5">05 Harness</a>
+  <a href="#s6">06 Method</a>
+  <a href="#s7">07 Evidence</a>
+  <a href="#s8">08 Memory</a>
+  <a href="#s9">09 Artifacts</a>
+  <a href="#s10">10 Calls</a>
+  <a href="#s11">11 Checks</a>
+  <a href="#s12">12 Operation</a>
 </nav>
 
-<main class="doc">
+<main>
+  <header>
+    <div class="eyebrow">CDI · real-estate due diligence · architecture contract</div>
+    <h1>Deep Research Module</h1>
+    <p class="lead">One Markdown fact sheet becomes eight property missions, eight independent domain
+      reports, one comprehensive review, optional clarification and one property synthesis.</p>
+    <div class="meta">Deep Agents 0.7.7 · gpt-5.6-luna · Layer 2 maximum reasoning · Layer 3 low reasoning</div>
+  </header>
 
-<div class="hero">
-  <p class="eyebrow">Technical design · 260818</p>
-  <h1>Deep Research Module</h1>
-  <p>This module researches one property. It has two stages. <b>Layer 2</b> reads one summary
-     document about the property and writes fourteen research briefs, one per subject area.
-     <b>Layer 3</b> gives each brief to a stable mission supervisor. That supervisor delegates to
-     five fixed lens researchers and combines their work into one answer.</p>
-  <p>Layer 3 is the only stage that uses the internet. The module runs once per property.</p>
-  <div class="meta">in: 1 fact sheet &nbsp;·&nbsp; out: 14 answers, 70 required lens files, optional additional lenses, stored sources</div>
-</div>
+  <section id="s1">
+    <h2><span class="num">01</span>Purpose</h2>
+    <p>CDI separates supplied property facts from public research. Layer 2 transcribes and routes the
+      supplied evidence. Layer 3 investigates what remains, retains the public sources, tests the
+      conclusions and creates one property-level answer.</p>
+    <div class="callout">All eight domains run for every property. The geopolitical and supply-chain
+      domain performs a dependency assessment even when its final result is that no material pathway
+      was established.</div>
+  </section>
 
-<!-- ============ 1 ============ -->
-<h2 id="s1"><span class="num">01</span>What it does</h2>
-
-<p>The property's own documents have already been read by an earlier stage, which produced a single
-   summary file called the fact sheet. This module takes that file and finds out what it does not
-   say.</p>
-
-<pre class="block"><b>Input</b>     assets/&lt;uuid&gt;/fact_sheet.md
-
-<b>Output</b>    research/&lt;agent&gt;.md              <i>14 answers, one per subject area</i>
-          lenses/&lt;agent&gt;/&lt;lens&gt;.md         <i>70 required lens files</i>
-          lenses/&lt;agent&gt;/&lt;additional&gt;.md   <i>up to 14 optional additional-lens files</i>
-          sources/                         <i>a stored copy of every page read</i>
-          checkpoints.sqlite3              <i>resumable mission memory</i>
-          run.json                         <i>status for each of the 14 missions</i></pre>
-
-<p>Each of the fourteen answers reports what its researchers established, the evidence behind it,
-   and what they could not find. This module does not compare findings across the fourteen agents
-   or rank them against each other. That happens in the next layer.</p>
-
-<h3>What the words mean</h3>
-
-<div class="scroll">
-<table>
-  <thead><tr><th>Word</th><th>Meaning</th></tr></thead>
-  <tbody>
-  <tr><td><span class="f">fact sheet</span></td><td>one file listing everything the property's documents say, with the page each fact came from</td></tr>
-  <tr><td><span class="f">mission</span></td><td>the job owned by one stable supervisor, written in plain prose</td></tr>
-  <tr><td><span class="f">lens</span></td><td>one of five fixed custom subagents, each looking at the same job from a different angle</td></tr>
-  <tr><td><span class="f">mission supervisor</span></td><td>the resumable agent that delegates one mission, compares the returns and writes its answer</td></tr>
-  <tr><td><span class="f">system prompt</span></td><td>the standing instruction that tells one researcher who it is and how to look at the job</td></tr>
-  <tr><td><span class="f">locator</span></td><td>file name, page number and document date — how a fact is traced back to where it came from</td></tr>
-  <tr><td><span class="f">mission memory</span></td><td>thread-scoped StateBackend scratch restored from SQLite for that mission only</td></tr>
-  <tr><td><span class="f">atomic commit</span></td><td>application code validates the full bundle, replaces each file atomically, then marks the mission complete</td></tr>
-  <tr><td><span class="f">tier</span></td><td>how trustworthy a source is, 1 (official) to 4 (interested party)</td></tr>
-  </tbody>
-</table>
-</div>
-
-<p>Layer 1, which reads the property's documents and produces the fact sheet, is specified
-   separately as Data Room Intelligence and is not covered here.</p>
-
-<!-- ============ 2 ============ -->
-<h2 id="s2"><span class="num">02</span>End to end</h2>
-
-<p>One planning request for the whole property, then fourteen resumable mission supervisors. Each
-   supervisor delegates to the five fixed lenses and performs its own follow-up and synthesis.</p>
-
-<p>The two diagrams below show the same pipeline: the first is the planning stage, the second is
-   what happens to one of the fourteen briefs.</p>
-
-<div class="svgwrap">
-<svg viewBox="0 0 880 148" role="img" aria-label="Layer 2: fact sheet and planner prompt into one call, out to fourteen missions">
-  <defs>
-    <marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
-      <path d="M0,1 L7,4.5 L0,8 z" fill="currentColor"/>
-    </marker>
-  </defs>
-  <g font-family="ui-monospace,Consolas,monospace" font-size="11.5" fill="currentColor">
-    <text x="0" y="12" font-size="10" letter-spacing="1.4" fill="#6B7684">LAYER 2 · PLAN</text>
-
-    <rect x="0" y="26" width="176" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="12" y="49">fact_sheet.md</text>
-
-    <rect x="0" y="76" width="176" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="12" y="99">planner_prompt.md</text>
-
-    <g color="currentColor" stroke="currentColor" stroke-width="1.2" fill="none" marker-end="url(#a1)">
-      <path d="M176,45 L232,45 L232,62 L266,62"/>
-      <path d="M176,95 L232,95 L232,78 L266,78"/>
-      <path d="M446,70 L502,70"/>
-    </g>
-
-    <rect x="268" y="40" width="176" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="1.8"/>
-    <text x="284" y="65" font-weight="700">ONE CALL</text>
-    <text x="284" y="84" font-size="10.5" fill="#6B7684">nothing may be chunked</text>
-
-    <rect x="504" y="50" width="170" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="516" y="74">14 missions</text>
-
-    <text x="690" y="66" font-size="10.5" fill="#6B7684">one response,</text>
-    <text x="690" y="80" font-size="10.5" fill="#6B7684">split into 14 files</text>
-  </g>
-</svg>
-</div>
-<p class="cap">Layer 2. The fact sheet and the agent definitions go in together, in one request.
-   Fourteen briefs come back in one response and are saved as fourteen files.</p>
-
-<div class="svgwrap">
-<svg viewBox="0 0 920 330" role="img" aria-label="Layer 3: one stable mission supervisor delegates to five fixed lens subagents, sends direct question-only follow-ups, may use one additional lens, and returns a bundle for atomic application commit">
-  <defs>
-    <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
-      <path d="M0,1 L7,4.5 L0,8 z" fill="currentColor"/>
-    </marker>
-  </defs>
-  <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill="currentColor">
-    <text x="0" y="11" font-size="10" letter-spacing="1.3" fill="#6B7684">LAYER 3 · RESEARCH &#160;·&#160; one stable supervisor per mission, ×14</text>
-
-    <rect x="0" y="112" width="88" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="11" y="134">mission</text>
-
-    <rect x="116" y="96" width="158" height="68" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
-    <text x="128" y="119" font-size="10.5" font-weight="700">MISSION SUPERVISOR</text>
-    <text x="128" y="138" font-size="9.5" fill="#6B7684">dispatches five tasks</text>
-    <text x="128" y="154" font-size="9.5" fill="#6B7684">stable thread</text>
-
-    <g stroke="currentColor" stroke-width="1.2" fill="none">
-      <rect x="324" y="20" width="138" height="30" rx="5"/>
-      <rect x="324" y="62" width="138" height="30" rx="5"/>
-      <rect x="324" y="104" width="138" height="30" rx="5"/>
-      <rect x="324" y="146" width="138" height="30" rx="5"/>
-    </g>
-    <rect x="324" y="188" width="138" height="30" rx="5" fill="none" stroke="#9A3B32" stroke-width="1.7"/>
-    <text x="335" y="40">practitioner</text>
-    <text x="335" y="82">academic</text>
-    <text x="335" y="124">economist</text>
-    <text x="335" y="166">historian</text>
-    <text x="335" y="208" fill="#9A3B32" font-weight="700">skeptic</text>
-
-    <rect x="532" y="96" width="168" height="68" rx="7" fill="none" stroke="currentColor" stroke-width="1.7"/>
-    <text x="544" y="119" font-size="10.5" font-weight="700">SAME SUPERVISOR</text>
-    <text x="544" y="138" font-size="9.5" fill="#6B7684">compares · follows up</text>
-    <text x="544" y="154" font-size="9.5" fill="#6B7684">synthesizes</text>
-
-    <rect x="738" y="103" width="104" height="54" rx="7" fill="none" stroke="currentColor" stroke-width="1.5"/>
-    <text x="750" y="124" font-size="10" font-weight="700">APPLICATION</text>
-    <text x="750" y="142" font-size="9.5" fill="#6B7684">atomic commit</text>
-
-    <rect x="866" y="111" width="52" height="38" rx="6" fill="none" stroke="#2F6B4F" stroke-width="1.5"/>
-    <text x="875" y="134" fill="#2F6B4F">files</text>
-
-    <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#a2)">
-      <path d="M88,130 L114,130"/>
-      <path d="M274,130 L298,130 L298,35 L322,35"/>
-      <path d="M274,130 L298,130 L298,77 L322,77"/>
-      <path d="M274,130 L322,119"/>
-      <path d="M274,130 L298,130 L298,161 L322,161"/>
-      <path d="M274,130 L298,130 L298,203 L322,203"/>
-      <path d="M462,35 L496,35 L496,117 L530,117"/>
-      <path d="M462,77 L496,77 L496,121 L530,121"/>
-      <path d="M462,119 L530,126"/>
-      <path d="M462,161 L496,161 L496,135 L530,135"/>
-      <path d="M462,203 L496,203 L496,139 L530,139"/>
-      <path d="M700,130 L736,130"/>
-      <path d="M842,130 L864,130"/>
-    </g>
-
-    <text x="125" y="186" font-size="9.5" fill="#6B7684">StateBackend + SQLite checkpoint</text>
-
-    <path d="M582,164 L582,292 L392,292 L392,220" stroke="currentColor" stroke-width="1.2"
-          fill="none" stroke-dasharray="5 3" marker-end="url(#a2)"/>
-    <text x="210" y="312" font-size="9.5" fill="#9A3B32">DIRECT FOLLOW-UP &#8212; bare question only, never another lens&#39;s report or identity</text>
-
-    <rect x="532" y="220" width="168" height="34" rx="6" fill="none" stroke="#6B7684" stroke-width="1.1" stroke-dasharray="5 3"/>
-    <text x="544" y="241" font-size="9.5" fill="#6B7684">optional additional lens · ≤1</text>
-    <path d="M650,164 L650,218" stroke="currentColor" stroke-width="1.1" fill="none"
-          stroke-dasharray="5 3" marker-end="url(#a2)"/>
-    <path d="M700,237 L718,237 L718,178 L684,178" stroke="currentColor" stroke-width="1.1"
-          fill="none" stroke-dasharray="5 3" marker-end="url(#a2)"/>
-  </g>
-</svg>
-</div>
-<p class="cap">Layer 3, for one brief. One stable supervisor delegates to five fixed custom lens
-   subagents. It may ask a lens a direct unattributed question or invoke one additional lens. The
-   application writes durable files only after the complete mission bundle returns.</p>
-
-<pre class="block">per property   <b>1</b> planning request
-               <b>14</b> mission-supervisor graph runs <i>one stable thread per mission</i>
-               <b>70</b> required lens delegations     <i>14 missions × 5 fixed lenses</i>
-               <b>adaptive</b> direct question follow-ups <i>only where evidence needs testing</i>
-               <b>0–14</b> additional-lens delegations <i>at most one per mission</i>
-               <b>14</b> atomic application commits   <i>five lens files plus one answer each</i></pre>
-
-<p>The number of model turns and web-search requests is not fixed: each supervisor and subagent may
-   take several turns before it has enough evidence.</p>
-
-<!-- ============ 3 ============ -->
-<h2 id="s3"><span class="num">03</span>What goes in</h2>
-
-<p>One file. Not the original documents, and not a database.</p>
-
-<pre class="block">assets/&lt;asset_uuid&gt;/fact_sheet.md        <i>with its "Not covered" section removed</i></pre>
-
-<p><span class="f">&lt;asset_uuid&gt;</span> is a unique identifier for the property.</p>
-
-<p>The fact sheet contains every fact taken from the property's documents. Each fact carries four
-   things:</p>
-
-<pre class="block">the German text     <i>exactly as printed in the document</i>
-an English meaning  <i>what that text says</i>
-a locator           <i>which file, which page, and the document's date</i>
-a section heading   <i>the subject the fact was filed under</i></pre>
-
-<div class="call stop">
-  <p><b>The "Not covered" section is removed first.</b> That section lists what nobody read —
-     unreadable drawings, illegible pages, documents the seller did not supply. Showing an agent a
-     list of missing material diverts it from its subject.</p>
-  <p>One rule applies instead: report <b>"the material does not state X"</b>, never
-     <b>"X does not exist"</b>.</p>
-</div>
-
-<!-- ============ 4 ============ -->
-<h2 id="s4"><span class="num">04</span>The fourteen agents</h2>
-
-<p>All fourteen run on every property. None is skipped. Each agent receives one mission file and
-   produces one answer file.</p>
-
-<p>Agents are identified by name. There are no ID codes. The names below are fixed text — they are
-   what appears in a mission's <span class="f">agent</span> field, and a mission naming anything
-   else stops the run with an error.</p>
-
-<div class="scroll">
-<table>
-  <thead><tr><th>Agent</th><th>What it is responsible for</th></tr></thead>
-  <tbody>
-  <tr><td><strong>Building condition, capital expenditure &amp; warranty</strong></td>
-      <td>the physical state of the building, what repairs cost at today's prices, what is still
-          under warranty — and separately, a list of the legally required inspections and whether
-          each one is current</td></tr>
-  <tr><td><strong>Occupier, lease &amp; income</strong></td>
-      <td>who occupies the building, on what terms, what they pay, and whether they can keep
-          paying. Also the surveyed floor area against the area stated in the lease, and which
-          costs the landlord cannot pass on to the tenant</td></tr>
-  <tr><td><strong>Legal, title &amp; encumbrance</strong></td>
-      <td>who owns the building and what is registered against it, what the owner may lawfully
-          agree to, whether the building matches its permits, and whether the other party to a
-          contract still legally exists</td></tr>
-  <tr><td><strong>Utilities, connection &amp; building technology</strong></td>
-      <td>what is supplied to the building — power, water, heat, internet — whether the connections
-          have spare capacity, and whether the building's own control systems could be attacked by
-          hackers</td></tr>
-  <tr><td><strong>Ground, environment &amp; insurability</strong></td>
-      <td>what is under the building, what the weather and climate do to it, and whether an insurer
-          would cover the loss. Covers contamination, unexploded ordnance, soil conditions and
-          insurance</td></tr>
-  <tr><td><strong>Counterparty mandate &amp; award legitimacy</strong></td>
-      <td>under which legal mandate and funding source the occupier is at this address, and whether
-          a lease extension could be agreed with this landlord without a public tender</td></tr>
-  <tr><td><strong>Energy, carbon &amp; transition</strong></td>
-      <td>how far the building is from the emissions targets it will be held to, and what closing
-          that gap costs</td></tr>
-  <tr><td><strong>Market, valuation &amp; exit</strong></td>
-      <td>who would rent this building, at what rent, what else it could be used for, and whether
-          the assumptions behind the existing valuation hold</td></tr>
-  <tr><td><strong>Planning, regulation &amp; tax</strong></td>
-      <td>what public law applies to the building, whether each rule is already law or only
-          proposed, who could object to a permission, and how tax affects both the building and a
-          future sale</td></tr>
-  <tr><td><strong>Location, access &amp; surroundings</strong></td>
-      <td>the site itself — how it is reached, what the neighbours do, and anything nearby that
-          affects this building</td></tr>
-  <tr><td><strong>Regional economy &amp; demographics</strong></td>
-      <td>whether the local economy and population support this use at this rent over the holding
-          period</td></tr>
-  <tr><td><strong>Macro, financing &amp; debt</strong></td>
-      <td>interest rates, credit conditions, and what is borrowed against this building</td></tr>
-  <tr><td><strong>Fund vehicle eligibility</strong></td>
-      <td>whether the fund that owns the building is legally allowed to hold it, and what the
-          fund's own obligations do to it</td></tr>
-  <tr><td><strong>Geopolitical, trade &amp; supply chain</strong></td>
-      <td>cross-border and supply-chain dependencies, and the risk of deliberate harm at this
-          address by non-government actors</td></tr>
-  </tbody>
-</table>
-</div>
-
-<!-- ============ 5 ============ -->
-<h2 id="s5"><span class="num">05</span>Adding an agent later</h2>
-
-<p>When a subject appears uncovered, there are two options: extend an existing agent's brief, or
-   add a fifteenth agent. <strong>Extend the existing brief.</strong> Add an agent only if one of
-   the three conditions below applies.</p>
-
-<p>Extending a brief costs almost nothing. Adding an agent creates a boundary with every existing
-   agent — fourteen new boundaries — and agents do not exchange information, so two agents that
-   both believe a subject is theirs will produce two unreconciled answers on it.</p>
-
-<h3>Conditions for adding a fifteenth agent</h3>
-
-<div class="rules">
-  <div class="rule-c">
-    <span class="k">condition 1</span>
-    <b>No existing agent would consult the required sources</b>
-    <span>None of the fourteen would think to look at parliamentary budget papers or
-      court-reorganisation statutes. An instruction to check a source is ineffective if the agent
-      does not know the source exists. <em>Counterparty mandate &amp; award legitimacy exists for
-      this reason.</em></span>
-  </div>
-  <div class="rule-c">
-    <span class="k">condition 2</span>
-    <b>The conclusion requires both subjects assessed together</b>
-    <span>Split across two agents, one reports that a refurbishment could be funded in exchange for
-      a fifteen-year lease extension. The other reports that a lease extension needs no public
-      tender. Each answer is correct on its own. Together they describe an unlawful award, and
-      neither agent sees both halves.</span>
-  </div>
-  <div class="rule-c">
-    <span class="k">condition 3</span>
-    <b>The added subject would receive little attention</b>
-    <span>Each agent writes one answer. If the condition agent is also told to cover insurance, its
-      answer will be about condition, because that is where most of its material is. Insurance
-      receives a sentence or is omitted. This is caused by the volume of material available.</span>
-  </div>
-</div>
-
-<p><strong>A different source list is not sufficient reason to create an agent.</strong> Sources
-   are added to a brief as a line of instruction.</p>
-
-<!-- ============ 6 ============ -->
-<h2 id="s6"><span class="num">06</span>Layer 2 — the mission call</h2>
-
-<p>Layer 2 reads the fact sheet and writes fourteen briefs. It does no research and makes no
-   internet requests.</p>
-
-<div class="contract">
-  <div class="contract-h"><b>Layer 2 · the mission call</b><span>1 request per property</span></div>
-  <div class="io">
-    <div class="io-col">
-      <b>Input</b>
-      <ul>
-        <li><span class="f">fact_sheet.md</span>
-            <i>the property, without its "Not covered" section</i></li>
-        <li><span class="f">planner_prompt.md</span>
-            <i>the fourteen agent definitions and the rules</i></li>
-      </ul>
+  <section id="s2">
+    <h2><span class="num">02</span>End-to-end flow</h2>
+    <div class="diagram">
+      <svg viewBox="0 0 1040 400" role="img" aria-label="CDI flow from Markdown fact sheet through eight missions, eight concurrent domain researchers, one review, optional clarification and final synthesis">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#9aabba"/>
+          </marker>
+        </defs>
+        <g fill="none" stroke="#9aabba" stroke-width="1.4" marker-end="url(#arrow)">
+          <path d="M150 95 H215"/><path d="M365 95 H435"/><path d="M585 95 H610 V240 H630"/>
+          <path d="M840 250 H900"/>
+          <path d="M960 270 V362 H820"/>
+          <path d="M900 220 H860 V205 H840" stroke-dasharray="5 5"/>
+        </g>
+        <g fill="#171e28" stroke="#67b8ff" stroke-width="1.3">
+          <rect x="20" y="65" width="130" height="60" rx="8"/>
+          <rect x="215" y="65" width="150" height="60" rx="8"/>
+          <rect x="435" y="65" width="150" height="60" rx="8"/>
+        </g>
+        <g fill="#171e28" stroke="#59d39b" stroke-width="1.3">
+          <rect x="630" y="180" width="210" height="120" rx="8"/>
+          <rect x="650" y="338" width="170" height="48" rx="8"/>
+        </g>
+        <g fill="#171e28" stroke="#f5c46b" stroke-width="1.3">
+          <rect x="900" y="210" width="120" height="60" rx="8"/>
+        </g>
+        <g fill="#eef3f8" font-family="ui-monospace,Consolas,monospace" font-size="13">
+          <text x="37" y="91">fact_sheet.md</text><text x="47" y="111" fill="#9aabba" font-size="10">public or private facts</text>
+          <text x="241" y="91">LAYER 2</text><text x="238" y="111" fill="#9aabba" font-size="10">one routing graph</text>
+          <text x="460" y="91">8 MISSIONS</text><text x="462" y="111" fill="#9aabba" font-size="10">lossless context</text>
+          <text x="666" y="207">8 DOMAIN RESEARCHERS</text>
+          <text x="650" y="232" fill="#9aabba" font-size="10">same five questions · isolated drafts</text>
+          <text x="650" y="253" fill="#9aabba" font-size="10">shared cache · independent searches</text>
+          <text x="650" y="278" fill="#9aabba" font-size="10">all eight start concurrently</text>
+          <text x="920" y="235">REVIEW</text><text x="912" y="255" fill="#9aabba" font-size="10">targeted gaps</text>
+          <text x="842" y="194" fill="#9aabba" font-size="9">follow-up</text>
+          <text x="672" y="368">FINAL SYNTHESIS</text>
+        </g>
+      </svg>
     </div>
-    <div class="io-col mid">
-      <b>What happens</b>
-      <ul>
-        <li>one request to a large language model</li>
-        <li>the input is never split into pieces</li>
-        <li>the fourteen briefs come back in a fixed order</li>
-      </ul>
-    </div>
-    <div class="io-col out">
-      <b>Output</b>
-      <ul>
-        <li><span class="f">missions/&lt;agent-name-slug&gt;.json</span>
-            <i>fourteen files, split from one response</i></li>
-      </ul>
-    </div>
-  </div>
-</div>
+    <p class="caption">The dashed return is one optional clarification batch to the responsible
+      domains. Synthesis follows without another review.</p>
+  </section>
 
-<h3>Why the request is not split</h3>
-<p>The model must accept the whole fact sheet plus all fourteen definitions at once. If the fact
-   sheet is processed in pieces, facts that belong to more than one agent are missed — and
-   allocating facts to agents is what this step is for.</p>
-
-<p>Facts also cannot be allocated before the briefs exist, which is why one request does both jobs.
-   The model needs to accept very long input and return machine-readable fields.</p>
-
-<h3><span class="f">planner_prompt.md</span></h3>
-
-<p>One file, stored and change-tracked alongside the software. It holds everything that does not
-   change from one property to the next.</p>
-
-<div class="scroll">
-<table>
-  <thead><tr><th>Part</th><th>Contents</th></tr></thead>
-  <tbody>
-  <tr><td>the rules</td>
-      <td>all fourteen agents run on every property · "nothing found" is a valid result · never
-          report that something does not exist · a general fact is not a finding</td></tr>
-  <tr><td>the fourteen definitions</td>
-      <td>for each agent, in a fixed order — the five fields below</td></tr>
-  <tr><td>the output contract</td>
-      <td>the required structure of a mission, and the instruction to return exactly fourteen in
-          roster order</td></tr>
-  </tbody>
-</table>
-</div>
-
-<div class="scroll">
-<table>
-  <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
-  <tbody>
-  <tr><td><span class="f">name</span></td><td>the exact fixed text that goes in a mission's <span class="f">agent</span> field</td></tr>
-  <tr><td><span class="f">establishes</span></td><td>what this agent is responsible for pinning down</td></tr>
-  <tr><td><span class="f">do_not_cover</span></td><td>subjects belonging to another agent, each naming that agent</td></tr>
-  <tr><td><span class="f">take_as_given</span></td><td>figures this agent must accept from another agent rather than work out again</td></tr>
-  <tr><td><span class="f">web_sources</span></td><td>the registers and publications it should consult</td></tr>
-  </tbody>
-</table>
-</div>
-
-<p>The agent definitions are stored only in this file. <span class="f">do_not_cover</span> and
-   <span class="f">take_as_given</span> do not travel inside a mission — the surrounding software
-   adds them back when a researcher is started. A single copy prevents two agents drifting into the
-   same subject.</p>
-
-<!-- ============ 7 ============ -->
-<h2 id="s7"><span class="num">07</span>The mission</h2>
-
-<p>A mission is produced by the call in section 6 and is read by each of the five researchers in
-   section 8. One file per agent, at
-   <span class="f">missions/&lt;agent-name-slug&gt;.json</span>. The slug is the agent's name
-   rewritten so it can be used as a filename.</p>
-
-<p>A mission holds three things: the agent's name, the job in plain prose, and every fact from the
-   fact sheet that touches that agent's subject. Below is the mission for the condition agent, laid
-   out for readability rather than as literal machine-readable data.</p>
-
-<div class="payload">
-  <div class="payload-h"><span>missions/building-condition-capital-expenditure-warranty.json</span><em>illustrative</em></div>
-<pre>{
-  <b>"agent"</b>: "Building condition, capital expenditure &amp; warranty",
-
-  <b>"mission"</b>: "Establish the condition of the courthouse and its underground garage,
-              and what putting it right costs at today's prices. The record carries
-              more than one figure for the garage deck and more than one scope date:
-              establish which governs, on what evidence, and whether the scope that
-              was finally commissioned still matches the defect it was written for.
-              The building is a 1964 original with a 1988 extension, a 1992 dormer
-              alteration and a 1994 attic conversion, so establish condition per
-              construction generation rather than as one average. Ninety-six
-              inspection reports run from 2020 to 2026 across fire doors, hold-open
-              devices, smoke vents, lightning protection, roof and the revolving
-              door: read them as one series and establish whether any defect was
-              raised and never closed. Report every figure gross, and state plainly
-              that this total is not the asset's total capex.",
-
-  <b>"context"</b>: [
-    { "section": "The underground garage",
-      "fact":    <u>"Angebotssumme gesamt: 702.668,06 EUR (netto)"</u>,
-      "means":   "the garage deck repair was awarded at 702,668.06 EUR net, the
-                  lowest of three tenders, against a prior estimate of 765.000,00 EUR",
-      "where":   "Vergabeempfehlung.pdf · p.1 · 2025-07-04" },
-
-    { "section": "Flagged disagreements",
-      "fact":    <u>"Instandsetzung Tiefgaragendecke, ca. 1.000.000 EUR"</u>,
-      "means":   "a desktop estimate put the same work at about 1,000,000 EUR",
-      "where":   "Objektbericht.pdf · p.31 · 2026-01-21" },
-
-    { "section": "The underground garage",
-      "fact":    <u>"Chloridgehalt oberhalb des Schwellenwerts, 5.400 m² Deckenfläche"</u>,
-      "means":   "chloride readings above threshold across 5,400 m² of deck",
-      "where":   "Gutachten_Tiefgarage.pdf · p.12 · 2025-03-10" },
-
-    { "section": "The lease",
-      "fact":    <u>"Dach und Fach umfasst die Tiefgaragendecken"</u>,
-      "means":   "the landlord carries structural repair of the garage deck",
-      "where":   "Mietvertrag.pdf · p.9 · 2006-11-03" }
+  <section id="s3">
+    <h2><span class="num">03</span>Layer 2 — eight missions</h2>
+    <p>Independent structured calls receive recursively split Markdown chunks and the frozen planner
+      prompt. Their results are appended in source order into eight domain missions.</p>
+    <pre>{
+  "agent": "exact domain name",
+  "mission": "property-specific research objective",
+  "context": [
+    {"section": "heading", "fact": "evidence", "means": "interpretation"}
   ]
 }</pre>
-</div>
+    <p>Python splits, schedules and serializes the structured responses. It does not semantically
+      verify, repair or deduplicate the model's routing.</p>
+  </section>
 
-<p>Every other fact touching this agent's subject appears in the same list. The list has no maximum
-   length.</p>
-
-<div class="scroll">
-<table>
-  <thead><tr><th>Field</th><th>Rule</th></tr></thead>
-  <tbody>
-  <tr><td><span class="f">agent</span></td><td>one of the fourteen names, exactly as written in section 4</td></tr>
-  <tr><td><span class="f">mission</span></td><td>plain prose. The job for this property, including any conflict the agent has to settle</td></tr>
-  <tr><td><span class="f">context</span></td><td>every fact in the fact sheet touching this agent's subject. No maximum</td></tr>
-  <tr><td><span class="f">context[].section</span></td><td>the fact-sheet heading the fact appeared under. Must exist in the sheet</td></tr>
-  <tr><td><span class="f">context[].fact</span></td><td>copied exactly, including spelling and punctuation. German stays German</td></tr>
-  <tr><td><span class="f">context[].means</span></td><td>what it says, in English</td></tr>
-  <tr><td><span class="f">context[].where</span></td><td>file name · page · document date</td></tr>
-  </tbody>
-</table>
-</div>
-
-<h3>What goes in the context list</h3>
-
-<p>Every fact touching an agent's subject goes in, copied exactly, with its locator. There is no
-   maximum number of facts, no selection of the best few, and no shortening.</p>
-
-<p>Each fact also carries the fact-sheet heading it appeared under. The fact sheet groups facts by
-   subject, so facts sharing a heading concern the same thing — the deck award, the chloride reading
-   and the commissioned coating all appear under <em>The underground garage</em>. This grouping is
-   the only indication a researcher gets of which facts relate to each other.</p>
-
-<p><strong>The same fact may go to several agents.</strong> The garage award is relevant to
-   condition, to recoverability and to valuation. Each of those agents draws its own conclusion
-   within its own subject.</p>
-
-<div class="call">
-  <p><b>Where the record disagrees, both values are supplied as separate facts</b>, each with its
-     own source and date. The mission asks the agent to establish which one governs. The facts are
-     not labelled as conflicting, so the agent has to weigh them itself.</p>
-</div>
-
-<h3>Known limitation</h3>
-<p>Fourteen briefs in one response is a long output, and later items in a long response tend to be
-   less detailed — the fourteenth brief is usually weaker than the first. The output order is fixed,
-   so the affected briefs are always the last ones and are predictable. Until validation exists,
-   they are checked by reading them.</p>
-
-<!-- ============ 8 ============ -->
-<h2 id="s8"><span class="num">08</span>Layer 3 — one mission supervisor per brief</h2>
-
-<p>Each brief has one stable mission supervisor and one SQLite-checkpointed thread. The supervisor
-   delegates the identical mission to five fixed custom lens subagents. Lens subagents never read
-   one another's work; their scratch files and returns remain inside that mission's
-   <span class="f">StateBackend</span> until the supervisor finishes.</p>
-
-<div class="contract">
-  <div class="contract-h"><b>Layer 3 · one mission supervisor</b><span>14 stable threads per property</span></div>
-  <div class="io">
-    <div class="io-col">
-      <b>Input</b>
-      <ul>
-        <li><span class="f">mission.json</span>
-            <i>the stable mission, boundaries and supplied facts</i></li>
-        <li>five named custom subagents
-            <i>one fixed system prompt per lens</i></li>
-        <li>mission-scoped <span class="f">StateBackend</span>
-            <i>restored from the same SQLite thread on resume</i></li>
-      </ul>
+  <section id="s4">
+    <h2><span class="num">04</span>Eight always-on domains</h2>
+    <div class="grid domains">
+      <article class="card"><span class="tag">01 · Physical</span><h3>Asset Integrity, Systems & Operational Resilience</h3><p>Structure, envelope, MEP, utilities, controls, capacity, redundancy, maintenance, warranty, remediation and downtime.</p></article>
+      <article class="card"><span class="tag">02 · Income</span><h3>Occupier, Lease, Income & Counterparty Economics</h3><p>Occupier strength, funding, lease terms, cash flow, leakage, security, default, breaks and renewal.</p></article>
+      <article class="card"><span class="tag">03 · Authority</span><h3>Rights, Public Law & Ownership Governance</h3><p>Title, rights, ownership, permits, planning, procurement, fund eligibility, regulation and tax.</p></article>
+      <article class="card"><span class="tag">04 · Loss</span><h3>Ground, Physical Climate & Insurability</h3><p>Ground and site hazards, climate exposure, vulnerability, adaptation, coverage and residual loss.</p></article>
+      <article class="card"><span class="tag">05 · Transition</span><h3>Energy, Carbon & Transition</h3><p>Metered performance, fuels, emissions, enacted duties, retrofit economics, compliance and stranding.</p></article>
+      <article class="card"><span class="tag">06 · Market</span><h3>Location, Demand, Market, Valuation & Exit</h3><p>Access, surroundings, demographics, supply, demand, rents, yields, comparables, liquidity and exit.</p></article>
+      <article class="card"><span class="tag">07 · Capital</span><h3>Finance, Debt & Macro Transmission</h3><p>Debt, security, covenants, hedging, refinancing and macro transmission into cash flow, value and returns.</p></article>
+      <article class="card"><span class="tag">08 · External</span><h3>External Dependencies, Geopolitics, Trade & Supply Chains</h3><p>Trigger-to-property pathways across suppliers, technology, fuels, commodities, routes, sanctions and threats, including resilience and recovery.</p></article>
     </div>
-    <div class="io-col mid">
-      <b>What happens</b>
-      <ul>
-        <li>delegates the first investigation to all five lenses</li>
-        <li>compares their returns and asks direct question-only follow-ups</li>
-        <li>may invoke one additional lens for an indispensable gap</li>
-        <li>synthesizes one complete mission bundle</li>
-      </ul>
-    </div>
-    <div class="io-col out">
-      <b>Output</b>
-      <ul>
-        <li>five required free-form lens reports</li>
-        <li>zero or one additional-lens report</li>
-        <li>one cited final answer</li>
-        <li>one structured return to application code</li>
-      </ul>
-    </div>
-  </div>
-</div>
+  </section>
 
-<p>The model cannot write the durable run folder. Application code validates the complete returned
-   bundle, atomically replaces each lens report and answer, and marks the mission complete in
-   <span class="f">run.json</span> only after every file succeeds. If a process stops during that
-   publication step, the same completed SQLite checkpoint republishes the bundle on resume.</p>
+  <section id="s5">
+    <h2><span class="num">05</span>Layer 3 harness</h2>
+    <table>
+      <thead><tr><th>Actor</th><th>Tools</th><th>State access</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr><td>Eight domains</td><td><code>search_web</code>, <code>read_source</code>, <code>cite</code>, <code>append_report</code>, <code>read_file</code></td><td>Own mission, partial report and offloaded results</td><td>Decision-ledger evidence units</td></tr>
+        <tr><td>Reviewer</td><td><code>read_file</code></td><td>Eight initial reports</td><td>One structured comprehensive review and optional questions</td></tr>
+        <tr><td>Synthesis</td><td><code>read_file</code></td><td>Reports, appended clarification and review</td><td>One structured property answer</td></tr>
+      </tbody>
+    </table>
+    <p>There is no implicit general-purpose subagent, shell, code execution, durable cross-property
+      memory or model-visible host run directory.</p>
+  </section>
 
-<h3>Three research tools</h3>
-<p>The lens subagents receive only <span class="f">search_web</span>,
-   <span class="f">read_source</span> and <span class="f">cite</span>. The first finds public-source
-   candidates, the second fetches and stores one candidate, and the third records the exact support
-   for a claim. There is no host shell, <span class="f">run_python</span>, model-writable run folder,
-   general-purpose subagent or <span class="f">StoreBackend</span>. Deep Agents' task delegation and
-   StateBackend file operations are harness plumbing, not additional research capabilities.</p>
+  <section id="s6">
+    <h2><span class="num">06</span>Five-facet decision ledger</h2>
+    <ol>
+      <li><strong>Practice:</strong> what happens, by whom, in what sequence and at what cost?</li>
+      <li><strong>Authority:</strong> what do primary authorities, standards and rigorous research establish?</li>
+      <li><strong>Economics:</strong> how does the finding affect income, Opex, CapEx, value and exit, and who bears it?</li>
+      <li><strong>Comparables:</strong> what genuinely comparable cases exist, and where does comparability weaken?</li>
+      <li><strong>Challenge:</strong> what evidence challenges the leading view, and what would change the conclusion?</li>
+    </ol>
+    <div class="callout warn">Each facet finishes as <code>supported</code>, <code>inference</code>,
+      <code>unknown</code> or <code>immaterial</code>. Unknown closes the issue. The facets do not
+      create five agents or five automatic searches.</div>
+  </section>
 
-<p>Lens reports remain free-form prose because a fixed field structure encourages filling in fields
-   rather than researching.</p>
+  <section id="s7">
+    <h2><span class="num">07</span>Evidence and search</h2>
+    <p>The model resolves one material issue at a time. Search results include snippets, which help
+      choose the sources worth opening but cannot support a claim. Each domain searches independently;
+      the run-scoped cache reuses an identical query or fetched URL without sharing conclusions.</p>
+    <p>Python enforces the trust boundary: HTTP(S)-only public destinations, redirect revalidation,
+      fetch timeout and size limit, retained raw bytes, canonical text and exact-quotation checks.
+      Search results and web pages remain untrusted data.</p>
+    <pre>search_web(query) → candidates with snippets
+read_source(url)  → retained bytes + canonical text + source ID
+cite(source_id, exact_quote, tier) → verified [citation:&lt;id&gt;]
+append_report(fragment_id, markdown) → durable idempotent evidence unit</pre>
+  </section>
 
-<h3>How a researcher works</h3>
+  <section id="s8">
+    <h2><span class="num">08</span>Memory and resume</h2>
+    <p>Stable domain, review, clarification and synthesis threads share one run-local SQLite
+      checkpointer. Decision-relevant report fragments are durable as soon as they are appended;
+      StateBackend holds messages and offloaded working context for its thread.</p>
+    <ul>
+      <li>Resume a pending graph with the same thread and <code>ainvoke(None)</code>.</li>
+      <li>Commit a completed checkpoint without another model call.</li>
+      <li>Start a clean attempt thread only with <code>-RetryFailed</code>.</li>
+      <li>Retain the run-scoped source cache across retries.</li>
+    </ul>
+  </section>
 
-<p>Each query is chosen from the previous result rather than from a list prepared in advance.</p>
+  <section id="s9">
+    <h2><span class="num">09</span>Published artifacts</h2>
+    <pre>runs/L3_YYYYMMDD_xxxx/
+  inputs/missions/                 eight copied missions
+  inputs/planner_prompt.md         frozen mandate snapshot
+  inputs/prompts/                  frozen harness prompts
+  domains/&lt;domain-slug&gt;.md         eight published reports
+  domains/&lt;domain-slug&gt;.partial.md current progressive reports
+  domains/.fragments/*.json        replay-safe fragment ledgers
+  review/final_review.md
+  research/final.md
+  sources/index.jsonl
+  sources/queries.jsonl
+  sources/citations.jsonl
+  sources/raw/ and sources/text/
+  checkpoints.sqlite3
+  usage.jsonl
+  run.json
+  check_report.md</pre>
+    <p>Domain fragments publish incrementally to their server-bound partial reports. The reviewer
+      returns structured questions; synthesis returns the final Markdown directly. The application
+      validates each final artifact before publication and marks the property complete only after
+      synthesis succeeds.</p>
+  </section>
 
-<div class="rules">
-  <div class="rule-c">
-    <span class="k">rule 1</span>
-    <b>Answer only from what was retrieved</b>
-    <span>If the researcher states an answer and then looks for a source that supports it, the
-      answer came from memory and the source was found afterwards.</span>
-  </div>
-  <div class="rule-c">
-    <span class="k">rule 2</span>
-    <b>Stop when a round adds nothing</b>
-    <span>When a round of queries returns no new source and changes nothing already established,
-      the research is finished. There is no target number of rounds.</span>
-  </div>
-  <div class="rule-c">
-    <span class="k">rule 3</span>
-    <b>Review unused material before finishing</b>
-    <span>Some retrieved material was irrelevant. Some was skipped only because no query led to
-      it.</span>
-  </div>
-</div>
+  <section id="s10">
+    <h2><span class="num">10</span>Execution and calls</h2>
+    <table>
+      <thead><tr><th>Work</th><th>Required executions</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Layer 2 chunk graphs</td><td>1 or more</td><td>Create eight missions from parallel structured chunks</td></tr>
+        <tr><td>Initial domain harnesses</td><td>8</td><td>One per fixed domain, started concurrently</td></tr>
+        <tr><td>Comprehensive review</td><td>1</td><td>Reviews all initial reports once</td></tr>
+        <tr><td>Clarification harnesses</td><td>0–8</td><td>One optional parallel batch for questioned domains</td></tr>
+        <tr><td>Final synthesis</td><td>1</td><td>Reads the review and reports with any appended clarification</td></tr>
+      </tbody>
+    </table>
+    <p>A task count is not a model-call count. Every actor may take several reasoning and tool turns.
+      <code>usage.jsonl</code> records each API-reported call with actor, phase, timestamp, input,
+      cached input, output and reasoning tokens when available.</p>
+  </section>
 
-<h3>Checking sources</h3>
-<p>Before writing, for every source relied on: open it and confirm it exists · confirm it says the
-   thing it is being used to say · store a copy with the date it was read · record the exact words
-   relied on · record who published it, when, and what grade that earns.</p>
+  <section id="s11">
+    <h2><span class="num">11</span>Deterministic checks</h2>
+    <ul>
+      <li>The Layer 2 completion record is valid and prompt hashes match their snapshots.</li>
+      <li>Exactly eight missions, eight domain reports, one final review and one synthesis exist.</li>
+      <li>Every required execution is terminal and there is no repeated review loop.</li>
+      <li>Raw sources and canonical text match their recorded hashes.</li>
+      <li>Query and citation identifiers are unique.</li>
+      <li>Every emitted citation marker resolves to an exact quote in retained canonical text.</li>
+      <li>An answered final synthesis contains verified evidence.</li>
+    </ul>
+    <p>A domain can reuse the query and source cache without making a new search, so search count is
+      not a completion gate. Structural checks do not claim that research judgement is correct.</p>
+  </section>
 
-<p>A copy is stored for every source because web addresses change without notice. An address on its
-   own does not record what the page said.</p>
+  <section id="s12">
+    <h2><span class="num">12</span>Operation</h2>
+    <pre>.\run.ps1 -FactSheet 'C:\path\fact_sheet.md'
+.\run.ps1 -Resume '.\runs\L2_YYYYMMDD_xxxx'
+.\run.ps1 -Research '.\runs\L2_YYYYMMDD_xxxx' -Online -PublicInputConfirmed
+.\run.ps1 -ResumeL3 '.\runs\L3_YYYYMMDD_xxxx'
+.\run.ps1 -ResumeL3 '.\runs\L3_YYYYMMDD_xxxx' -RetryFailed</pre>
+    <p>The API key lives only in <code>.env</code>. Public-input confirmation is required before
+      Layer 3 sends queries externally. Layer 3 currently uses low reasoning for every model and
+      web-search proxy call; this is configuration for measured live testing, not a CLI mode.</p>
+  </section>
 
-<!-- ============ 9 ============ -->
-<h2 id="s9"><span class="num">09</span>The five lenses</h2>
-
-<p>All five custom lens subagents run on every brief. Lenses are not chosen per brief, for the same
-   reason agents are not skipped. Each receives the identical mission and returns one report to the
-   mission supervisor.</p>
-
-<div class="lensgrid">
-  <div class="lens-c"><span class="nm">practitioner</span>
-    <span>How the work is done in practice, and what it costs.</span></div>
-  <div class="lens-c"><span class="nm">academic</span>
-    <span>What the research and published standards establish.</span></div>
-  <div class="lens-c"><span class="nm">economist</span>
-    <span>What it is worth, and who ends up paying.</span></div>
-  <div class="lens-c"><span class="nm">historian</span>
-    <span>How comparable cases turned out, and what the precedent is.</span></div>
-  <div class="lens-c hard"><span class="nm">skeptic</span>
-    <span>Reasons the answer may be wrong. <strong>Always included.</strong></span></div>
-</div>
-
-<p>The mission supervisor may invoke the dedicated <strong>additional-lens</strong> subagent once,
-   but only after reading the five returns and identifying an indispensable perspective none of
-   them covered. This is not a general-purpose subagent and cannot delegate again.</p>
-
-<div class="call stop">
-  <p><b>Purpose of the skeptic.</b> The main error to guard against is a false connection between
-     two real facts, which produces a risk that does not exist. The skeptic tests whether each
-     connection is supported by evidence.</p>
-</div>
-
-<!-- ============ 10 ============ -->
-<h2 id="s10"><span class="num">10</span>Direct question-only follow-up</h2>
-
-<p>Question follow-up is part of the mission supervisor's work, not a separate pipeline stage. Once
-   the five first returns are present in mission memory, the supervisor may send a bare,
-   unattributed question directly to the relevant fixed lens subagent.</p>
-
-<div class="contract">
-  <div class="contract-h"><b>Layer 3 · direct follow-up</b><span>adaptive, inside the mission thread</span></div>
-  <div class="io">
-    <div class="io-col">
-      <b>Input</b>
-      <ul>
-        <li>a bare question from the supervisor
-            <i>the thing to establish, without attribution</i></li>
-        <li>the same mission, assigned lens and that lens's own first report</li>
-      </ul>
-    </div>
-    <div class="io-col mid">
-      <b>What happens</b>
-      <ul>
-        <li>the lens researches the answer itself</li>
-        <li>a lens with no question receives no follow-up</li>
-        <li>no question file or intermediate stage is created</li>
-      </ul>
-    </div>
-    <div class="io-col out">
-      <b>Output</b>
-      <ul>
-        <li>an addendum returned to the same supervisor thread</li>
-        <li>preserved below that lens's first-round report at commit</li>
-      </ul>
-    </div>
-  </div>
-</div>
-
-<p>Independence has two costs: five researchers may open the same registers, and one may find
-   something another needed without either knowing. Both are accepted, and the questions are how
-   the second is addressed. Questions exist only in checkpointed mission state; they are not a
-   durable artifact. The order is shown in the second diagram in section 2.</p>
-
-<h3>Information permitted between researchers</h3>
-
-<div class="scroll">
-<table>
-  <thead><tr><th>Passes between them</th><th>Does not pass</th></tr></thead>
-  <tbody>
-  <tr><td>a question</td><td>another researcher's file, or any part of it</td></tr>
-  <tr><td><em>"Was the figure you priced against superseded in 2024?"</em></td>
-      <td><em>"The historian found it was superseded in 2024."</em></td></tr>
-  <tr><td></td><td>which researcher raised the question</td></tr>
-  <tr><td></td><td>any researcher's conclusion or wording</td></tr>
-  </tbody>
-</table>
-</div>
-
-<p>A lens receives the question from the supervisor and researches the answer itself.</p>
-
-<h3>Reasons researchers stay independent</h3>
-
-<div class="rules">
-  <div class="rule-c"><span class="k">effect 1</span><b>Effect on the skeptic</b>
-    <span>Its job is to test an answer it had no part in building. If it reads the other four
-      first it may adopt their assumptions, and the output would not show that it had.</span></div>
-  <div class="rule-c"><span class="k">effect 2</span><b>Effect on conflict detection</b>
-    <span>The combining step looks for places where two researchers claim opposite things. After a
-      conversation, a conflict may have been settled between them and an agreement may be one
-      researcher giving way. Both look identical in the output.</span></div>
-  <div class="rule-c"><span class="k">effect 3</span><b>Effect of ordering</b>
-    <span>The first researcher to report would set the framing for the others, reducing five
-      independent views to one.</span></div>
-</div>
-
-<h4>Rules</h4>
-<ul>
-  <li>questions carry no attribution — a researcher is never told who raised one</li>
-  <li>the supervisor may ask no follow-up question of a lens</li>
-  <li>a lens with no question receives no second task</li>
-  <li>a researcher that cannot answer a question says so, naming the searches it tried</li>
-  <li>the follow-up is added below the first return and never rewrites it, so what a researcher
-      established alone stays separable from what it found after being asked</li>
-</ul>
-
-<!-- ============ 11 ============ -->
-<h2 id="s11"><span class="num">11</span>Where to look</h2>
-
-<p>Sources are ranked. Every researcher searches tier 1 first, then lower tiers. The tier is
-   recorded next to each claim in the researcher's file.</p>
-
-<div class="scroll">
-<table>
-  <thead><tr><th>Tier</th><th>What it is</th><th>Examples</th></tr></thead>
-  <tbody>
-  <tr><td><span class="tier">1</span> official</td>
-      <td>the body whose records are the origin of the fact</td>
-      <td>government departments, land and building registers, regulators, statistical offices, courts</td></tr>
-  <tr><td><span class="tier t2">2</span> standards</td>
-      <td>professional and scholarly consensus</td>
-      <td>professional-body standards, peer-reviewed research</td></tr>
-  <tr><td><span class="tier t3">3</span> reputable</td>
-      <td>independent second-hand reporting</td>
-      <td>agency market reports, serious press</td></tr>
-  <tr><td><span class="tier t4">4</span> interested</td>
-      <td>a party with something to gain</td>
-      <td>manufacturers, contractors, anyone selling the thing</td></tr>
-  </tbody>
-</table>
-</div>
-
-<p>A lower tier is used only when the tiers above it do not answer the question.</p>
-
-<div class="call">
-  <p><b>Tier 4 is permitted.</b> Sometimes the only source is a manufacturer's own data sheet, and
-     banning it would make a real gap indistinguishable from a source that was not allowed. A claim
-     resting only on a tier 4 source must say so, on the claim itself.</p>
-</div>
-
-<!-- ============ 12 ============ -->
-<h2 id="s12"><span class="num">12</span>How long an answer should be</h2>
-
-<p>This applies to all five researcher files and to the supervisor's answer. Each must be as short
-   as it can be without losing a fact. Long outputs make individual findings harder to find.</p>
-
-<p>No fact may be removed. Three methods of shortening are permitted:</p>
-
-<div class="rules">
-  <div class="rule-c">
-    <span class="k">method 1</span>
-    <b>Merge duplicate sources</b>
-    <span>Where several sources state the same fact, record one fact with all of its
-      citations.</span>
-  </div>
-  <div class="rule-c">
-    <span class="k">method 2</span>
-    <b>Cite instead of transcribing</b>
-    <span>Do not copy a large table. Describe what it shows in one line, and cite it.</span>
-  </div>
-  <div class="rule-c">
-    <span class="k">method 3</span>
-    <b>Move to the end, do not delete</b>
-    <span>Material that does not bear on the answer goes to a list at the end of the file.</span>
-  </div>
-</div>
-
-<div class="call warn">
-  <p><b>Never</b> cut a list short, write "etc." or "among others", shorten a figure away, or drop
-     a source because the point is already made. Retrieved facts are not deleted.</p>
-</div>
-
-<!-- ============ 13 ============ -->
-<h2 id="s13"><span class="num">13</span>The mission supervisor</h2>
-
-<p>The same supervisor that dispatched the lenses compares their returns, performs any follow-up,
-   decides whether one additional lens is indispensable, and writes the answer inside the same
-   continuous mission graph.</p>
-
-<div class="contract">
-  <div class="contract-h"><b>Mission supervisor · compare and synthesize</b><span>one per mission</span></div>
-  <div class="io">
-    <div class="io-col">
-      <b>Input</b>
-      <ul>
-        <li>five lens returns in mission-scoped StateBackend</li>
-        <li>any direct question-only follow-up returns</li>
-        <li>zero or one additional-lens return</li>
-        <li><span class="f">mission.json</span>
-            <i>the brief they were answering</i></li>
-      </ul>
-    </div>
-    <div class="io-col mid">
-      <b>What happens</b>
-      <ul>
-        <li>maps conflicts, missing evidence and unused material</li>
-        <li>asks the relevant lens bare follow-up questions directly</li>
-        <li>follows up material no researcher used</li>
-        <li>may invoke the additional-lens subagent once</li>
-        <li>settles the disagreements it can settle</li>
-        <li>records the rest with both readings</li>
-      </ul>
-    </div>
-    <div class="io-col out">
-      <b>Output</b>
-      <ul>
-        <li><span class="f">research/&lt;agent&gt;.md</span>
-            <i>one answer</i></li>
-        <li>five required lens reports and any additional-lens report</li>
-        <li>a complete mission bundle returned to application code</li>
-      </ul>
-    </div>
-  </div>
-</div>
-
-<p>Where a disagreement cannot be settled on evidence, both readings are recorded with their
-   evidence, together with what would settle it.</p>
-
-<p><strong>Where researchers disagree, the disagreement may itself be the finding.</strong> One
-   reports that a proper repair lasts ten to fifteen years. Another reports that props are already
-   holding the deck up, so the survey behind that estimate may be out of date. The relevant issue
-   is the survey date, not the cost figure, and neither researcher identified it alone.</p>
-
-<div class="call stop">
-  <p><b>Required disclosure.</b> We wrote all five researcher prompts, so their agreement is not
-     independent confirmation and is not the consensus of a field. The answer must say so where it
-     relies on their agreement.</p>
-  <p>The two modes are also weighted differently: something all five reached independently in their
-     first returns is stronger than something four adopted after a supervisor follow-up.</p>
-</div>
-
-<h3>Retention</h3>
-<p>The five required lens files and any additional-lens file are committed alongside the answer, so
-   the answer can be checked against what it was based on.</p>
-
-<!-- ============ 14 ============ -->
-<h2 id="s14"><span class="num">14</span>Execution and model calls</h2>
-
-<p>Layer 3 has fourteen stable top-level graph runs, not a fixed chain of model-call stages. Each
-   supervisor and subagent may take several model turns and research-tool calls.</p>
-
-<div class="scroll">
-<table>
-  <thead><tr><th>Work</th><th>Owner</th><th class="n0">Per property</th><th>Input</th><th>Output</th></tr></thead>
-  <tbody>
-  <tr><td><strong>mission call</strong></td><td>Layer 2</td><td class="n0">1</td>
-      <td>the whole fact sheet plus all fourteen agent definitions, in one request</td>
-      <td>fourteen missions, in a fixed order</td></tr>
-  <tr><td><strong>mission supervisor graph</strong></td><td>Deep Agents</td><td class="n0">14</td>
-      <td>one mission, five fixed custom lens subagents and mission-scoped checkpoint state</td>
-      <td>one complete mission bundle</td></tr>
-  <tr><td><strong>fixed-lens delegation</strong></td><td>custom subagent</td><td class="n0">70 required</td>
-      <td>one mission, one lens prompt and three guarded research tools</td>
-      <td>one free-form lens report returned to its supervisor</td></tr>
-  <tr><td><strong>question-only follow-up</strong></td><td>same custom subagent</td><td class="n0">adaptive</td>
-      <td>the mission, its own first report and one bare unattributed question</td>
-      <td>a lens addendum returned inside the same mission thread</td></tr>
-  <tr><td><strong>additional lens</strong></td><td>dedicated custom subagent</td><td class="n0">0–14</td>
-      <td>the mission and one narrowly defined uncovered perspective</td>
-      <td>one additional-lens report</td></tr>
-  <tr><td><strong>atomic commit</strong></td><td>application code</td><td class="n0">14</td>
-      <td>one validated mission bundle</td>
-      <td>durable lens files, answer and mission status</td></tr>
-  </tbody>
-</table>
-</div>
-
-<p>The exact provider request count and cost are not fixed in advance. A graph invocation is not one
-   model request: supervisors and subagents are multi-turn, and web search is an additional provider
-   request whenever a lens uses it.</p>
-
-<!-- ============ 15 ============ -->
-<h2 id="s15"><span class="num">15</span>Artifacts and resume</h2>
-
-<pre class="block">research/&lt;agent&gt;.md            <i>one answer per agent, in prose</i>
-lenses/&lt;agent&gt;/&lt;lens&gt;.md       <i>70 required fixed-lens files, retained</i>
-lenses/&lt;agent&gt;/&lt;additional&gt;.md <i>zero or one additional-lens file per mission</i>
-sources/                       <i>every page and document read, stored with the date and a
-                               fingerprint proving the copy is unaltered</i>
-checkpoints.sqlite3            <i>messages and StateBackend scratch for 14 stable mission threads</i>
-run.json                       <i>application-owned status for each mission</i>
-check_report.md                <i>deterministic artifact and source checks</i></pre>
-
-<h3>Mission status and memory</h3>
-
-<p><span class="f">run.json</span> records the current status of each of the fourteen missions and
-   maps it to a stable thread. SQLite checkpoints preserve that thread's messages and StateBackend
-   scratch, so an interrupted supervisor resumes the same mission instead of starting from zero.
-   A new mission cannot read another mission's thread, and no StateBackend data crosses to another
-   property.</p>
-
-<p>The deterministic checks require fourteen answers and all seventy fixed-lens files. They allow
-   at most one additional-lens file per mission and also verify source records, hashes, citations,
-   mission completion and the Layer 2 handoff.</p>
-
-<div class="call stop">
-  <p><b>Durable output is an application commit.</b> The model writes only mission-scoped scratch.
-     After a supervisor returns a valid complete bundle, application code atomically replaces each
-     required lens file, any additional-lens file and the answer, then updates mission status. A
-     technical failure remains visible and resumable without presenting partial files as complete.</p>
-</div>
-
-<!-- ============ 16 ============ -->
-<h2 id="s16"><span class="num">16</span>Before going online</h2>
-
-<p>Layer 3 makes internet requests. Layer 2 makes none. Three rules apply to every fixed lens and
-   optional additional-lens task.</p>
-
-<div class="rules">
-  <div class="rule-c"><span class="k">rule 1</span><b>What may leave in a query</b>
-    <span>Publicly known details only — the building type, the town, the regulation, the material.
-      Not the tenant's name, the rent, the valuation or the exact address. A question about market
-      prices is asked about a building type in a region. Every query is logged, so what was sent
-      can be checked.</span></div>
-  <div class="rule-c"><span class="k">rule 2</span><b>Retrieved pages are content</b>
-    <span>A page cannot change a researcher's task. Its text is recorded as text.</span></div>
-  <div class="rule-c"><span class="k">rule 3</span><b>Everything read is kept</b>
-    <span>Every page and downloaded document is stored with the date it was read and a fingerprint
-      proving the copy is unaltered.</span></div>
-</div>
-
-<div class="call stop">
-  <p><b>Nothing confidential goes online until the data-handling rules are agreed</b> — what may be
-     searched, which provider is used, what is logged and kept, and where the data is stored. Until
-     then, testing uses public or invented material.</p>
-  <p>Layer 2 can be produced and tested before those rules exist. Only Layer 3 is blocked.</p>
-</div>
-
-<div class="foot">
-  260818 · Deep Research Module · Layers 2 and 3 · the input file format is defined by the Data
-  Room Intelligence specification · one run per property
-</div>
-
+  <footer>
+    CDI architecture · current direct-research contract · offline structural validation is reported
+    separately from an explicitly authorized live research run.
+  </footer>
 </main>
-</div>
+</body>
+</html>

@@ -44,11 +44,11 @@ def slug(text: str) -> str:
     ``bautrager`` and ``Marché`` becomes ``marche``. Scripts with no Latin form
     keep a stable hashed identifier instead of collapsing to an empty string —
     without that, two Arabic or Chinese headings would overwrite each other's
-    file. Pure ASCII input is returned unchanged, which is why the fourteen
-    roster slugs did not move when the folding was added.
+    file. Pure ASCII input is returned unchanged, which keeps roster slugs stable
+    when the folding rules evolve.
 
-    `&` becomes ` and ` first, so "Legal, title & encumbrance" reads as
-    ``legal-title-and-encumbrance`` rather than losing the conjunction.
+    `&` becomes ` and ` first, so "Energy, Carbon & Transition" reads as
+    ``energy-carbon-and-transition`` rather than losing the conjunction.
     """
     import re
     import unicodedata
@@ -66,8 +66,7 @@ def sha256(path: Path) -> str:
     """Hex digest of a file's bytes, read in 1 MiB chunks.
 
     Chunked so a large source document is hashed without being held in memory.
-    Used to prove the two input copies in a run folder still match their
-    originals — Layer 3 re-checks the planner copy's digest.
+    Used for stored-source identity and prompt-snapshot integrity.
     """
     digest = hashlib.sha256()
     with path.open("rb") as handle:

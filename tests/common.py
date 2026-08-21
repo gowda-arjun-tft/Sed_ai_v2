@@ -48,13 +48,11 @@ CONTEXT = [
         "section": "Land-register reference",
         "fact": '"Sheet 2967"',
         "means": "The property is registered on sheet 2967.",
-        "where": "register.pdf · p1",
     },
     {
         "section": "Annual rent",
         "fact": '"EUR 100,000"',
         "means": "The annual rent is EUR 100,000.",
-        "where": "lease.pdf · p9",
     },
 ]
 
@@ -68,12 +66,24 @@ def create_complete_run(root: Path) -> Path:
     """A finished Layer 2 run, built without a model call.
 
     Stands in for what the agent produces: the run folder, the two input copies,
-    and fourteen mission files. The first agent gets the facts; the rest get a
+    and eight mission files. The first agent gets the facts; the rest get a
     silent-subject mission, which is a normal outcome.
     """
     fact_sheet = root / "fact_sheet.md"
     fact_sheet.write_text(FACT_SHEET, encoding="utf-8")
     run_dir = create_run(fact_sheet, PLANNER_PATH, root / "runs")
+
+    write_json(run_dir / "chunks" / "chunk_0001.json", {"fixture": True})
+    record = load_json(run_dir / "run.json")
+    record["chunking"]["chunks"] = [
+        {
+            "index": 1,
+            "file": "chunks/chunk_0001.json",
+            "status": "complete",
+            "error": "",
+        }
+    ]
+    write_json(run_dir / "run.json", record)
 
     for index, name in enumerate(AGENT_NAMES):
         holds_facts = index == 0
@@ -98,7 +108,7 @@ def create_complete_l3_run(root: Path) -> Path:
     from ML.deep_research.layer3.contracts import Document
     from ML.deep_research.layer3.pipeline.create_run import create_run as create_l3_run
     from ML.deep_research.layer3.pipeline.run_checks import run_checks
-    from ML.deep_research.layer3.settings import LENSES
+    from ML.deep_research.layer3.settings import DOMAIN_NAMES
     from ML.deep_research.layer3.sources import SourceStore
 
     l2_run = create_complete_run(root)
@@ -118,42 +128,65 @@ def create_complete_l3_run(root: Path) -> Path:
         )
     )
     run = load_json(l3_run / "run.json")
-    for agent in AGENT_NAMES:
-        record = run["missions"][slug(agent)]
+    execution = run["execution"]
+    markers = []
+    for domain in DOMAIN_NAMES:
+        record = execution["domains"][domain]
         session_id = record["thread_id"]
-        markers = []
-        for lens in LENSES:
-            store.record_query(
-                session_id=session_id,
-                agent=agent,
-                lens=lens,
-                query=f"{agent} {lens} public evidence",
-                new_sources=1,
-            )
-            marker = store.record_citation(
-                source_id=source["source_sha256"],
-                quote="Verified public fact.",
-                tier=1,
-                agent=agent,
-                lens=lens,
-                session_id=session_id,
-            )
-            markers.append(marker)
-            atomic_write_text(
-                l3_run / "lenses" / slug(agent) / f"{lens}.md",
-                f"# {lens.title()}\n\nVerified public fact. {marker}\n",
-            )
-        atomic_write_text(
-            l3_run / "research" / f"{slug(agent)}.md",
-            f"# Answer\n\nVerified public fact. {markers[0]}\n",
+        store.record_query(
+            session_id=session_id,
+            agent=domain,
+            lens=domain,
+            query=f"public property record {domain}",
+            new_sources=1,
         )
+        marker = store.record_citation(
+            source_id=source["source_sha256"],
+            quote="Verified public fact.",
+            tier=1,
+            agent=domain,
+            lens=domain,
+            session_id=session_id,
+        )
+        markers.append(marker)
+        report = f"# {domain}\n\nVerified public fact. {marker}\n"
+        atomic_write_text(l3_run / "domains" / f"{slug(domain)}.partial.md", report)
+        atomic_write_text(l3_run / "domains" / f"{slug(domain)}.md", report)
         record.update(
             status="complete",
             outcome="answered",
-            reason="",
-            error="",
+            artifact=f"domains/{slug(domain)}.md",
+            model_turns=1,
+            elapsed_seconds=1.0,
             updated_at=now_iso(),
         )
+    atomic_write_text(
+        l3_run / "review" / "final_review.md",
+        f"# Review\n\nEvidence rechecked. {markers[0]}\n",
+    )
+    atomic_write_text(
+        l3_run / "research" / "final.md",
+        f"# Answer\n\nVerified public fact. {markers[0]}\n",
+    )
+    execution["review"].update(
+        status="complete",
+        outcome="complete",
+        questions={},
+        artifact="review/final_review.md",
+        model_turns=1,
+        elapsed_seconds=1.0,
+        updated_at=now_iso(),
+    )
+    execution["final"].update(
+        status="complete",
+        outcome="answered",
+        reason="",
+        error="",
+        artifact="research/final.md",
+        model_turns=1,
+        elapsed_seconds=1.0,
+        updated_at=now_iso(),
+    )
     run["status"] = "complete"
     write_json(l3_run / "run.json", run)
     checks = run_checks(l3_run)

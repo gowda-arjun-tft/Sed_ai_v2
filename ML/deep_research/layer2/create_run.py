@@ -1,4 +1,4 @@
-"""Step 1 of 3 — build the run folder.
+"""Build a self-contained schema-version-2 Layer 2 run folder.
 
 No model, no network, ordinary code. This runs before the agent exists, and its
 whole job is to make a folder that is a self-contained record of one property:
@@ -9,8 +9,8 @@ runs/L2_20260820_a1b2/
     inputs/
         fact_sheet.md      byte-identical copy of the source document
         planner_prompt.md  byte-identical copy of the roster
-    missions/         empty; the agent writes fourteen JSON files here
-    staging/          empty; scratch space the agent uses only if it needs to
+    missions/         empty; ordered chunk merging writes eight JSON files here
+    chunks/           one structured JSON result per model call
 ```
 
 **Why copy the inputs instead of pointing at them.** A run has to stay readable
@@ -19,9 +19,7 @@ hashed into `run.json`, so the report can later prove the run was checked agains
 the same bytes it was given — and Layer 3 re-verifies the planner copy before it
 will accept the run.
 
-The two validations here look like guardrails but are not: they inspect a
-**human-supplied file** before any model sees it. Nothing in this module ever
-inspects what the agent produced.
+The validations inspect only human-supplied inputs before any model call.
 """
 
 from __future__ import annotations
@@ -36,15 +34,20 @@ from .fs import now_iso, read_text, sha256, write_json
 from .planner import load_planner
 from .settings import (
     AGENT_NAMES,
+    CHUNK_ENCODING,
+    CHUNK_OVERLAP_TOKENS,
+    CHUNK_SEPARATORS,
+    CHUNK_SIZE_TOKENS,
     DEEPAGENTS_VERSION,
+    LAYER2_SCHEMA_VERSION,
+    MAX_CHUNK_CONCURRENCY,
+    MODEL_INPUT_TOKEN_LIMIT,
     MODEL_NAME,
+    PROVIDER_MAX_RETRIES,
     REASONING_EFFORT,
 )
 
-# `missions/` is the deliverable. `staging/` is the agent's own scratch space,
-# used only when a fact sheet is too large to hold in one context — created
-# empty either way so the agent never has to make a directory to use one.
-RUN_SUBDIRS = ("inputs", "missions", "staging")
+RUN_SUBDIRS = ("inputs", "chunks", "missions")
 
 
 def create_run(fact_sheet: Path, planner: Path, runs_dir: Path) -> Path:
@@ -139,6 +142,7 @@ def _initial_record(run_id: str, fact_sheet: Path, planner: Path) -> dict:
     because a run's output is only interpretable next to what produced it.
     """
     return {
+        "schema_version": LAYER2_SCHEMA_VERSION,
         "run_id": run_id,
         "status": "started",
         "started_at": now_iso(),
@@ -154,6 +158,18 @@ def _initial_record(run_id: str, fact_sheet: Path, planner: Path) -> dict:
         },
         "model": MODEL_NAME,
         "reasoning_effort": REASONING_EFFORT,
+        "limits": {
+            "input_tokens_per_model_call": MODEL_INPUT_TOKEN_LIMIT,
+            "provider_max_retries": PROVIDER_MAX_RETRIES,
+        },
+        "chunking": {
+            "encoding": CHUNK_ENCODING,
+            "size_tokens": CHUNK_SIZE_TOKENS,
+            "overlap_tokens": CHUNK_OVERLAP_TOKENS,
+            "max_concurrency": MAX_CHUNK_CONCURRENCY,
+            "separators": list(CHUNK_SEPARATORS),
+            "chunks": [],
+        },
         "deepagents_version": DEEPAGENTS_VERSION,
         "agent_count": len(AGENT_NAMES),
     }

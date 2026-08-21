@@ -1,11 +1,4 @@
-"""What Layer 3 records about its Layer 2 source must be what Layer 2 said.
-
-`layer3/pipeline/create_run.py` used to write a literal
-`{"passed": 19, "failed": 0}` into `source_l2.checks`, and its check 1 then
-compared that field against the same literal -- a tautology that always passed
-and proved nothing, while stating a count Layer 2 can no longer produce (it has
-eight checks, not nineteen). Both sides are now derived from the source run.
-"""
+"""Layer 3 handoff and CLI contract checks."""
 
 import contextlib
 import io
@@ -73,6 +66,25 @@ class HandoffProvenanceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "public-input confirmation"):
                 create_l3_run(l2_run, destination)
             self.assertFalse(destination.exists())
+
+    def test_legacy_or_relabelled_mission_rosters_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            l2_run = create_complete_run(root)
+            first = next((l2_run / "missions").glob("*.json"))
+            mission = load_json(first)
+            mission["agent"] = "User-defined domain label"
+            write_json(first, mission)
+            write_json(
+                l2_run / "missions" / "legacy-fourteenth-domain.json",
+                {"agent": "Legacy domain", "mission": "Do not migrate.", "context": []},
+            )
+            with self.assertRaisesRegex(ValueError, "exact current eight-domain"):
+                create_l3_run(
+                    l2_run,
+                    root / "l3-runs",
+                    public_input_confirmed=True,
+                )
 
 
 class Layer3CliContractTests(unittest.TestCase):

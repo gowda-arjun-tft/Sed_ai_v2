@@ -2,22 +2,15 @@
 
 ## Project Structure & Module Organization
 
-`ML/deep_research/layer2/` converts Markdown fact sheets into fourteen checked mission files
-through three flat steps — `create_run.py`, `agent.py`, `report.py` — wired by `cli.py`. It has no
-`pipeline/` package: there are no phases between them. `fs.py`, `planner.py` and `settings.py` are
-shared with Layer 3 and are not private to Layer 2.
-`ML/deep_research/layer3/` consumes those missions through fourteen stable mission supervisors.
-Each supervisor delegates to five fixed custom lens subagents, asks direct question-only follow-ups,
-may use one optional additional lens, and returns one bundle for an atomic application commit.
-`StateBackend` plus SQLite preserves mission-scoped agent memory; `run.json` owns mission status.
-Prompts are under `layer2/prompts/` and `layer3/prompts/`; documentation is in
-`ML/deep_research/docs/`. Model-free tests live in `tests/`.
-
-Generated `runs/`, `.env`, caches, sources, and checkpoint databases are local-only.
+`ML/deep_research/layer2/` splits Markdown fact sheets and merges structured chunk responses into
+eight mission JSON files. `ML/deep_research/layer3/` runs eight direct researchers concurrently,
+one comprehensive review, one optional clarification batch, and synthesis. Prompts sit below each
+layer's `prompts/` folder; design notes are in `ML/deep_research/docs/`; tests are in `tests/`.
+Generated runs, secrets, caches, sources, and checkpoints stay local.
 
 ## Build, Test, and Development Commands
 
-Use the compute interpreter:
+Use the `compute` interpreter:
 
 ```powershell
 & 'C:\src\anaconda3\envs\compute\python.exe' -m pip install -r requirements.txt
@@ -26,44 +19,40 @@ Use the compute interpreter:
 & 'C:\src\anaconda3\envs\compute\python.exe' -m pip check
 ```
 
-Run Layer 2 with `.\run.ps1 -FactSheet <fact_sheet.md>`. Run Layer 3 with
+Run Layer 2 with `.\run.ps1 -FactSheet <fact_sheet.md>` and Layer 3 with
 `.\run.ps1 -Research <L2-run> -Online -PublicInputConfirmed`. Resume with `-Resume` or `-ResumeL3`.
 
-## Coding Style & Naming Conventions
+## Coding Style & Testing
 
 Use Python 3.11+, four-space indentation, type hints, `snake_case` functions, and `UPPER_CASE`
-constants. Prefer standard-library and existing helpers. Keep mission commits and resume behavior
-idempotent. No executable Python, PowerShell, or future application source file may exceed 350
-lines; split files near 300 lines. Only prompts, skills, specifications, and documentation are
-exempt. Never compress formatting to evade the limit.
+constants. Prefer existing helpers and the standard library. Keep writes atomic and resumable.
+No executable Python, PowerShell, or application source file may exceed 350
+lines; split near 300. Prompts, skills, specifications, and documentation are exempt.
 
-## Testing Guidelines
+Tests use offline `unittest`. Cover changed parsing, resume, schema,
+egress, citation, or publication behavior. Do not hardcode check counts.
 
-Tests use `unittest` and must not call a model or the public web. Add focused coverage for parser,
-resume, egress, citation, mission-status, or schema changes. Both layers must record every check passed
-and none failed; never hardcode the count, since both check lists are expected to change.
+## Agent and Security Boundaries
 
-## Commit & Pull Request Guidelines
+Keep secrets only in `.env`. The model is fixed to `gpt-5.6-luna`, with no application output-token
+ceiling. Layer 2 uses maximum reasoning; Layer 3 currently uses low reasoning for every model and
+web-search proxy call while live behavior is measured. Do not
+restate model, search, token, source, or report limits in prompts.
 
-Use short imperative commits such as `Add Layer 3 checkpoint recovery`. PRs must state affected
-layers, validation results, and any schema, model, prompt, privacy, or resume change.
+Layer 2 uses 50K-token chunks, 5K overlap, concurrency five, and no tools, subagents, memory,
+checkpointer, or summarizer. Save chunk responses atomically and merge them in order without
+semantic verification or deduplication.
 
-## Security & Configuration
+Layer 3 researchers receive `search_web`, `read_source`, `cite`, `append_report`, and offload-only
+`read_file`. Python schedules eight isolated initial stages, one review, one optional clarification
+batch, and synthesis; it does not impose a model-turn quota. Prompts own research choice, domain
+boundaries, handoffs, source selection, and terminal `supported / inference / unknown / immaterial`
+judgement. Append each decision-relevant unit immediately with a stable fragment ID.
+Python may enforce network safety, exact quotations, persistence, attribution, idempotent appends,
+atomic publication, and structural checks. Never add keyword-based research policy, host shell,
+`run_python`, cross-property memory, or model-writable run folders without explicit approval.
 
-Keep `OPENAI_API_KEY` only in `.env`. Never place secrets in prompts, logs, checkpoints, or run
-artifacts.
+## Commits and Pull Requests
 
-Layer 2 is deliberately unsandboxed and must be described accurately. It gives the agent a
-model-writable run folder and `run_python`, which executes model-authored code in a subprocess on
-the host: that subprocess inherits the environment (`OPENAI_API_KEY` included), the host filesystem
-and host network access, with no timeout, no output cap and no import restriction. The
-`FilesystemPermission` deny on `inputs/**` constrains the built-in file tools only — it cannot
-constrain a subprocess. So Layer 2 *does no web research*, but it is wrong to say it *cannot* reach
-the web; earlier versions of this file claimed that and were incorrect. Run Layer 2 only on input
-you would run any untrusted script against.
-
-Layer 3 exposes only three guarded research tools: `search_web`, `read_source`, and `cite`. It uses
-five fixed custom lens subagents and at most one additional-lens subagent per mission. It has no
-general-purpose subagent, host shell, `run_python`, `StoreBackend`, model-writable run folder, or
-cross-property durable memory. `StateBackend` scratch and SQLite checkpoints stay mission-scoped;
-application code alone atomically commits durable run artifacts.
+PRs must list affected layers, validations, and schema, model, prompt,
+privacy, or resume changes.

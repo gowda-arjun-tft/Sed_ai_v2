@@ -1,86 +1,69 @@
-"""The roster contract, the input checks, and the fact count.
-
-Everything Layer 2 does in Python before and after the model. No model calls.
-"""
-
 import tempfile
 import unittest
 from pathlib import Path
 
-from ML.deep_research.layer2.create_run import create_run
+from ML.deep_research.layer2.cli import split_fact_sheet
+from ML.deep_research.layer2.create_run import RUN_SUBDIRS, create_run
 from ML.deep_research.layer2.fs import load_json
-from ML.deep_research.layer2.planner import load_planner
-from ML.deep_research.layer2.report import fact_blocks
-from ML.deep_research.layer2.settings import AGENT_NAMES, PLANNER_PATH
-
+from ML.deep_research.layer2.settings import (
+    CHUNK_ENCODING,
+    CHUNK_OVERLAP_TOKENS,
+    CHUNK_SEPARATORS,
+    CHUNK_SIZE_TOKENS,
+    LAYER2_SCHEMA_VERSION,
+    MAX_CHUNK_CONCURRENCY,
+    PLANNER_PATH,
+)
 from tests.common import FACT_SHEET
 
 
-class PlannerTests(unittest.TestCase):
-    def test_planner_has_frozen_roster(self):
-        _, agents = load_planner(PLANNER_PATH)
-        self.assertEqual([agent["name"] for agent in agents], AGENT_NAMES)
+class InputAndChunkingTests(unittest.TestCase):
+    def test_small_fact_sheet_is_one_chunk(self):
+        self.assertEqual(split_fact_sheet(FACT_SHEET), [FACT_SHEET.rstrip()])
 
+    def test_one_hundred_thousand_tokens_make_three_overlapping_chunks(self):
+        import tiktoken
 
-class InputValidationTests(unittest.TestCase):
-    """These validate a human-supplied file, not anything a model produced."""
+        encoding = tiktoken.get_encoding(CHUNK_ENCODING)
+        token = encoding.encode(" property")[0]
+        text = encoding.decode([token] * 100_000)
+        chunks = split_fact_sheet(text)
+        sizes = [len(encoding.encode(chunk)) for chunk in chunks]
+        self.assertEqual(len(chunks), 3)
+        self.assertLessEqual(max(sizes), CHUNK_SIZE_TOKENS)
+        self.assertGreater(sizes[-1], CHUNK_OVERLAP_TOKENS)
 
-    def test_json_input_is_rejected(self):
+    def test_markdown_heading_is_preferred_as_a_chunk_boundary(self):
+        text = "## First\n" + "alpha " * 30_000 + "\n## Second\n" + "beta " * 30_000
+        chunks = split_fact_sheet(text)
+        self.assertEqual(len(chunks), 2)
+        self.assertTrue(chunks[1].startswith("## Second\n"))
+
+    def test_run_folder_records_schema_and_chunk_policy_without_output_cap(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            path = root / "claims.json"
-            path.write_text('{"claims": [{"value": 1}]}', encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "at least one ## heading"):
-                create_run(path, PLANNER_PATH, root / "runs")
-
-    def test_empty_fact_sheet_is_rejected(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            path = root / "fact_sheet.md"
-            path.write_text("   \n", encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "missing or empty"):
-                create_run(path, PLANNER_PATH, root / "runs")
-
-    def test_run_folder_holds_inputs_missions_and_staging(self):
-        """No pieces/, no buckets/, no progress ledger.
-
-        `staging/` is scratch space the agent may use when the sheet is too large
-        to hold in one context. It is the agent's, not a pipeline stage.
-        """
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            fact_sheet = root / "fact_sheet.md"
-            fact_sheet.write_text(FACT_SHEET, encoding="utf-8")
-            run_dir = create_run(fact_sheet, PLANNER_PATH, root / "runs")
-            self.assertEqual(
-                sorted(item.name for item in run_dir.iterdir() if item.is_dir()),
-                ["inputs", "missions", "staging"],
-            )
-            self.assertFalse((run_dir / "progress.csv").exists())
-            # Empty until the agent decides it needs it.
-            self.assertEqual(list((run_dir / "staging").iterdir()), [])
-
-    def test_the_run_record_takes_its_agent_count_from_the_roster(self):
-        """Never a hardcoded 14 -- the roster is the single source."""
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            fact_sheet = root / "fact_sheet.md"
-            fact_sheet.write_text(FACT_SHEET, encoding="utf-8")
-            run_dir = create_run(fact_sheet, PLANNER_PATH, root / "runs")
+            source = root / "fact_sheet.md"
+            source.write_text(FACT_SHEET, encoding="utf-8")
+            run_dir = create_run(source, PLANNER_PATH, root / "runs")
             record = load_json(run_dir / "run.json")
-        self.assertEqual(record["agent_count"], len(AGENT_NAMES))
-        # The report is what turns this into "complete" or "failed".
-        self.assertEqual(record["status"], "started")
 
+        self.assertEqual(tuple(RUN_SUBDIRS), ("inputs", "chunks", "missions"))
+        self.assertEqual(record["schema_version"], LAYER2_SCHEMA_VERSION)
+        self.assertEqual(record["chunking"]["size_tokens"], CHUNK_SIZE_TOKENS)
+        self.assertEqual(record["chunking"]["overlap_tokens"], CHUNK_OVERLAP_TOKENS)
+        self.assertEqual(record["chunking"]["max_concurrency"], MAX_CHUNK_CONCURRENCY)
+        self.assertEqual(record["chunking"]["separators"], list(CHUNK_SEPARATORS))
+        self.assertNotIn("output_tokens_per_model_call", record["limits"])
+        self.assertNotIn("summarization_trigger_tokens", record["limits"])
 
-class CountingTests(unittest.TestCase):
-    """The report counts fact blocks. It never uses them to gate anything."""
-
-    def test_fact_blocks_are_counted(self):
-        self.assertEqual(len(fact_blocks(FACT_SHEET)), 3)
-
-    def test_a_sheet_with_no_fact_blocks_counts_zero(self):
-        self.assertEqual(fact_blocks("# Property\n\n## Summary\n\nPlain text.\n"), [])
+    def test_wrong_input_is_rejected_before_a_run_folder_is_created(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "fact_sheet.md"
+            source.write_text("plain text", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "## heading"):
+                create_run(source, PLANNER_PATH, root / "runs")
+            self.assertFalse((root / "runs").exists())
 
 
 if __name__ == "__main__":

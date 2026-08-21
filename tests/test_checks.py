@@ -30,14 +30,11 @@ class ReportTests(unittest.TestCase):
             self.assertLess(sum(ok for _, _, ok, _ in checks), len(checks))
             self.assertEqual(load_json(run_dir / "run.json")["status"], "failed")
 
-    def test_an_empty_locator_fails_the_report(self):
-        """`where` is what Layer 3 traces a fact back through."""
+    def test_a_malformed_chunk_fails_the_report(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = create_complete_run(Path(temporary))
-            path = run_dir / "missions" / f"{slug(AGENT_NAMES[0])}.json"
-            mission = load_json(path)
-            mission["context"][0]["where"] = ""
-            path.write_text(json.dumps(mission), encoding="utf-8")
+            path = run_dir / "chunks" / "chunk_0001.json"
+            path.write_text("not json", encoding="utf-8")
             checks = run_checks(run_dir)
             self.assertLess(sum(ok for _, _, ok, _ in checks), len(checks))
 

@@ -6,25 +6,32 @@ import os
 from pathlib import Path
 
 from ML.deep_research.layer2.cli import load_dotenv_key
+from ML.deep_research.layer2.fs import load_json
 
 from .pipeline.create_run import create_run
 from .pipeline.run_checks import Check, run_checks
-from .runner import run_missions
-from .settings import REPO_ROOT, RUNS_DIR
+from .runner import run_research
+from .settings import REPO_ROOT, RUNS_DIR, SCHEMA_VERSION
 
 
 async def run_all(run_dir: Path, *, retry_failed: bool = False) -> list[Check]:
+    schema = load_json(run_dir / "run.json").get("schema_version")
+    if schema != SCHEMA_VERSION:
+        raise ValueError(
+            f"Layer 3 schema {schema!r} cannot resume in schema {SCHEMA_VERSION}; "
+            "start a fresh Layer 3 run"
+        )
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError(
             f"OPENAI_API_KEY is empty. Add it to {REPO_ROOT / '.env'} and resume."
         )
-    await run_missions(run_dir, retry_failed=retry_failed)
+    await run_research(run_dir, retry_failed=retry_failed)
     return run_checks(run_dir)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Research fourteen CDI missions with mission-scoped Deep Agent supervisors."
+        description="Research one CDI property with eight progressive domain harnesses."
     )
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--research", type=Path, help="source runs/L2_* folder")
@@ -39,7 +46,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--retry-failed",
         action="store_true",
-        help="retry failed missions in clean checkpoint threads",
+        help="retry failed invocations in clean checkpoint threads",
     )
     return parser
 
@@ -50,7 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.check_only:
         if args.online or args.public_input_confirmed or args.retry_failed:
             parser.error("--check-only does not accept run or provider options")
-        checks = run_checks(args.check_only.resolve())
+        try:
+            checks = run_checks(args.check_only.resolve())
+        except ValueError as error:
+            parser.error(str(error))
         return 0 if all(ok for _, _, ok, _ in checks) else 1
     load_dotenv_key()
     if args.research:
@@ -83,6 +93,6 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(error))
     passed = sum(ok for _, _, ok, _ in checks)
     print(f"Run {run_dir.name}: {passed}/{len(checks)} checks passed")
-    print(f"Answers: {run_dir / 'research'}")
+    print(f"Answer: {run_dir / 'research' / 'final.md'}")
     print(f"Report: {run_dir / 'check_report.md'}")
     return 0 if passed == len(checks) else 1

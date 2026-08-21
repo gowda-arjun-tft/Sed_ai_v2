@@ -1,111 +1,79 @@
 # CDI Layer 2 planner
 
-All fourteen agents run for every property. A silent fact sheet is a valid starting point. Never
-claim that something does not exist merely because it was not found. A general fact is context,
-not automatically a finding. This layer allocates facts and writes missions; it performs no research.
+All eight agents run for every property. A silent fact sheet is a valid starting point. Absence in
+the sheet becomes a public-research question rather than a conclusion. A general fact is context,
+not automatically a property finding. This layer allocates facts and writes missions; it performs
+no research.
 
-A fact may belong to several agents. Copy evidence, source locators and interpretations exactly.
-Do not resolve disagreements or remove either side of a disagreement.
+A fact may belong to several agents. Copy evidence and interpretations exactly.
+Preserve both sides of every disagreement. Each mandate assigns accountable outcomes; its handoffs
+name evidence that should also reach neighboring missions.
 
 <!-- AGENTS_JSON_START -->
 [
   {
-    "name": "Building condition, capital expenditure & warranty",
-    "establishes": "The physical state of the building, current repair and replacement cost, warranties, and the legally required inspections and whether each is current.",
-    "do_not_cover": ["Lease recoverability belongs to Occupier, lease & income.", "Energy-transition works belong to Energy, carbon & transition.", "Insurance availability belongs to Ground, environment & insurability."],
-    "take_as_given": ["Lease terms established by Occupier, lease & income.", "Public-law requirements established by Planning, regulation & tax."],
-    "web_sources": ["Current construction-cost benchmarks", "Manufacturer warranty records", "Applicable inspection registers and technical standards"]
+    "name": "Asset Integrity, Systems & Operational Resilience",
+    "mandate": "Establish whether the structure, envelope, interiors, mechanical, electrical and public-health systems, utility connections, controls and communications can safely and reliably support current and intended use throughout the hold. Verify condition, capacity, redundancy, inspection and test status, maintenance history, warranties, defects and operational or cyber dependencies. Convert findings into remedial scope, cost, timing, downtime, accountable party, residual risk and property-performance effect.",
+    "handoffs": [
+      "Share verified repair scope, capital expenditure, timing, downtime, capacity and technical dependencies with Occupier, Lease, Income & Counterparty Economics; Energy, Carbon & Transition; Location, Demand, Market, Valuation & Exit; Finance, Debt & Macro Transmission; and External Dependencies, Geopolitics, Trade & Supply Chains as relevant.",
+      "Use verified responsibility allocations, transition requirements, market assumptions, financing constraints and external dependency pathways supplied by their accountable agents."
+    ]
   },
   {
-    "name": "Occupier, lease & income",
-    "establishes": "Who occupies the building, the lease terms, rent and other income, occupier covenant, measured versus leased area, and costs the landlord cannot recover.",
-    "do_not_cover": ["Title and registered rights belong to Legal, title & encumbrance.", "Public-award legitimacy belongs to Counterparty mandate & award legitimacy.", "Market rent belongs to Market, valuation & exit."],
-    "take_as_given": ["Measured physical area established by Building condition, capital expenditure & warranty.", "Counterparty legal existence established by Legal, title & encumbrance."],
-    "web_sources": ["Company and public-body registers", "Lease and rent comparables", "Occupier accounts and budgets"]
+    "name": "Occupier, Lease, Income & Counterparty Economics",
+    "mandate": "Establish the quality and durability of contractual income. Verify occupier and counterparty identity, economic capacity and funding basis; the lease or occupancy instrument; term, break, renewal, rent, indexation, concessions, area, recoveries, service charges, arrears, security and obligations. Translate these into normalized cash flow, landlord leakage, default and renewal scenarios, and negotiation leverage.",
+    "handoffs": [
+      "Share verified lease cash flows, occupier obligations, counterparty economics and funding evidence with Rights, Public Law & Ownership Governance; Location, Demand, Market, Valuation & Exit; and Finance, Debt & Macro Transmission.",
+      "Use verified technical area and capital expenditure from Asset Integrity, Systems & Operational Resilience; legal capacity and award authority from Rights, Public Law & Ownership Governance; and market rent from Location, Demand, Market, Valuation & Exit."
+    ]
   },
   {
-    "name": "Legal, title & encumbrance",
-    "establishes": "Ownership, registered rights and burdens, contracting capacity, permit conformity, and whether contractual counterparties legally exist.",
-    "do_not_cover": ["Planning policy and tax belong to Planning, regulation & tax.", "Lease economics belong to Occupier, lease & income.", "Public-procurement legitimacy belongs to Counterparty mandate & award legitimacy."],
-    "take_as_given": ["Physical condition established by Building condition, capital expenditure & warranty."],
-    "web_sources": ["Land register", "Cadastral register", "Company register", "Court and insolvency registers"]
+    "name": "Rights, Public Law & Ownership Governance",
+    "mandate": "Establish the lawful and governable ability to own, use, finance and exit the asset. Verify title, cadastral identity, rights, burdens, ownership and special-purpose-vehicle chain, legal capacity, permits, planning and use conformity, notices, public-procurement and award authority, fund mandate and eligibility, concentration constraints, regulatory duties, and property and transaction tax. Identify each required consent, decision-maker, timing, condition and consequence.",
+    "handoffs": [
+      "Share verified ownership, lawful-use, consent, procurement, tax, vehicle and governance constraints with Occupier, Lease, Income & Counterparty Economics; Location, Demand, Market, Valuation & Exit; and Finance, Debt & Macro Transmission.",
+      "Use verified occupier and counterparty facts from Occupier, Lease, Income & Counterparty Economics and asset value from Location, Demand, Market, Valuation & Exit."
+    ]
   },
   {
-    "name": "Utilities, connection & building technology",
-    "establishes": "Power, water, heat and communications supply, connection capacity and resilience, and cyber exposure in building-control systems.",
-    "do_not_cover": ["Energy performance and carbon targets belong to Energy, carbon & transition.", "General physical defects belong to Building condition, capital expenditure & warranty."],
-    "take_as_given": ["Current building systems recorded by Building condition, capital expenditure & warranty."],
-    "web_sources": ["Network-operator maps and capacity statements", "Utility tariffs", "Building-control security advisories"]
+    "name": "Ground, Physical Climate & Insurability",
+    "mandate": "Establish current and forward-looking loss exposure arising from the ground and physical environment. Verify geology, subsidence, contamination, unexploded ordnance, radon, flood, storm, heat, fire, water and other site-relevant hazards, including historic events and remediation. Map hazard, exposure, vulnerability, loss, adaptation and coverage, including exclusions, deductibles, premium, claims history, market capacity and residual risk.",
+    "handoffs": [
+      "Share verified hazards, loss pathways, mitigation needs and insurance terms with Asset Integrity, Systems & Operational Resilience; Energy, Carbon & Transition; Location, Demand, Market, Valuation & Exit; Finance, Debt & Macro Transmission; and External Dependencies, Geopolitics, Trade & Supply Chains as relevant.",
+      "Use verified building characteristics from Asset Integrity, Systems & Operational Resilience and transition measures from Energy, Carbon & Transition."
+    ]
   },
   {
-    "name": "Ground, environment & insurability",
-    "establishes": "Ground and soil conditions, contamination, unexploded ordnance, weather and climate exposure, and whether resulting losses can be insured.",
-    "do_not_cover": ["Building fabric condition belongs to Building condition, capital expenditure & warranty.", "Carbon transition belongs to Energy, carbon & transition.", "Neighbouring uses belong to Location, access & surroundings."],
-    "take_as_given": ["Building construction and defects established by Building condition, capital expenditure & warranty."],
-    "web_sources": ["Contaminated-land and ordnance registers", "Flood and climate maps", "Geological surveys", "Insurance-market publications"]
+    "name": "Energy, Carbon & Transition",
+    "mandate": "Establish actual energy and emissions performance and a transition pathway over the hold. Verify data boundaries and coverage, meters, fuels, energy certificates and certifications, energy and greenhouse-gas intensity, landlord and tenant control, enacted requirements and dates, and applicable benchmarks. Assess performance gaps, retrofit measures, capital expenditure, operating expenditure, savings, disruption, lead time, incentives, compliance and stranding risk, and letting and value consequences.",
+    "handoffs": [
+      "Share verified performance, compliance dates, retrofit scope, cost and disruption with Asset Integrity, Systems & Operational Resilience; Location, Demand, Market, Valuation & Exit; Finance, Debt & Macro Transmission; and External Dependencies, Geopolitics, Trade & Supply Chains.",
+      "Use verified systems and fabric from Asset Integrity, Systems & Operational Resilience; enacted legal requirements from Rights, Public Law & Ownership Governance; and market assumptions from Location, Demand, Market, Valuation & Exit."
+    ]
   },
   {
-    "name": "Counterparty mandate & award legitimacy",
-    "establishes": "The occupier's legal mandate and funding for being at this address, and whether a lease extension or related award can lawfully be agreed without a public tender.",
-    "do_not_cover": ["Commercial lease terms belong to Occupier, lease & income.", "General contracting capacity belongs to Legal, title & encumbrance."],
-    "take_as_given": ["Occupier identity and lease dates established by Occupier, lease & income.", "Counterparty legal existence established by Legal, title & encumbrance."],
-    "web_sources": ["Public-procurement law and notices", "Parliamentary budgets", "Court-organisation statutes", "Public-body mandates"]
+    "name": "Location, Demand, Market, Valuation & Exit",
+    "mandate": "Establish the asset's ability to sustain demand, rent, value and exit. Verify access, transport, amenities, neighboring uses, nuisance, safety, catchment, demographics, employment and regional economy alongside property-specific supply, demand, vacancy, take-up, rents, yields, incentives and comparables. Test alternative use, tenant and buyer depth, liquidity, exit timing and valuation sensitivities while distinguishing asset, submarket and regional evidence.",
+    "handoffs": [
+      "Share verified market rent, valuation, demand, liquidity and exit evidence with Occupier, Lease, Income & Counterparty Economics and Finance, Debt & Macro Transmission.",
+      "Use verified income from Occupier, Lease, Income & Counterparty Economics; lawful uses from Rights, Public Law & Ownership Governance; capital expenditure from Asset Integrity, Systems & Operational Resilience and Energy, Carbon & Transition; physical risk from Ground, Physical Climate & Insurability; and dependency pathways from External Dependencies, Geopolitics, Trade & Supply Chains."
+    ]
   },
   {
-    "name": "Energy, carbon & transition",
-    "establishes": "Current energy and emissions performance, applicable transition targets, the gap to those targets, and the cost and timing of closing it.",
-    "do_not_cover": ["Ordinary condition repairs belong to Building condition, capital expenditure & warranty.", "Utility connection capacity belongs to Utilities, connection & building technology.", "Legal status of rules belongs to Planning, regulation & tax."],
-    "take_as_given": ["Building systems and fabric established by Building condition, capital expenditure & warranty.", "Rule status established by Planning, regulation & tax."],
-    "web_sources": ["Energy certificates and benchmarks", "Carbon pathways", "Applicable energy and emissions rules"]
+    "name": "Finance, Debt & Macro Transmission",
+    "mandate": "Establish financing durability and the transmission of macro conditions into asset performance. Verify existing and prospective debt, security, rate, amortization, maturity, covenants, hedging, recourse, loan-to-value, interest and debt-service coverage, liquidity and refinancing terms. Translate rate, inflation, growth, credit and foreign-exchange scenarios through income, costs, capital expenditure, value, covenant headroom, distributions and exit; identify funding gaps and mitigants.",
+    "handoffs": [
+      "Share verified financing terms, covenant headroom, refinancing exposure and macro transmission with Occupier, Lease, Income & Counterparty Economics; Rights, Public Law & Ownership Governance; and Location, Demand, Market, Valuation & Exit.",
+      "Use verified income from Occupier, Lease, Income & Counterparty Economics; legal and vehicle constraints from Rights, Public Law & Ownership Governance; capital expenditure from Asset Integrity, Systems & Operational Resilience and Energy, Carbon & Transition; value from Location, Demand, Market, Valuation & Exit; and external pathways from External Dependencies, Geopolitics, Trade & Supply Chains."
+    ]
   },
   {
-    "name": "Market, valuation & exit",
-    "establishes": "Likely occupiers and market rent, alternative uses, liquidity and exit routes, and whether existing valuation assumptions remain supportable.",
-    "do_not_cover": ["In-place lease facts belong to Occupier, lease & income.", "Planning permissibility belongs to Planning, regulation & tax.", "Financing terms belong to Macro, financing & debt."],
-    "take_as_given": ["In-place income established by Occupier, lease & income.", "Capex established by Building condition, capital expenditure & warranty.", "Permitted uses established by Planning, regulation & tax."],
-    "web_sources": ["Investment and occupational comparables", "Broker market reports", "Transaction registers", "Valuation standards"]
-  },
-  {
-    "name": "Planning, regulation & tax",
-    "establishes": "Applicable public law, whether each rule is enacted or proposed, permission and objection routes, and tax effects on the building and a future sale.",
-    "do_not_cover": ["Registered title belongs to Legal, title & encumbrance.", "Physical permit conformity belongs to Legal, title & encumbrance.", "Fund-level eligibility belongs to Fund vehicle eligibility."],
-    "take_as_given": ["Current use and building facts established by the relevant property agents."],
-    "web_sources": ["Planning portals and plans", "Building-control records", "Legislation and consultations", "Tax authority guidance"]
-  },
-  {
-    "name": "Location, access & surroundings",
-    "establishes": "Site access, transport, neighbouring uses and nearby conditions that directly affect this property.",
-    "do_not_cover": ["Regional economic trends belong to Regional economy & demographics.", "Ground and flood risk belong to Ground, environment & insurability.", "Market rent belongs to Market, valuation & exit."],
-    "take_as_given": ["Site identity and title boundaries established by Legal, title & encumbrance."],
-    "web_sources": ["Transport and access maps", "Local planning maps", "Neighbouring-use and amenity data", "Crime and nuisance data"]
-  },
-  {
-    "name": "Regional economy & demographics",
-    "establishes": "Whether local economic activity, employment and population support the property's use and rent over the holding period.",
-    "do_not_cover": ["Property-specific market rent belongs to Market, valuation & exit.", "National interest rates belong to Macro, financing & debt.", "Immediate neighbours belong to Location, access & surroundings."],
-    "take_as_given": ["Property use and rent established by Occupier, lease & income and Market, valuation & exit."],
-    "web_sources": ["Official population and labour statistics", "Regional economic forecasts", "Business formation and insolvency data"]
-  },
-  {
-    "name": "Macro, financing & debt",
-    "establishes": "Interest rates, credit conditions and all borrowing, security, covenants and refinancing exposure attached to the building.",
-    "do_not_cover": ["Asset valuation belongs to Market, valuation & exit.", "Fund mandate belongs to Fund vehicle eligibility.", "Occupier covenant belongs to Occupier, lease & income."],
-    "take_as_given": ["Asset cash flow established by Occupier, lease & income.", "Asset valuation established by Market, valuation & exit."],
-    "web_sources": ["Central-bank rates and yield curves", "Lending-market surveys", "Loan and security registers"]
-  },
-  {
-    "name": "Fund vehicle eligibility",
-    "establishes": "Whether the owning fund may lawfully hold the asset and how fund mandate, concentration, liquidity and regulatory obligations affect it.",
-    "do_not_cover": ["Asset title belongs to Legal, title & encumbrance.", "Property tax belongs to Planning, regulation & tax.", "Asset debt belongs to Macro, financing & debt."],
-    "take_as_given": ["Asset value established by Market, valuation & exit.", "Title and ownership chain established by Legal, title & encumbrance."],
-    "web_sources": ["Fund prospectus and constitutional documents", "Investment-fund regulation", "Regulator publications"]
-  },
-  {
-    "name": "Geopolitical, trade & supply chain",
-    "establishes": "Cross-border dependencies, supply-chain exposure, sanctions and trade effects, and risk of deliberate harm at this address by non-government actors.",
-    "do_not_cover": ["Ordinary contractor availability belongs to Building condition, capital expenditure & warranty.", "Building-control cyber risk belongs to Utilities, connection & building technology.", "Local crime belongs to Location, access & surroundings."],
-    "take_as_given": ["Planned works and required systems established by the relevant technical agents."],
-    "web_sources": ["Sanctions and trade-control registers", "Supply-chain and commodity publications", "Official threat assessments"]
+    "name": "External Dependencies, Geopolitics, Trade & Supply Chains",
+    "mandate": "Establish material direct and indirect external dependency pathways affecting operations, occupier income, works, finance or exit. Trace identified suppliers, vendors, technologies, commodities, countries, transport routes, sanctions and threat dependencies through trigger, transmission, property effect and time horizon. Assess concentration, lead time, buffers, alternative supplier, route or specification, substitution feasibility and cost, contractual allocation, resilience controls and residual exposure. Anchor every pathway in an identified property, occupier, system, supplier, commodity, jurisdiction or financing exposure. Record a fully evidenced finding when no material pathway is established.",
+    "handoffs": [
+      "Share verified dependency pathways, resilience measures, substitution options, costs and residual exposure with every affected domain and with Finance, Debt & Macro Transmission.",
+      "Use verified systems and works from Asset Integrity, Systems & Operational Resilience; occupier activities from Occupier, Lease, Income & Counterparty Economics; legal and sanctions context from Rights, Public Law & Ownership Governance; transition works from Energy, Carbon & Transition; market transmission from Location, Demand, Market, Valuation & Exit; and financing exposure from Finance, Debt & Macro Transmission."
+    ]
   }
 ]
 <!-- AGENTS_JSON_END -->
@@ -119,11 +87,11 @@ Write exactly one JSON mission per agent, in roster order:
   "agent": "exact roster name",
   "mission": "property-specific plain prose",
   "context": [
-    {"section": "fact heading", "fact": "exact evidence", "means": "interpretation", "where": "source and locator"}
+    {"section": "fact heading", "fact": "exact evidence", "means": "interpretation"}
   ]
 }
 ```
 
-Every fact an agent needs becomes one context entry. Do not shorten, rank or drop facts. An agent
-the sheet says nothing about still receives a non-empty mission that says the sheet is silent on
-the subject.
+Every fact an agent needs becomes one context entry. Preserve each fact and interpretation exactly.
+An agent whose subject is silent still receives a non-empty mission that
+states the public evidence needed to establish its mandate.

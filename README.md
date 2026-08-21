@@ -6,12 +6,11 @@ evidence-backed subject reports. Python runs through the `compute` Conda interpr
 
 ## Structure
 
-- `ML/deep_research/layer2/` converts `fact_sheet.md` into fourteen mission JSON files. One agent
-  reads the sheet and writes the missions itself; it does no web research, and a run is complete
-  when its report records no failures.
-- `ML/deep_research/layer3/` runs fourteen stable mission supervisors. Each delegates to five fixed
-  lens subagents, may send direct question-only follow-ups, may add one narrowly scoped lens, and
-  returns one complete mission bundle for the application to commit atomically.
+- `ML/deep_research/layer2/` token-splits `fact_sheet.md`, routes chunks through independent
+  structured Deep Agent calls, then appends eight domain mission JSON files in source order.
+- `ML/deep_research/layer3/` starts eight isolated domain researchers concurrently, performs one
+  comprehensive review, optionally runs one targeted clarification batch, and writes one property
+  synthesis.
 - `ML/deep_research/docs/` contains the Layer 2 code walkthrough and the global-readiness notes.
 - `tests/` contains model-free unit and fabricated end-to-end run tests.
 
@@ -29,10 +28,13 @@ Set only the API key in `.env`:
 OPENAI_API_KEY=your-key
 ```
 
-The model is fixed in code to `gpt-5.6-luna` with high reasoning effort. Layer 3 uses Deep Agents
-0.7.7. Each mission has a stable SQLite-checkpointed thread and thread-scoped `StateBackend`
-scratch shared with its fixed lens subagents. It has no general-purpose subagent, `StoreBackend`,
-host shell, `run_python`, model-writable run directory, or cross-property memory.
+The model is fixed in code to `gpt-5.6-luna`. Layer 2 uses maximum reasoning. Layer 3 currently uses
+low reasoning for its research, review, synthesis, and web-search proxy calls while live behavior is
+measured; this is configuration, not a separate test command. Neither layer sets an application
+output-token ceiling; provider limits still apply. Layer 3 uses Deep Agents 0.7.7 with stable SQLite
+stage threads and thread-scoped `StateBackend` scratch. It has no general-purpose subagent, `task`,
+`StoreBackend`, host shell, `run_python`, model-writable run directory, or cross-property memory.
+Web-search context remains low.
 
 ## Layer 2
 
@@ -41,10 +43,12 @@ host shell, `run_python`, model-writable run directory, or cross-property memory
 .\run.ps1 -Resume '.\runs\L2_YYYYMMDD_xxxx'
 ```
 
-Layer 2 is one harness agent. It is given the fact sheet, the frozen roster, a filesystem, Python
-and two kinds of helper it can spawn, and told what the output must contain rather than how to
-produce it — it decides how to read the sheet, how to allocate facts and how to check its own work.
-The report that follows counts and records; it never rejects.
+Layer 2 targets 50,000 tokens per chunk with a 5,000-token overlap and runs at most five independent
+calls concurrently. The reusable graph has provider-native structured output and no tools,
+subagents, memory, checkpointer or summarizer. Responses are saved under `chunks/`; resume reruns
+only missing or invalid-JSON chunks. Python appends results in order without semantic checking or
+deduplication, writes eight missions and performs four technical completion checks. `usage.jsonl`
+records each chunk call as it finishes. Legacy checkpoint-based runs must be restarted fresh.
 `ML/deep_research/docs/260820_Layer2_Code_Walkthrough_ENG.md` walks the code end to end.
 
 ## Layer 3
@@ -55,18 +59,20 @@ Enable live research only for public or invented input:
 .\run.ps1 -Research '.\runs\L2_YYYYMMDD_xxxx' -Online -PublicInputConfirmed
 ```
 
-Resume an interrupted run, or explicitly retry failed mission supervisors:
+Resume an interrupted run, or explicitly retry only failed stages with clean threads:
 
 ```powershell
 .\run.ps1 -ResumeL3 '.\runs\L3_YYYYMMDD_xxxx'
 .\run.ps1 -ResumeL3 '.\runs\L3_YYYYMMDD_xxxx' -RetryFailed
 ```
 
-Layer 3 exposes only `search_web`, `read_source`, and `cite` as research tools. Five required lens
-files per mission produce exactly 70 base files; an optional additional-lens file may be present for
-each mission, and fourteen final answers are required. `run.json` records mission status, while
-SQLite preserves each mission's resumable agent state. The model never writes the run folder:
-application code validates and atomically commits each complete mission bundle.
+Layer 3 gives each domain researcher `search_web`, `read_source`, `cite`, `append_report`, and
+offload-only `read_file`. Eight initial researchers start together. Each works through a finite
+five-facet decision ledger, uses result snippets to choose sources, and durably appends every
+decision-relevant unit as soon as it is ready. `Unknown` is a completed finding, not a reason to keep
+searching. One reviewer returns the comprehensive review and optional bare questions; Python runs
+one clarification batch for the addressed domains, then synthesis finishes without another review.
+`run.json`, SQLite checkpoints, partial reports, and `usage.jsonl` make progress resumable and visible.
 
 Raw page bytes, canonical text, hashes, citations, query decisions, and usage remain retained.
 Binary/PDF sources cannot support claims until deterministic PDF extraction is added.
@@ -79,6 +85,6 @@ Binary/PDF sources cannot support claims until deterministic PDF extraction is a
 & 'C:\src\anaconda3\envs\compute\python.exe' -m pip check
 ```
 
-The suite makes no model calls. It covers both complete check reports, mission handoff, fixed-lens
-isolation, direct question-only follow-up, citation and egress controls, checkpoint recovery,
-atomic mission commits, and the 350-line executable-source limit.
+The suite makes no model calls. It covers both complete check reports, eight-domain handoff, parallel
+research, the finite ledger and append contract, one optional clarification batch, citation and
+egress controls, checkpoint recovery, publication, and the 350-line executable-source limit.

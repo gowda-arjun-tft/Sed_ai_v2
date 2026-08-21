@@ -19,6 +19,7 @@ from ..settings import (
     MODEL_MAX_RETRIES,
     MODEL_NAME,
     MODEL_TIMEOUT_SECONDS,
+    REASONING_EFFORT,
 )
 from ..usage import record_search_usage
 
@@ -100,13 +101,20 @@ def _hits(response: Any) -> list[SearchHit]:
                         hit_id=hit_id(url),
                         url=url,
                         title=str(annotation.get("title", url)),
+                        publisher=urlsplit(url).hostname or "",
                         snippet=snippet,
                     )
         action = item.get("action") or {}
         for source in action.get("sources", []) or []:
             url = str(source.get("url", ""))
             if url and url not in found:
-                found[url] = SearchHit(hit_id(url), url, url, "")
+                found[url] = SearchHit(
+                    hit_id=hit_id(url),
+                    url=url,
+                    title=str(source.get("title") or url),
+                    publisher=urlsplit(url).hostname or "",
+                    snippet=str(source.get("snippet") or ""),
+                )
     return list(found.values())
 
 
@@ -118,18 +126,21 @@ class OpenAISearchRetriever:
             max_retries=MODEL_MAX_RETRIES,
         )
 
-    async def search(self, query: str) -> list[SearchHit]:
+    async def search(
+        self, query: str, *, actor: str, session_id: str = "web-search"
+    ) -> list[SearchHit]:
         response = await self.client.responses.create(
             model=MODEL_NAME,
             input=(
                 "Search the public web for this exact research query. Return relevant sources "
                 f"with citations and do not add unsupported claims.\n\nQuery: {query}"
             ),
-            tools=[{"type": "web_search", "search_context_size": "high"}],
+            tools=[{"type": "web_search", "search_context_size": "low"}],
             tool_choice={"type": "web_search"},
+            reasoning={"effort": REASONING_EFFORT},
             store=False,
         )
-        record_search_usage(self.run_dir, response)
+        record_search_usage(self.run_dir, response, actor, session_id)
         return _hits(response)
 
     async def fetch(self, url: str) -> Document:

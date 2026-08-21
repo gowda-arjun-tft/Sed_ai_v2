@@ -13,7 +13,7 @@ $ProjectDir = $PSScriptRoot
 Set-Location -LiteralPath $ProjectDir
 $Python = 'C:\src\anaconda3\envs\compute\python.exe'
 
-# Console output must survive non-Latin agent, lens and source names. Without
+# Console output must survive non-Latin domain and source names. Without
 # this, Windows defaults to the ANSI code page and a single non-ASCII
 # character in a printed path raises UnicodeEncodeError.
 $env:PYTHONIOENCODING = 'utf-8'
