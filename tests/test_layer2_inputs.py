@@ -47,23 +47,48 @@ class InputAndChunkingTests(unittest.TestCase):
             run_dir = create_run(source, PLANNER_PATH, root / "runs")
             record = load_json(run_dir / "run.json")
 
-        self.assertEqual(tuple(RUN_SUBDIRS), ("inputs", "chunks", "missions"))
+        self.assertEqual(
+            tuple(RUN_SUBDIRS), ("inputs", "chunks", "missions", "mission_md")
+        )
+        self.assertEqual(run_dir.parent.parent, root / "runs")
+        self.assertEqual(run_dir.parent.name, record["run_group"])
+        self.assertIn("fact-sheet", run_dir.parent.name)
+        self.assertRegex(run_dir.name, r"^L2_\d{8}_\d{6}_[0-9a-f]{4}$")
         self.assertEqual(record["schema_version"], LAYER2_SCHEMA_VERSION)
         self.assertEqual(record["chunking"]["size_tokens"], CHUNK_SIZE_TOKENS)
         self.assertEqual(record["chunking"]["overlap_tokens"], CHUNK_OVERLAP_TOKENS)
         self.assertEqual(record["chunking"]["max_concurrency"], MAX_CHUNK_CONCURRENCY)
         self.assertEqual(record["chunking"]["separators"], list(CHUNK_SEPARATORS))
+        self.assertEqual(record["limits"]["provider_max_retries"], 3)
         self.assertNotIn("output_tokens_per_model_call", record["limits"])
         self.assertNotIn("summarization_trigger_tokens", record["limits"])
 
-    def test_wrong_input_is_rejected_before_a_run_folder_is_created(self):
+    def test_nonempty_markdown_does_not_require_a_heading(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "fact_sheet.md"
             source.write_text("plain text", encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "## heading"):
-                create_run(source, PLANNER_PATH, root / "runs")
-            self.assertFalse((root / "runs").exists())
+            run_dir = create_run(source, PLANNER_PATH, root / "runs")
+            self.assertEqual(
+                (run_dir / "inputs" / "fact_sheet.md").read_text(), "plain text"
+            )
+
+    def test_same_input_is_grouped_and_same_named_inputs_are_distinct(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "property-a" / "fact_sheet.md"
+            second = root / "property-b" / "fact_sheet.md"
+            first.parent.mkdir()
+            second.parent.mkdir()
+            first.write_text(FACT_SHEET, encoding="utf-8")
+            second.write_text(FACT_SHEET, encoding="utf-8")
+            first_run = create_run(first, PLANNER_PATH, root / "runs")
+            repeated_run = create_run(first, PLANNER_PATH, root / "runs")
+            second_run = create_run(second, PLANNER_PATH, root / "runs")
+
+        self.assertEqual(first_run.parent, repeated_run.parent)
+        self.assertNotEqual(first_run, repeated_run)
+        self.assertNotEqual(first_run.parent, second_run.parent)
 
 
 if __name__ == "__main__":

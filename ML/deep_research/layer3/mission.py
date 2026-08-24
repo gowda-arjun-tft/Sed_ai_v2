@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
-from ML.deep_research.layer2.fs import load_json, slug
+from ML.deep_research.layer2.fs import read_text, slug
 from ML.deep_research.layer2.planner import load_planner
 
 from .settings import AGENT_NAMES
@@ -17,7 +17,7 @@ def stage_thread_id(
     batch: int,
     attempt: int,
 ) -> str:
-    """Stable isolated checkpoint identity for one direct stage attempt."""
+    """Stable isolated checkpoint identity for one STORM stage attempt."""
     return str(uuid5(NAMESPACE_URL, f"cdi:{run_id}:{stage}:{actor}:{batch}:{attempt}"))
 
 
@@ -34,7 +34,7 @@ def load_research_input(run_dir: Path) -> list[dict[str, Any]]:
     by_name = {item["name"]: item for item in definitions}
     missions = []
     for name in AGENT_NAMES:
-        mission = load_json(run_dir / "inputs" / "missions" / f"{slug(name)}.json")
+        mission = read_text(run_dir / "inputs" / "mission_md" / f"{slug(name)}.md")
         missions.append(mission)
     return [
         {

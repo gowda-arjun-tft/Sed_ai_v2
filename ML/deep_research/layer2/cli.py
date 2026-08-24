@@ -8,13 +8,11 @@ import os
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ValidationError
-
-from .agent import chunk_request, create_chunk_agent, domain_key, structured_value
+from .agent import chunk_request, create_chunk_agent, domain_key, response_value
 from .create_run import create_run
-from .fs import load_json, read_text, slug, write_json
-from .planner import load_planner
-from .report import Check, run_checks
+from .fs import load_json, now_iso, read_text, slug, write_json
+from .mission_markdown import write_mission_markdown
+from .report import run_checks
 from .settings import (
     CHUNK_ENCODING,
     CHUNK_OVERLAP_TOKENS,
@@ -22,6 +20,7 @@ from .settings import (
     CHUNK_SIZE_TOKENS,
     LAYER2_SCHEMA_VERSION,
     MAX_CHUNK_CONCURRENCY,
+    AGENT_NAMES,
     PLANNER_PATH,
     REPO_ROOT,
     RUNS_DIR,
@@ -61,123 +60,192 @@ def _chunk_path(run_dir: Path, index: int) -> Path:
     return run_dir / "chunks" / f"chunk_{index:04d}.json"
 
 
-def _saved_chunk(path: Path, schema: type[BaseModel]) -> BaseModel | None:
-    """Return one valid saved structured response, otherwise schedule it again."""
+def _saved_chunk(path: Path) -> dict[str, Any] | None:
+    """Reuse any saved JSON object, regardless of its internal shape."""
     if not path.is_file():
         return None
     try:
-        return schema.model_validate(load_json(path))
-    except (OSError, ValueError, ValidationError):
+        value = load_json(path)
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError):
         return None
 
 
-def _record_chunks(run_dir: Path, chunks: list[str], schema: type[BaseModel]) -> None:
+def _record_chunks(run_dir: Path, chunks: list[str]) -> None:
     record = load_json(run_dir / "run.json")
+    previous = {
+        item.get("index"): item
+        for item in record.get("chunking", {}).get("chunks", [])
+        if isinstance(item, dict)
+    }
     record["status"] = "running"
     record["chunking"]["chunks"] = [
         {
             "index": index,
             "file": f"chunks/chunk_{index:04d}.json",
-            "status": "complete" if _saved_chunk(_chunk_path(run_dir, index), schema) else "pending",
+            "status": "complete" if _saved_chunk(_chunk_path(run_dir, index)) else "pending",
+            "attempt": int(previous.get(index, {}).get("attempt", 0) or 0),
+            "error_type": "",
             "error": "",
         }
         for index in range(1, len(chunks) + 1)
     ]
+    completed = sum(
+        item["status"] == "complete" for item in record["chunking"]["chunks"]
+    )
+    record["chunking"].update(
+        result="running",
+        summary={"total": len(chunks), "completed": completed, "failed": 0},
+    )
     write_json(run_dir / "run.json", record)
 
 
-async def _set_chunk_status(
+async def _start_chunk(
+    run_dir: Path,
+    index: int,
+    lock: asyncio.Lock,
+) -> int:
+    async with lock:
+        record = load_json(run_dir / "run.json")
+        entry = record["chunking"]["chunks"][index - 1]
+        attempt = int(entry.get("attempt", 0) or 0) + 1
+        entry.update(
+            status="running", attempt=attempt, error_type="", error=""
+        )
+        write_json(run_dir / "run.json", record)
+        return attempt
+
+
+async def _finish_chunk(
     run_dir: Path,
     index: int,
     status: str,
+    error_type: str,
     error: str,
     lock: asyncio.Lock,
 ) -> None:
     async with lock:
         record = load_json(run_dir / "run.json")
         entry = record["chunking"]["chunks"][index - 1]
-        entry.update(status=status, error=error)
+        entry.update(status=status, error_type=error_type, error=error)
         write_json(run_dir / "run.json", record)
+
+
+def _finish_chunking(run_dir: Path) -> None:
+    record = load_json(run_dir / "run.json")
+    chunks = record["chunking"]["chunks"]
+    completed = sum(item.get("status") == "complete" for item in chunks)
+    failed = sum(item.get("status") == "failed" for item in chunks)
+    record["chunking"].update(
+        result="partial" if failed else "complete",
+        summary={"total": len(chunks), "completed": completed, "failed": failed},
+    )
+    write_json(run_dir / "run.json", record)
 
 
 async def _run_chunk(
     graph: Any,
-    schema: type[BaseModel],
     run_dir: Path,
     chunk: str,
     index: int,
     total: int,
     semaphore: asyncio.Semaphore,
     lock: asyncio.Lock,
-) -> BaseModel:
+) -> dict[str, Any]:
     path = _chunk_path(run_dir, index)
-    saved = _saved_chunk(path, schema)
+    saved = _saved_chunk(path)
     if saved is not None:
         return saved
     async with semaphore:
-        await _set_chunk_status(run_dir, index, "running", "", lock)
+        attempt = await _start_chunk(run_dir, index, lock)
         try:
             result = await graph.ainvoke(
                 {"messages": [{"role": "user", "content": chunk_request(chunk, index, total)}]},
-                config={"callbacks": [UsageCallback(run_dir, f"chunk-{index:04d}")]},
+                config={
+                    "callbacks": [
+                        UsageCallback(
+                            run_dir, f"chunk-{index:04d}-attempt-{attempt}"
+                        )
+                    ]
+                },
             )
-            value = structured_value(result, schema)
-            write_json(path, value.model_dump())
-            await _set_chunk_status(run_dir, index, "complete", "", lock)
+            value = response_value(result)
+            write_json(path, value)
+            await _finish_chunk(run_dir, index, "complete", "", "", lock)
             return value
         except Exception as exc:
-            await _set_chunk_status(run_dir, index, "failed", str(exc), lock)
+            await _finish_chunk(
+                run_dir, index, "failed", type(exc).__name__, str(exc), lock
+            )
             raise
 
 
-def merge_chunks(run_dir: Path, values: list[BaseModel]) -> None:
-    """Append every domain contribution in chunk order without deduplication."""
-    _, definitions = load_planner(run_dir / "inputs" / "planner_prompt.md")
-    for definition in definitions:
-        name = definition["name"]
-        key = domain_key(name)
-        parts: list[str] = []
-        context: list[dict[str, Any]] = []
-        for value in values:
-            contribution = getattr(value, key)
-            if contribution.mission:
-                parts.append(contribution.mission)
-            context.extend(item.model_dump() for item in contribution.context)
-        write_json(
-            run_dir / "missions" / f"{slug(name)}.json",
-            {"agent": name, "mission": "\n\n".join(parts), "context": context},
+def _contribution(value: dict[str, Any], name: str) -> dict[str, Any] | None:
+    for key in (domain_key(name), name):
+        item = value.get(key)
+        if isinstance(item, dict):
+            return item
+    missions = value.get("missions")
+    if isinstance(missions, list):
+        return next(
+            (
+                item
+                for item in missions
+                if isinstance(item, dict) and item.get("agent") == name
+            ),
+            None,
         )
+    return None
+
+
+def merge_chunks(run_dir: Path, values: list[dict[str, Any]]) -> None:
+    """Append every domain contribution in chunk order without deduplication."""
+    for name in AGENT_NAMES:
+        parts: list[str] = []
+        context: list[Any] = []
+        for value in values:
+            contribution = _contribution(value, name)
+            if contribution is None:
+                continue
+            mission = contribution.get("mission")
+            if isinstance(mission, str) and mission:
+                parts.append(mission)
+            entries = contribution.get("context")
+            if isinstance(entries, list):
+                context.extend(entries)
+        mission = {"agent": name, "mission": "\n\n".join(parts), "context": context}
+        filename = slug(name)
+        write_json(run_dir / "missions" / f"{filename}.json", mission)
+        write_mission_markdown(run_dir / "mission_md" / f"{filename}.md", mission)
 
 
 async def write_missions(run_dir: Path) -> dict[str, int]:
     """Run missing chunks concurrently, save them, and append their outputs."""
     chunks = split_fact_sheet(read_text(run_dir / "inputs" / "fact_sheet.md"))
-    graph, schema = create_chunk_agent(run_dir)
-    _record_chunks(run_dir, chunks, schema)
+    graph = create_chunk_agent(run_dir)
+    _record_chunks(run_dir, chunks)
     semaphore = asyncio.Semaphore(MAX_CHUNK_CONCURRENCY)
     lock = asyncio.Lock()
     results = await asyncio.gather(
         *(
-            _run_chunk(graph, schema, run_dir, chunk, index, len(chunks), semaphore, lock)
+            _run_chunk(graph, run_dir, chunk, index, len(chunks), semaphore, lock)
             for index, chunk in enumerate(chunks, start=1)
         ),
         return_exceptions=True,
     )
-    failures = [item for item in results if isinstance(item, BaseException)]
-    if failures:
-        raise RuntimeError(f"{len(failures)} Layer 2 chunk call(s) failed") from failures[0]
-    merge_chunks(run_dir, list(results))
+    merge_chunks(run_dir, [item for item in results if isinstance(item, dict)])
+    _finish_chunking(run_dir)
     return summarize_usage(run_dir)
 
 
-def run_all(run_dir: Path) -> list[Check]:
+def run_all(run_dir: Path) -> dict[str, int]:
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError(f"OPENAI_API_KEY is empty. Add it to {REPO_ROOT / '.env'}")
     usage = asyncio.run(write_missions(run_dir))
     record = load_json(run_dir / "run.json")
-    record["usage"] = usage
+    record.update(status="complete", usage=usage, finished_at=now_iso())
     write_json(run_dir / "run.json", record)
-    return run_checks(run_dir)
+    return usage
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -197,6 +265,25 @@ def _require_current_run(parser: argparse.ArgumentParser, run_dir: Path) -> None
         parser.error("legacy Layer 2 runs cannot resume; start a fresh fact-sheet run")
 
 
+def _print_summary(run_dir: Path) -> None:
+    record = load_json(run_dir / "run.json")
+    chunking = record.get("chunking", {})
+    chunks = chunking.get("chunks", [])
+    summary = chunking.get("summary", {})
+    completed = int(summary.get("completed", 0) or 0)
+    failed = [item for item in chunks if item.get("status") == "failed"]
+    print(f"Run {run_dir.name}: {completed}/{len(chunks)} chunks returned JSON")
+    if failed:
+        print("WARNING: Layer 2 published partial missions with failed chunks.")
+        for item in failed:
+            print(
+                f"  Chunk {item.get('index')} attempt {item.get('attempt', 0)}: "
+                f"{item.get('error_type') or 'Error'}: {item.get('error') or 'unknown error'}"
+            )
+        print(f'.\\run.ps1 -Resume "{run_dir}"')
+    print(f"Missions: {run_dir / 'missions'}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
@@ -214,9 +301,6 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("provide a fact_sheet.md path or --resume")
         run_dir = create_run(args.fact_sheet, PLANNER_PATH, RUNS_DIR)
         print(f"Created {run_dir}", flush=True)
-    checks = run_all(run_dir)
-    passed = sum(ok for _, _, ok, _ in checks)
-    print(f"Run {run_dir.name}: {passed}/{len(checks)} checks passed")
-    print(f"Missions: {run_dir / 'missions'}")
-    print(f"Report: {run_dir / 'check_report.md'}")
-    return 0 if passed == len(checks) else 1
+    run_all(run_dir)
+    _print_summary(run_dir)
+    return 0

@@ -1,10 +1,9 @@
 """Turning fetched bytes into quotable text.
 
-Two things live here that decide whether a citation can ever succeed: working
-out how a page is encoded, and preserving the structure of a table. Both used to
-be assumptions -- UTF-8, and no cell separator -- and both silently produced
-mangled text that the exact-quote check then rejected for reasons nobody could
-see from the outside.
+Two things here determine whether an agent can inspect retained evidence:
+working out how a page is encoded and preserving the structure of a table.
+Both used to be assumptions -- UTF-8 and no cell separator -- and both silently
+produced mangled text that made source review unreliable.
 """
 
 from __future__ import annotations

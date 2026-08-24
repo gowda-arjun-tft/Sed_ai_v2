@@ -2,31 +2,15 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
-from .fs import atomic_write_text, load_json, now_iso, read_text, sha256, slug, write_json
+from .fs import atomic_write_text, load_json, sha256, slug
 from .planner import load_planner
 from .settings import AGENT_NAMES, LAYER2_SCHEMA_VERSION
-from .usage import summarize_usage
 
 
 Check = tuple[int, str, bool, str]
-
-
-def fact_blocks(text: str) -> list[str]:
-    """Return complete ### blocks for informational counts only."""
-    headings = list(re.finditer(r"(?m)^##(?:#)? (?!#).+?\s*$", text))
-    return [
-        text[
-            heading.start() : headings[index + 1].start()
-            if index + 1 < len(headings)
-            else len(text)
-        ].strip()
-        for index, heading in enumerate(headings)
-        if heading.group(0).startswith("### ")
-    ]
 
 
 def _load_json_or_none(path: Path) -> Any:
@@ -36,7 +20,7 @@ def _load_json_or_none(path: Path) -> Any:
         return None
 
 
-def _checks(run_dir: Path, run: dict[str, Any]) -> tuple[list[Check], dict[str, int]]:
+def _checks(run_dir: Path, run: dict[str, Any]) -> list[Check]:
     fact_path = run_dir / "inputs" / "fact_sheet.md"
     planner_path = run_dir / "inputs" / "planner_prompt.md"
     schema_ok = run.get("schema_version") == LAYER2_SCHEMA_VERSION
@@ -69,21 +53,13 @@ def _checks(run_dir: Path, run: dict[str, Any]) -> tuple[list[Check], dict[str, 
     missions_ok = len(mission_values) == len(AGENT_NAMES) and all(
         isinstance(value, dict) for value in mission_values
     )
-    contexts = [
-        item
-        for mission in mission_values
-        if isinstance(mission, dict)
-        for item in mission.get("context", [])
-        if isinstance(item, dict)
-    ]
-    sheet_blocks = len(fact_blocks(read_text(fact_path))) if fact_path.is_file() else 0
     checks = [
         (1, "Schema and copied inputs are intact", schema_ok and hashes_ok, f"schema={run.get('schema_version')}"),
         (2, "Planner contains the frozen eight-domain roster", planner_ok, f"agents={len(AGENT_NAMES)}"),
         (3, "Every expected chunk result is valid JSON", chunks_ok, f"chunks={len(chunk_values)}"),
         (4, "Eight mission files are valid JSON", missions_ok, f"missions={sum(isinstance(v, dict) for v in mission_values)}"),
     ]
-    return checks, {"sheet_blocks": sheet_blocks, "context_entries": len(contexts)}
+    return checks
 
 
 def run_checks(run_dir: Path) -> list[Check]:
@@ -93,7 +69,7 @@ def run_checks(run_dir: Path) -> list[Check]:
         raise FileNotFoundError(f"not a CDI run folder: {run_dir}")
     run = _load_json_or_none(record_path)
     run = run if isinstance(run, dict) else {}
-    checks, facts = _checks(run_dir, run)
+    checks = _checks(run_dir, run)
     passed = sum(ok for _, _, ok, _ in checks)
     lines = [f"# Layer 2 check report — {run_dir.name}", ""]
     lines.extend(
@@ -102,12 +78,4 @@ def run_checks(run_dir: Path) -> list[Check]:
     )
     lines.extend(["", f"**Result: {passed}/{len(checks)} passed.**", ""])
     atomic_write_text(run_dir / "check_report.md", "\n".join(lines))
-    run.update(
-        checks={"run": len(checks), "passed": passed, "failed": len(checks) - passed},
-        facts=facts,
-        usage=summarize_usage(run_dir),
-        status="complete" if passed == len(checks) else "failed",
-        finished_at=now_iso(),
-    )
-    write_json(record_path, run)
     return checks

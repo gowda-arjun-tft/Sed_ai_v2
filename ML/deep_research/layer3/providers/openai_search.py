@@ -19,7 +19,6 @@ from ..settings import (
     MODEL_MAX_RETRIES,
     MODEL_NAME,
     MODEL_TIMEOUT_SECONDS,
-    REASONING_EFFORT,
 )
 from ..usage import record_search_usage
 
@@ -119,8 +118,18 @@ def _hits(response: Any) -> list[SearchHit]:
 
 
 class OpenAISearchRetriever:
-    def __init__(self, run_dir: Path) -> None:
+    def __init__(
+        self,
+        run_dir: Path,
+        *,
+        reasoning_effort: str,
+        context_size: str,
+        verbosity: str,
+    ) -> None:
         self.run_dir = run_dir
+        self.reasoning_effort = reasoning_effort
+        self.context_size = context_size
+        self.verbosity = verbosity
         self.client = AsyncOpenAI(
             timeout=MODEL_TIMEOUT_SECONDS,
             max_retries=MODEL_MAX_RETRIES,
@@ -135,9 +144,12 @@ class OpenAISearchRetriever:
                 "Search the public web for this exact research query. Return relevant sources "
                 f"with citations and do not add unsupported claims.\n\nQuery: {query}"
             ),
-            tools=[{"type": "web_search", "search_context_size": "low"}],
+            tools=[
+                {"type": "web_search", "search_context_size": self.context_size}
+            ],
             tool_choice={"type": "web_search"},
-            reasoning={"effort": REASONING_EFFORT},
+            reasoning={"effort": self.reasoning_effort},
+            text={"verbosity": self.verbosity},
             store=False,
         )
         record_search_usage(self.run_dir, response, actor, session_id)

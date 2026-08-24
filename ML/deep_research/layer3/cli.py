@@ -14,7 +14,7 @@ from .runner import run_research
 from .settings import REPO_ROOT, RUNS_DIR, SCHEMA_VERSION
 
 
-async def run_all(run_dir: Path, *, retry_failed: bool = False) -> list[Check]:
+async def run_all(run_dir: Path, *, retry_failed: bool = False) -> None:
     schema = load_json(run_dir / "run.json").get("schema_version")
     if schema != SCHEMA_VERSION:
         raise ValueError(
@@ -26,16 +26,15 @@ async def run_all(run_dir: Path, *, retry_failed: bool = False) -> list[Check]:
             f"OPENAI_API_KEY is empty. Add it to {REPO_ROOT / '.env'} and resume."
         )
     await run_research(run_dir, retry_failed=retry_failed)
-    return run_checks(run_dir)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Research one CDI property with eight progressive domain harnesses."
+        description="Research one CDI property with eight sequential domain-scoped STORM coordinators."
     )
     action = parser.add_mutually_exclusive_group(required=True)
-    action.add_argument("--research", type=Path, help="source runs/L2_* folder")
-    action.add_argument("--resume-l3", type=Path, help="existing runs/L3_* folder")
+    action.add_argument("--research", type=Path, help="source runs/<fact-sheet>/L2_* folder")
+    action.add_argument("--resume-l3", type=Path, help="existing runs/<fact-sheet>/L3_* folder")
     action.add_argument("--check-only", type=Path, help="rerun Layer 3 checks only")
     parser.add_argument("--online", action="store_true", help="enable public web research")
     parser.add_argument(
@@ -46,7 +45,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--retry-failed",
         action="store_true",
-        help="retry failed invocations in clean checkpoint threads",
+        help="resume failed invocations from their durable checkpoints",
     )
     return parser
 
@@ -88,11 +87,9 @@ def main(argv: list[str] | None = None) -> int:
         if not (run_dir / "run.json").is_file():
             parser.error("--resume-l3 must point to a CDI Layer 3 run folder")
     try:
-        checks = asyncio.run(run_all(run_dir, retry_failed=args.retry_failed))
+        asyncio.run(run_all(run_dir, retry_failed=args.retry_failed))
     except (RuntimeError, ValueError) as error:
         parser.error(str(error))
-    passed = sum(ok for _, _, ok, _ in checks)
-    print(f"Run {run_dir.name}: {passed}/{len(checks)} checks passed")
+    print(f"Run {run_dir.name}: model responses saved")
     print(f"Answer: {run_dir / 'research' / 'final.md'}")
-    print(f"Report: {run_dir / 'check_report.md'}")
-    return 0 if passed == len(checks) else 1
+    return 0

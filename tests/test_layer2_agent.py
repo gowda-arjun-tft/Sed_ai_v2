@@ -3,20 +3,19 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from langchain.agents.structured_output import ProviderStrategy
 from pydantic import ValidationError
 
 from ML.deep_research.layer2.agent import (
-    ContextEntry,
+    Layer2Response,
     chunk_request,
     create_chunk_agent,
     domain_key,
-    response_schema,
-    structured_value,
+    response_value,
     system_prompt,
 )
 from ML.deep_research.layer2.create_run import create_run
 from ML.deep_research.layer2.harness import build_model
-from ML.deep_research.layer2.planner import load_planner
 from ML.deep_research.layer2.settings import AGENT_NAMES, PLANNER_PATH
 from tests.common import FACT_SHEET
 
@@ -30,7 +29,7 @@ class StructuredHarnessTests(unittest.TestCase):
     def test_graph_exposes_no_tools_or_implicit_subagents(self):
         with tempfile.TemporaryDirectory() as temporary:
             with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}):
-                graph, _ = create_chunk_agent(self._run(Path(temporary)))
+                graph = create_chunk_agent(self._run(Path(temporary)))
         tools = set()
         if "tools" in graph.nodes:
             bound = graph.nodes["tools"].bound
@@ -39,41 +38,56 @@ class StructuredHarnessTests(unittest.TestCase):
         self.assertIsNone(graph.checkpointer)
         self.assertFalse(any("summar" in name.casefold() for name in graph.nodes))
 
-    def test_schema_has_exactly_eight_required_domain_buckets(self):
-        _, definitions = load_planner(PLANNER_PATH)
-        schema = response_schema(definitions)
-        self.assertEqual(set(schema.model_fields), {domain_key(name) for name in AGENT_NAMES})
-        self.assertEqual(ContextEntry.model_json_schema()["properties"].keys(), {"section", "fact", "means"})
-        self.assertNotIn("where", str(schema.model_json_schema()).casefold())
+    def test_domain_keys_remain_stable(self):
+        self.assertEqual(len({domain_key(name) for name in AGENT_NAMES}), 8)
 
     def test_provider_has_no_application_output_cap(self):
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}):
-            model = build_model()
+            model = build_model("medium")
         self.assertIsNone(model.max_tokens)
-        self.assertEqual(model.reasoning_effort, "max")
+        self.assertEqual(model.reasoning_effort, "medium")
         self.assertFalse(model.store)
-        self.assertEqual(model.max_retries, 2)
+        self.assertEqual(model.max_retries, 3)
+        self.assertNotIn("response_format", model.model_kwargs)
+
+    def test_graph_uses_permissive_provider_structured_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._run(Path(temporary))
+            with (
+                patch.dict("os.environ", {"OPENAI_API_KEY": "test"}),
+                patch("deepagents.create_deep_agent") as create,
+            ):
+                create_chunk_agent(run_dir)
+
+        strategy = create.call_args.kwargs["response_format"]
+        self.assertIsInstance(strategy, ProviderStrategy)
+        self.assertIs(strategy.schema, Layer2Response)
+        self.assertFalse(strategy.schema_spec.strict)
+        self.assertEqual(strategy.schema_spec.json_schema["type"], "object")
+        self.assertTrue(strategy.schema_spec.json_schema["additionalProperties"])
 
     def test_prompt_and_request_keep_roster_separate_from_chunk_data(self):
-        _, definitions = load_planner(PLANNER_PATH)
-        prompt = system_prompt(definitions)
+        prompt = system_prompt(PLANNER_PATH)
         self.assertIn("<domain_definitions>", prompt)
         self.assertIn(AGENT_NAMES[-1], prompt)
+        self.assertIn("property-specific risk questions", prompt)
+        self.assertIn("Do not restate a domain mandate", prompt)
+        self.assertIn("empty mission and empty context", prompt)
+        self.assertIn("or an empty string", prompt)
+        self.assertNotIn("still receives a non-empty mission", prompt)
         request = chunk_request("## Input\ntext", 2, 3)
         self.assertIn("chunk 2 of 3", request)
         self.assertIn("<fact_sheet_chunk>", request)
 
-    def test_structured_value_accepts_only_the_provider_schema(self):
-        _, definitions = load_planner(PLANNER_PATH)
-        schema = response_schema(definitions)
-        valid = {
-            domain_key(name): {"mission": "", "context": []}
-            for name in AGENT_NAMES
-        }
-        parsed = structured_value({"structured_response": valid}, schema)
-        self.assertIsInstance(parsed, schema)
+    def test_response_accepts_any_json_object_without_content_validation(self):
+        value = {"unexpected": {"shape": True}}
+        result = {"structured_response": Layer2Response(root=value)}
+        self.assertEqual(response_value(result), value)
+        self.assertEqual(response_value({"structured_response": Layer2Response(root={})}), {})
         with self.assertRaises(ValidationError):
-            structured_value({"structured_response": {}}, schema)
+            Layer2Response.model_validate([])
+        with self.assertRaisesRegex(ValueError, "no structured JSON object"):
+            response_value({})
 
 
 if __name__ == "__main__":

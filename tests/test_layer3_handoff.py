@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,10 +18,8 @@ from tests.common import create_complete_l3_run, create_complete_run
 class HandoffProvenanceTests(unittest.TestCase):
     """What Layer 3 records about its Layer 2 source must be what Layer 2 said.
 
-    `create_run` used to write a literal `{"passed": 19, "failed": 0}` into
-    `source_l2.checks`, and check 1 then compared that field against the same
-    literal — a tautology that always passed and proved nothing, while stating a
-    count Layer 2 can no longer produce. Both sides are now derived.
+    Layer 2 checks are optional diagnostics. Layer 3 records them when present
+    and records an empty object when the normal Layer 2 path skipped them.
     """
 
     def test_the_recorded_l2_result_is_copied_not_asserted(self):
@@ -32,12 +31,10 @@ class HandoffProvenanceTests(unittest.TestCase):
             l2_run = Path(source["path"])
             l2 = load_json(l2_run / "run.json")
 
-        self.assertEqual(source["checks"], l2["checks"])
+        self.assertEqual(source["checks"], l2.get("checks", {}))
         self.assertEqual(source["status"], l2["status"])
-        self.assertEqual(source["facts"], l2["facts"])
-        # The count is whatever the current Layer 2 contract produced.
-        self.assertNotEqual(source["checks"].get("passed"), 19)
-        self.assertGreater(source["checks"]["run"], 0)
+        self.assertEqual(source["facts"], l2.get("facts", {}))
+        self.assertEqual(source["checks"], {})
 
     def test_no_layer3_module_restates_a_layer2_check_count(self):
         """A literal count here is what made check 1 vacuous."""
@@ -47,16 +44,18 @@ class HandoffProvenanceTests(unittest.TestCase):
             self.assertNotIn('"passed": 19', text, path.name)
             self.assertNotIn("19/19", text, path.name)
 
-    def test_an_incomplete_recorded_handoff_fails_check_one(self):
+    def test_an_incomplete_recorded_handoff_is_recorded_but_not_gated(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             l3_run = create_complete_l3_run(root)
             record = load_json(l3_run / "run.json")
             record["source_l2"]["checks"] = {"run": 8, "passed": 7, "failed": 1}
             write_json(l3_run / "run.json", record)
-            checks = run_checks(l3_run)
-        first = [ok for number, _, ok, _ in checks if number == 1]
-        self.assertEqual(first, [False])
+            before = load_json(l3_run / "run.json")["status"]
+            run_checks(l3_run)
+            after = load_json(l3_run / "run.json")
+        self.assertEqual(before, after["status"])
+        self.assertEqual(after["source_l2"]["checks"]["failed"], 1)
 
     def test_new_run_requires_public_input_confirmation(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -67,7 +66,19 @@ class HandoffProvenanceTests(unittest.TestCase):
                 create_l3_run(l2_run, destination)
             self.assertFalse(destination.exists())
 
-    def test_legacy_or_relabelled_mission_rosters_are_rejected(self):
+    def test_layer3_is_created_beside_its_layer2_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            l2_run = create_complete_run(root)
+            l3_run = create_l3_run(
+                l2_run,
+                root / "runs",
+                public_input_confirmed=True,
+            )
+        self.assertEqual(l3_run.parent.resolve(), l2_run.parent.resolve())
+        self.assertRegex(l3_run.name, r"^L3_\d{8}_\d{6}_[0-9a-f]{4}$")
+
+    def test_relabelled_or_extra_missions_are_copied_without_semantic_gating(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             l2_run = create_complete_run(root)
@@ -79,12 +90,35 @@ class HandoffProvenanceTests(unittest.TestCase):
                 l2_run / "missions" / "legacy-fourteenth-domain.json",
                 {"agent": "Legacy domain", "mission": "Do not migrate.", "context": []},
             )
-            with self.assertRaisesRegex(ValueError, "exact current eight-domain"):
-                create_l3_run(
-                    l2_run,
-                    root / "l3-runs",
-                    public_input_confirmed=True,
-                )
+            l3_run = create_l3_run(
+                l2_run,
+                root / "l3-runs",
+                public_input_confirmed=True,
+            )
+            self.assertTrue((l3_run / "inputs" / "missions" / first.name).is_file())
+            self.assertTrue(
+                (l3_run / "inputs" / "mission_md" / f"{first.stem}.md").is_file()
+            )
+            self.assertTrue(
+                (l3_run / "inputs" / "missions" / "legacy-fourteenth-domain.json").is_file()
+            )
+            self.assertTrue(
+                (l3_run / "inputs" / "mission_md" / "legacy-fourteenth-domain.md").is_file()
+            )
+
+    def test_legacy_layer2_without_mission_markdown_is_derived(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            l2_run = create_complete_run(root)
+            shutil.rmtree(l2_run / "mission_md")
+            l3_run = create_l3_run(
+                l2_run,
+                root / "l3-runs",
+                public_input_confirmed=True,
+            )
+            markdown = list((l3_run / "inputs" / "mission_md").glob("*.md"))
+
+        self.assertEqual(len(markdown), 8)
 
 
 class Layer3CliContractTests(unittest.TestCase):

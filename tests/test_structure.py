@@ -7,7 +7,6 @@ import unittest
 import ML.deep_research.layer2 as layer2
 import ML.deep_research.layer3 as layer3
 from ML.deep_research.layer2.settings import PLANNER_PATH, REPO_ROOT
-from ML.deep_research.layer3.settings import REASONING_EFFORT
 
 
 class StructureTests(unittest.TestCase):
@@ -20,15 +19,22 @@ class StructureTests(unittest.TestCase):
         )
         self.assertEqual(len(cells), 2)
         self.assertEqual(notebook["metadata"]["kernelspec"]["display_name"], "compute")
-        self.assertIn(f"Layer 3 currently uses {REASONING_EFFORT} reasoning", notebook_text)
-        self.assertIn("one optional clarification batch", notebook_text)
+        for control in (
+            "FACT_SHEET_PATH",
+            "LAYER2_REASONING_EFFORT",
+            "LAYER3_SOURCE_RUN_PATH",
+            "LAYER3_MODEL_REASONING_EFFORT",
+            "WEB_SEARCH_DEPTH",
+            "WEB_SEARCH_VERBOSITY",
+        ):
+            self.assertIn(control, notebook_text)
+        self.assertIn('LAYER3_SOURCE_RUN_PATH = r""', notebook_text)
+        self.assertIn('LAYER3_MODEL_REASONING_EFFORT = "low"', notebook_text)
+        self.assertIn('WEB_SEARCH_DEPTH = "low"', notebook_text)
+        self.assertIn('WEB_SEARCH_VERBOSITY = "low"', notebook_text)
         self.assertNotIn("Source Scout", notebook_text)
+        self.assertNotIn("clarification", notebook_text.casefold())
         for cell in cells:
-            # Execution state is deliberately not asserted. A notebook the human
-            # actually ran carries an `execution_count` and captured `outputs`,
-            # and failing the suite for that punished normal use -- it fired the
-            # moment the demo was run. What matters is that both cells still
-            # compile.
             compile(
                 "".join(cell["source"]),
                 str(notebook_path),
@@ -69,7 +75,10 @@ class StructureTests(unittest.TestCase):
             if path.suffix not in {".py", ".ps1"} or not path.is_file():
                 continue
             relative = path.relative_to(REPO_ROOT)
-            if any(part in {".venv", "runs", "__pycache__"} for part in relative.parts):
+            if any(
+                part in {".venv", "runs", "outputs", "node_modules", "__pycache__"}
+                for part in relative.parts
+            ):
                 continue
             lines = len(path.read_text(encoding="utf-8-sig").splitlines())
             if lines > 350:

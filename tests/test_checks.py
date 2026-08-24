@@ -22,13 +22,14 @@ class ReportTests(unittest.TestCase):
             run_dir = create_complete_run(Path(temporary))
             self.assertEqual(main(["--check-only", str(run_dir)]), 0)
 
-    def test_a_missing_mission_fails_the_report(self):
+    def test_a_missing_mission_is_reported_without_changing_run_status(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = create_complete_run(Path(temporary))
             (run_dir / "missions" / f"{slug(AGENT_NAMES[3])}.json").unlink()
+            status = load_json(run_dir / "run.json")["status"]
             checks = run_checks(run_dir)
             self.assertLess(sum(ok for _, _, ok, _ in checks), len(checks))
-            self.assertEqual(load_json(run_dir / "run.json")["status"], "failed")
+            self.assertEqual(load_json(run_dir / "run.json")["status"], status)
 
     def test_a_malformed_chunk_fails_the_report(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -38,8 +39,7 @@ class ReportTests(unittest.TestCase):
             checks = run_checks(run_dir)
             self.assertLess(sum(ok for _, _, ok, _ in checks), len(checks))
 
-    def test_fact_counts_are_reported_but_never_gate(self):
-        """Dropping every fact still passes. The number is for a human."""
+    def test_context_content_is_never_graded(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = create_complete_run(Path(temporary))
             path = run_dir / "missions" / f"{slug(AGENT_NAMES[0])}.json"
@@ -48,9 +48,6 @@ class ReportTests(unittest.TestCase):
             path.write_text(json.dumps(mission), encoding="utf-8")
             checks = run_checks(run_dir)
             self.assertEqual(sum(ok for _, _, ok, _ in checks), len(checks))
-            facts = load_json(run_dir / "run.json")["facts"]
-            self.assertEqual(facts["context_entries"], 0)
-            self.assertGreater(facts["sheet_blocks"], 0)
 
 
 if __name__ == "__main__":

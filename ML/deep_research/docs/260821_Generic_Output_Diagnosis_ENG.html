@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why the Deep Research Output Is Generic</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #e8eef7;
+      --muted: #aab8ca;
+      --paper: #07111e;
+      --card: #101e2f;
+      --line: #2b3d53;
+      --navy: #f4f8fd;
+      --blue: #72b2ff;
+      --blue-soft: #132c4c;
+      --red: #ff7b72;
+      --red-soft: #3a1d22;
+      --amber: #ffbf69;
+      --amber-soft: #3a2a12;
+      --green: #5de0a5;
+      --green-soft: #123227;
+      --shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    a { color: var(--blue); }
+    a:hover { text-decoration-thickness: 2px; }
+
+    .hero {
+      padding: 64px 24px 76px;
+      color: #fff;
+      background:
+        radial-gradient(circle at 82% 15%, rgba(64, 150, 255, 0.22), transparent 27rem),
+        linear-gradient(135deg, #050b13, #102a46);
+    }
+
+    .hero-inner,
+    main,
+    footer {
+      width: min(1160px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: #9ec8ff;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin: 0;
+      font-size: clamp(2.2rem, 5vw, 4.5rem);
+      line-height: 1.03;
+      letter-spacing: -0.045em;
+    }
+
+    .hero-copy {
+      max-width: 850px;
+      margin: 24px 0 0;
+      color: #d8e8fa;
+      font-size: clamp(1.02rem, 2vw, 1.3rem);
+    }
+
+    .verdict {
+      max-width: 950px;
+      margin: -34px auto 28px;
+      padding: 26px 30px;
+      border-left: 6px solid var(--red);
+      border-radius: 14px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+      font-size: 1.08rem;
+    }
+
+    .verdict strong { color: var(--red); }
+
+    main { padding-bottom: 72px; }
+
+    section {
+      margin-top: 52px;
+      scroll-margin-top: 20px;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      color: var(--navy);
+      font-size: clamp(1.55rem, 2.5vw, 2.2rem);
+      letter-spacing: -0.025em;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      color: var(--navy);
+      font-size: 1.06rem;
+    }
+
+    .section-intro {
+      max-width: 850px;
+      margin: 0 0 22px;
+      color: var(--muted);
+    }
+
+    .metrics,
+    .grid-2,
+    .grid-3,
+    .flow {
+      display: grid;
+      gap: 18px;
+    }
+
+    .metrics { grid-template-columns: repeat(4, 1fr); }
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .flow { grid-template-columns: repeat(4, 1fr); }
+
+    .metric,
+    .card,
+    .flow-step {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--card);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+    }
+
+    .metric { padding: 20px; }
+    .metric strong {
+      display: block;
+      color: var(--navy);
+      font-size: 2rem;
+      line-height: 1.05;
+    }
+    .metric span {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .metric.bad strong { color: var(--red); }
+    .metric.warn strong { color: var(--amber); }
+
+    .flow-step {
+      position: relative;
+      padding: 22px;
+    }
+
+    .flow-step:not(:last-child)::after {
+      position: absolute;
+      top: 50%;
+      right: -14px;
+      z-index: 2;
+      width: 28px;
+      color: var(--blue);
+      background: var(--paper);
+      content: "→";
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: 900;
+    }
+
+    .step-number {
+      display: inline-grid;
+      width: 30px;
+      height: 30px;
+      margin-bottom: 14px;
+      place-items: center;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--blue);
+      font-size: 0.85rem;
+      font-weight: 800;
+    }
+
+    .flow-step p,
+    .card p { margin: 8px 0 0; color: var(--muted); }
+
+    .card { padding: 24px; }
+    .card.danger { border-top: 4px solid var(--red); }
+    .card.warning { border-top: 4px solid var(--amber); }
+    .card.good { border-top: 4px solid var(--green); }
+    .card.info { border-top: 4px solid var(--blue); }
+
+    .tag {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      color: var(--red);
+      background: var(--red-soft);
+      font-size: 0.73rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .tag.blue { color: var(--blue); background: var(--blue-soft); }
+    .tag.green { color: var(--green); background: var(--green-soft); }
+    .tag.amber { color: var(--amber); background: var(--amber-soft); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--card);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+    }
+
+    th,
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--navy);
+      background: #17283c;
+      font-size: 0.78rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #14243a; }
+
+    .callout {
+      padding: 22px 24px;
+      border: 1px solid #315b85;
+      border-radius: 12px;
+      color: #d5e8ff;
+      background: var(--blue-soft);
+    }
+
+    .causal-chain {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 20px 0 0;
+      padding: 22px;
+      border-radius: 12px;
+      border: 1px solid #294866;
+      background: #0b1c2f;
+      color: #fff;
+    }
+
+    .causal-chain span {
+      padding: 8px 11px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+
+    .causal-chain b { color: #75b7ff; }
+
+    .example {
+      margin-top: 18px;
+      padding: 22px;
+      border-left: 5px solid var(--green);
+      border-radius: 10px;
+      background: var(--green-soft);
+    }
+
+    .example dl {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 8px 16px;
+      margin: 0;
+    }
+
+    .example dt { color: var(--green); font-weight: 800; }
+    .example dd { margin: 0; }
+
+    .checklist {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px 22px;
+      margin: 18px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      position: relative;
+      padding: 12px 14px 12px 42px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--card);
+    }
+
+    .checklist li::before {
+      position: absolute;
+      left: 14px;
+      color: var(--green);
+      content: "✓";
+      font-weight: 900;
+    }
+
+    .source-note {
+      margin-top: 44px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    footer {
+      padding: 0 0 48px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    @media (max-width: 900px) {
+      .metrics,
+      .flow { grid-template-columns: repeat(2, 1fr); }
+      .grid-3 { grid-template-columns: 1fr; }
+      .flow-step:nth-child(2)::after { display: none; }
+    }
+
+    @media (max-width: 640px) {
+      .hero { padding-top: 44px; }
+      .hero-inner,
+      main,
+      footer { width: min(100% - 24px, 1160px); }
+      .metrics,
+      .grid-2,
+      .flow,
+      .checklist { grid-template-columns: 1fr; }
+      .flow-step::after { display: none; }
+      .example dl { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">Deep Research · Combined Final Diagnosis · 21 August 2026</p>
+      <h1>Why the output is generic—and the final correction</h1>
+      <p class="hero-copy">
+        The research machinery ran. The prompts aimed it at the wrong product: a broad
+        due-diligence decision memo instead of current, property-linked risk intelligence.
+      </p>
+    </div>
+  </header>
+
+  <main>
+    <div class="verdict">
+      <strong>Final issue:</strong> Layer 2 creates repeated domain mandates rather than
+      property-specific risk questions. Layer 3 then researches the domain generally and is
+      explicitly told to produce decisions, actions, scenarios and recommendations. The result
+      is predictable: fact-sheet repetition, law and macro summaries, missed nearby developments,
+      weak geopolitical discovery, and an advisory final report the user did not ask for.
+    </div>
+
+    <section aria-labelledby="evidence-title">
+      <h2 id="evidence-title">The run worked hard in the wrong direction</h2>
+      <p class="section-intro">
+        Search volume was not the limiting factor. Search targeting and the final output contract
+        were. The completed Bad Homburg run provides a clean baseline for the diagnosis.
+      </p>
+      <div class="metrics">
+        <div class="metric"><strong>231</strong><span>recorded web-search queries</span></div>
+        <div class="metric"><strong>8</strong><span>completed domain reports</span></div>
+        <div class="metric bad"><strong>0</strong><span>queries about current or upcoming nearby events</span></div>
+        <div class="metric warn"><strong>3</strong><span>geopolitics/dependency queries, all citation verification</span></div>
+      </div>
+      <table style="margin-top: 22px">
+        <thead>
+          <tr><th>Domain</th><th>Queries</th><th>Observed search direction</th><th>Diagnosis</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Energy &amp; Carbon</td><td>39</td><td>GEG, GEIG, EPBD, funding and Hessian solar rules</td><td>Mainly national law applicable to many German buildings</td></tr>
+          <tr><td>Ground &amp; Climate</td><td>39</td><td>Address-specific hazard maps, groundwater and contaminated-land records</td><td>Strongest example of property-anchored research</td></tr>
+          <tr><td>Finance &amp; Debt</td><td>34</td><td>ECB rates, lending surveys, GDP and regulatory guidelines</td><td>Macro textbook material without enough property transmission</td></tr>
+          <tr><td>Occupier &amp; Lease</td><td>35</td><td>Generic public-lease law and historical precedents</td><td>Drifted away from the actual occupancy and income questions</td></tr>
+          <tr><td>Rights &amp; Public Law</td><td>31</td><td>Local planning and Heilquellenschutz material</td><td>Good evidence that current tools can research this address</td></tr>
+          <tr><td>Location &amp; Market</td><td>32</td><td>Address confirmation, transport, demographics and office-market reports</td><td>No systematic current/upcoming local scan</td></tr>
+          <tr><td>Asset Integrity</td><td>18</td><td>Operating, garage, inspection and fire-system regulations</td><td>Law verification dominated over emerging building risks</td></tr>
+          <tr><td>Geopolitics &amp; Dependencies</td><td>3</td><td>Fire-alarm, utility and local access citation checks</td><td>The intended outward-looking domain effectively did not run</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="chain-title">
+      <h2 id="chain-title">How the generic output is produced</h2>
+      <p class="section-intro">
+        The failure is cumulative. Each stage faithfully amplifies the ambiguity supplied by the
+        previous stage.
+      </p>
+      <div class="flow">
+        <article class="flow-step">
+          <span class="step-number">1</span>
+          <h3>Layer 2 repeats mandates</h3>
+          <p>Nine chunks each write another version of “establish everything.” Specific anomalies remain context, not research questions.</p>
+        </article>
+        <article class="flow-step">
+          <span class="step-number">2</span>
+          <h3>Lenses follow generic roles</h3>
+          <p>Academic finds laws, economist finds macro data, historian finds precedents. None owns “this address, now, nearby.”</p>
+        </article>
+        <article class="flow-step">
+          <span class="step-number">3</span>
+          <h3>Search drifts outward</h3>
+          <p>National frameworks and market context dominate. Current local construction, planning and events are not deliberately scanned.</p>
+        </article>
+        <article class="flow-step">
+          <span class="step-number">4</span>
+          <h3>Synthesis writes advice</h3>
+          <p>The prompt asks for decision gates, actions, owners and investment guidance—so the final report becomes an underwriting memo.</p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="missed-title">
+      <h2 id="missed-title">What a small local scan found immediately</h2>
+      <p class="section-intro">
+        Four targeted searches identified two official, property-relevant developments that the
+        231-query run missed. These are examples of the discovery behavior the prompts must request.
+      </p>
+      <div class="grid-2">
+        <article class="card danger">
+          <span class="tag">Current works</span>
+          <h3>U2 extension construction in Gonzenheim</h3>
+          <p>
+            The U2 extension toward Bad Homburg station entered construction, with works in the
+            property's district during 2026. The potential property linkage is access, noise,
+            parking, staff and visitor movement, and court operations during construction.
+          </p>
+          <p>
+            <a href="https://www.bad-homburg.de/de/stadt/aktuelles/spatenstich-fuer-die-verlaengerung-der-u2-oz5mnkkyvr">City announcement</a>
+            · <a href="https://www.bad-homburg-u2.de/das-projekt.html">Project page</a>
+            · <a href="https://www.vgf-ffm.de/en/news/planned-construction/bad-homburg-construction-project/">VGF works page</a>
+          </p>
+        </article>
+        <article class="card warning">
+          <span class="tag amber">Forward plan</span>
+          <h3>Proposed “Steinkaut” S-Bahn stop and surrounding development</h3>
+          <p>
+            The Bad Homburg 2030 framework explicitly names the Amtsgericht as a destination for a
+            proposed stop and links it with wider development ideas. That is directly relevant to
+            future access, demand, neighboring uses and value—but it was not found by the run.
+          </p>
+          <p>
+            <a href="https://badhomburg2030.de/topic/nord/thought/7679">Steinkaut proposal</a>
+            · <a href="https://badhomburg2030.de/topic/nord">Northern-area framework</a>
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="causes-title">
+      <h2 id="causes-title">Root causes by layer</h2>
+      <div class="grid-2">
+        <article class="card danger">
+          <span class="tag">Layer 2</span>
+          <h3>The mission is a mandate, not a question</h3>
+          <p>
+            Each chunk creates another broad mission paragraph. The merge preserves all nine, so
+            Layer 3 receives repeated instructions to investigate an entire domain. It does not
+            receive a concise list of property anomalies, risk hypotheses, search anchors and open
+            questions.
+          </p>
+          <p>
+            The mission also lacks a stable address/geo block containing the street, district,
+            parcel and relevant neighboring sites.
+          </p>
+          <p><a href="../layer2/prompts/chunk_router.md">Inspect the Layer 2 router prompt</a></p>
+        </article>
+        <article class="card danger">
+          <span class="tag">Layer 3</span>
+          <h3>The requested product is wrong</h3>
+          <p>
+            The coordinator is instructed to make a decision-ready report with consequences,
+            scenarios, handoffs and actions. The synthesizer requests an investment decision,
+            owners and decision gates. Generic advice is therefore compliance with the prompt,
+            not model disobedience.
+          </p>
+          <p>
+            The shared rules classify evidence as established, inferred, unknown or immaterial,
+            but do not require a property-risk verdict or causal linkage.
+          </p>
+          <p>
+            <a href="../layer3/SKILL.md">Inspect the Layer 3 coordinator instructions</a>
+            · <a href="../layer3/prompts/synthesis.md">Inspect the synthesis prompt</a>
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="prompt-defects-title">
+      <h2 id="prompt-defects-title">The five Layer 3 prompt defects</h2>
+      <p class="section-intro">
+        These are separate behavioral gaps. Fixing only the report format would still leave the
+        research generic; fixing only search wording would still produce unwanted advice.
+      </p>
+      <div class="grid-3">
+        <article class="card danger">
+          <span class="tag">Defect 1</span>
+          <h3>Lenses aim at disciplines</h3>
+          <p>Academic, economic and historical roles naturally collect laws, statistics and precedents. Their prompts do not make the property the compulsory subject of every search and finding.</p>
+        </article>
+        <article class="card danger">
+          <span class="tag">Defect 2</span>
+          <h3>No environmental scan</h3>
+          <p>No lens owns current local news, nearby construction, planning applications, transport works, council decisions, major events or announced projects.</p>
+        </article>
+        <article class="card danger">
+          <span class="tag">Defect 3</span>
+          <h3>No complete risk vocabulary</h3>
+          <p>The shared rules can say established, inferred, unknown or immaterial, but they do not consistently require likelihood, severity, timing and a building-or-people effect.</p>
+        </article>
+        <article class="card danger">
+          <span class="tag">Defect 4</span>
+          <h3>Advice is explicitly ordered</h3>
+          <p>Scenarios, handoffs, actions, owners and decision gates are requested. The unwanted underwriting memo is therefore the instructed output.</p>
+        </article>
+        <article class="card danger">
+          <span class="tag">Defect 5</span>
+          <h3>Geopolitics has no discovery checklist</h3>
+          <p>A quiet fact sheet produces a quiet mission. No prompt translates geopolitics into tenant-state, energy, vendor, sanction, cyber, security and specialist-capacity pathways for this building.</p>
+        </article>
+        <article class="card info">
+          <span class="tag blue">Cross-cutting</span>
+          <h3>No novelty rule</h3>
+          <p>The reports are not told to focus on what public evidence adds, contradicts or updates. Repeating the supplied fact sheet is therefore allowed and often rewarded.</p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="boundary-title">
+      <h2 id="boundary-title">One mechanical defect also exists</h2>
+      <div class="callout">
+        The nine-fold mission duplication is caused by concatenating chunk missions without
+        deduplication. It can be reduced through the router prompt by emitting only chunk-specific
+        questions, but deterministic deduplication is the one issue that is not purely semantic.
+        The broader genericness remains a prompt-objective problem.
+      </div>
+    </section>
+
+    <section aria-labelledby="mission-title">
+      <h2 id="mission-title">What Layer 2 should hand to Layer 3</h2>
+      <p class="section-intro">
+        Keep the permanent domain mandate once. The generated mission should contain only the
+        property-specific research delta: trigger, hypothesis, search anchors and missing linkage.
+      </p>
+      <div class="grid-2">
+        <article class="card danger">
+          <span class="tag">Current mission</span>
+          <h3>“Establish everything”</h3>
+          <p>
+            Establish condition, compliance, capacity, inspection status, cost, timing,
+            responsibility, disruption and residual risk—repeated with slightly different wording
+            for every chunk.
+          </p>
+          <p><strong>Effect:</strong> broad domain research and repeated fact-sheet narration.</p>
+        </article>
+        <article class="card good">
+          <span class="tag green">Required mission</span>
+          <h3>Property-specific question</h3>
+          <p><strong>Property fact:</strong> employee and construction access may depend on municipal swimming-pool land.</p>
+          <p><strong>Risk hypothesis:</strong> planned works, events, access-policy changes or third-party restrictions may interrupt staff, visitors, contractors or emergency access.</p>
+          <p><strong>Search anchors:</strong> Seedammweg, Seedammbad, Stadtwerke, municipal plans, road closures, event calendar and access agreements.</p>
+          <p><strong>Missing linkage:</strong> whether the arrangement is current, legally protected, temporary or revocable.</p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="target-title">
+      <h2 id="target-title">The target research behavior</h2>
+      <p class="section-intro">
+        Every material finding should prove how external evidence reaches the actual property.
+        News and events are inputs, not risks by themselves.
+      </p>
+      <div class="causal-chain" aria-label="Required causal chain">
+        <span>New evidence</span><b>→</b>
+        <span>Property fact</span><b>→</b>
+        <span>Exposure</span><b>→</b>
+        <span>Vulnerability</span><b>→</b>
+        <span>Building / people effect</span><b>→</b>
+        <span>Time horizon</span><b>→</b>
+        <span>Risk verdict</span>
+      </div>
+      <div class="example">
+        <dl>
+          <dt>New evidence</dt><dd>Confirmed construction programme near the courthouse.</dd>
+          <dt>Property fact</dt><dd>Staff, visitors and contractors rely on constrained local access and parking.</dd>
+          <dt>Possible effect</dt><dd>Temporary access disruption, noise, travel delay or operating interference.</dd>
+          <dt>Status</dt><dd>Established event; property impact inferred until route and timing overlap are verified.</dd>
+          <dt>Not included</dt><dd>No recommendation, action owner, investment decision or generic transport commentary.</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section aria-labelledby="roles-title">
+      <h2 id="roles-title">Keep five lenses, but give them non-overlapping jobs</h2>
+      <p class="section-intro">
+        The multi-agent method is usable. The smallest correction is to replace broad personas with
+        explicit research territories and a concise return contract.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Lens</th><th>Owned question</th><th>Required return</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Property exposure analyst</td><td>Which supplied facts create dependencies, vulnerabilities or unresolved contradictions?</td><td>Property facts and risk hypotheses—not a property summary</td></tr>
+          <tr><td>Local intelligence researcher</td><td>What is happening or planned nearby that could affect the building or its people?</td><td>Dated events, proximity, property linkage and sources</td></tr>
+          <tr><td>Regulatory and market researcher</td><td>Which current or upcoming laws, insurance, occupier, finance, energy or market changes reach this asset?</td><td>Only property-applicable deviations and transmission paths</td></tr>
+          <tr><td>Dependency and geopolitical researcher</td><td>Which utilities, vendors, technologies, materials, countries, sanctions, cyber or security drivers can reach this property?</td><td>Proven or rejected dependency pathways</td></tr>
+          <tr><td>Adversarial relevance verifier</td><td>Is each claim sourced, current, non-duplicative and genuinely connected to the property?</td><td>Keep, downgrade to context, mark unknown or reject</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="coverage-title">
+      <h2 id="coverage-title">Two discovery areas that must become explicit</h2>
+      <div class="grid-2">
+        <article class="card info">
+          <span class="tag blue">Nearby intelligence</span>
+          <h3>Use tiered proximity, not one blind radius</h3>
+          <p><strong>Immediate:</strong> parcel, neighboring properties, access streets, parking and utilities.</p>
+          <p><strong>Operational catchment:</strong> roadworks, transit changes, construction, noise, events, demonstrations, emergency access and service interruptions.</p>
+          <p><strong>Municipality/region:</strong> planning, public projects, court/service changes, major employers and market developments only when they can reach the property.</p>
+        </article>
+        <article class="card info">
+          <span class="tag blue">Geopolitical transmission</span>
+          <h3>Research pathways, not world news</h3>
+          <p><strong>Energy:</strong> supply or price change → building heat/power reliability and Opex.</p>
+          <p><strong>Equipment:</strong> trade/vendor restriction → fire, lift, controls or electrical parts → repair delay and operational disruption.</p>
+          <p><strong>Occupier/security:</strong> state budget, court reform, cyber or justice-site threat → occupancy, people or building operations.</p>
+          <p><strong>Labour/materials:</strong> specialist scarcity or commodity disruption → works programme, downtime and cost exposure.</p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="output-title">
+      <h2 id="output-title">Required output contract</h2>
+      <p class="section-intro">
+        The reader must be able to see what was already known, what the web added, how the risk was
+        inferred, and what remains unknown. Mixing those four categories creates repetition and
+        false confidence.
+      </p>
+      <div class="grid-2">
+        <table>
+          <thead>
+            <tr><th>Information class</th><th>Meaning</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Existing property fact</td><td>Authoritative input from Layer 2; repeat only when needed for linkage</td></tr>
+            <tr><td>New external fact</td><td>Current public evidence discovered by Layer 3</td></tr>
+            <tr><td>Property-risk inference</td><td>The explicit exposure, vulnerability and building/people effect</td></tr>
+            <tr><td>Unknown</td><td>The missing fact that prevents confirmation or severity assessment</td></tr>
+          </tbody>
+        </table>
+        <table>
+          <thead>
+            <tr><th>Risk-register field</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Risk finding</td><td>Property-specific title, including explicit “no material risk found” when appropriate</td></tr>
+            <tr><td>New/current evidence</td><td>What changed, happened or was newly verified</td></tr>
+            <tr><td>Property linkage</td><td>Fact → exposure → vulnerability → effect</td></tr>
+            <tr><td>Timing and status</td><td>Current/upcoming horizon; established, inferred, emerging or not established</td></tr>
+            <tr><td>Confidence and sources</td><td>Evidence strength and direct links</td></tr>
+            <tr><td>Missing information</td><td>What prevents confirmation—without turning it into an action list</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout" style="margin-top: 18px">
+        <strong>Final synthesizer:</strong> merge duplicate findings that share the same causal
+        chain, preserve distinct risks with different causes, show cross-domain amplification,
+        separate current/emerging/long-term risks, retain sources and confidence, and report
+        important “not established” results. Do not produce recommendations, owners, gates,
+        approval/rejection language or an investment decision.
+      </div>
+    </section>
+
+    <section aria-labelledby="improvements-title">
+      <h2 id="improvements-title">Areas of improvement, in order</h2>
+      <table>
+        <thead>
+          <tr><th>Priority</th><th>Change</th><th>Layer</th><th>Failure corrected</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>Convert missions into specific open questions, anomalies and research hypotheses; include a stable address/geo block.</td><td>Layer 2</td><td>Generic missions and fact-sheet restatement</td></tr>
+          <tr><td>2</td><td>Add a current and planned environmental scan covering local construction, transport, planning, council decisions, news and events.</td><td>Layer 3</td><td>Blindness to “now” and “nearby”</td></tr>
+          <tr><td>3</td><td>Require every lens search and finding to connect to the address, occupier, systems, dependencies or immediate market.</td><td>Layer 3</td><td>National-law and macro drift</td></tr>
+          <tr><td>4</td><td>Replace decision-report output with a compact property-risk register. Remove actions, owners, scenarios and recommendations.</td><td>Layer 3</td><td>Advice instead of research</td></tr>
+          <tr><td>5</td><td>Define concrete geopolitical pathways: state-budget/tenant continuity, energy, vendors, sanctions, cyber and justice-site security.</td><td>Layer 3</td><td>Starved geopolitics domain</td></tr>
+          <tr><td>6</td><td>Report only what public evidence adds, contradicts or dates; do not repeat a known fact without adding research value.</td><td>Layer 3</td><td>Input echo</td></tr>
+          <tr><td>7</td><td>Deduplicate merged mission prose deterministically if prompt-only question generation does not remove the repetition.</td><td>Layer 2</td><td>Nine-fold mission duplication</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="keep-title">
+      <h2 id="keep-title">What does not need redesign yet</h2>
+      <div class="grid-3">
+        <article class="card good">
+          <span class="tag green">Keep</span>
+          <h3>STORM coordination</h3>
+          <p>The fan-out, coordinator and verifier can support the desired product once their responsibilities are corrected.</p>
+        </article>
+        <article class="card good">
+          <span class="tag green">Keep</span>
+          <h3>Current search tools</h3>
+          <p>Ground/Climate and Rights already demonstrate that address-specific German research is possible with the existing tooling.</p>
+        </article>
+        <article class="card good">
+          <span class="tag green">Keep</span>
+          <h3>Primary-source discipline</h3>
+          <p>German-language queries, official sources, source reading and citation verification are strengths worth preserving.</p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="test-title">
+      <h2 id="test-title">Acceptance test for the next prompt iteration</h2>
+      <ul class="checklist">
+        <li>Every domain performs property-anchored, time-aware research rather than generic domain research.</li>
+        <li>The U2 works and Steinkaut S-Bahn proposal are found and linked cautiously to the property.</li>
+        <li>The geopolitics domain tests concrete building, occupier, energy, vendor, cyber and security pathways.</li>
+        <li>No acquisition advice, action owner, decision gate, approval, rejection or repricing language appears.</li>
+        <li>Every reported risk contains evidence, property linkage, affected building/people outcome, timing and status.</li>
+        <li>A fact-sheet fact is repeated only when it is needed to explain a new contradiction, update or risk pathway.</li>
+        <li>Information without a proven property pathway is labelled context only—not silently promoted to a risk.</li>
+        <li>“No material property-linked risk found” is allowed when the evidence genuinely supports that result.</li>
+      </ul>
+    </section>
+
+    <p class="source-note">
+      Combined analysis source: <a href="260821_Generic_Output_Diagnosis_ENG.md">260821_Generic_Output_Diagnosis_ENG.md</a>,
+      the completed run's query allocation and prompt/output review. This page is the consolidated
+      diagnosis; it does not modify prompts, code or completed run artifacts.
+    </p>
+  </main>
+
+  <footer>
+    SedAI Deep Research · Generic Output Diagnosis · Evidence baseline: L3_20260821_124129_5d66
+  </footer>
+</body>
+</html>

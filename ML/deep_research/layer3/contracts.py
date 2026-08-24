@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
-
-from pydantic import BaseModel, Field
-
-from .settings import DOMAIN_NAMES
+from typing import Any
 
 
-DomainName = Literal[*DOMAIN_NAMES]
+LENS_NAMES = (
+    "practitioner",
+    "academic",
+    "skeptic",
+    "economist",
+    "historian",
+)
+VERIFIER_NAME = "citation-verifier"
 
 
 @dataclass(frozen=True)
@@ -37,25 +40,3 @@ class ResearchContext:
     agent: str
     session_id: str
     retriever: Any
-
-
-class ResearchOutcome(BaseModel):
-    """Small terminal status after report fragments have already been persisted."""
-
-    status: Literal["answered", "cannot_be_answered"]
-    unknowns: list[str] = Field(default_factory=list)
-    reason: str = ""
-
-
-class DomainQuestions(BaseModel):
-    """Bare questions for one known domain."""
-
-    domain: DomainName
-    questions: list[str]
-
-
-class ReviewOutcome(BaseModel):
-    """One written review and its optional grouped clarification questions."""
-
-    review_markdown: str
-    questions: list[DomainQuestions] = Field(default_factory=list)

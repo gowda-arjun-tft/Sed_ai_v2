@@ -9,8 +9,6 @@ from .settings import (
     MODEL_SPEC,
     PROVIDER_MAX_RETRIES,
     REASONING_EFFORT,
-    SUMMARIZATION_KEEP_TOKENS,
-    SUMMARIZATION_TRIGGER_TOKENS,
 )
 
 
@@ -45,32 +43,28 @@ def configure_harness() -> None:
     register_harness_profile(
         MODEL_SPEC,
         HarnessProfile(
-            general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False)
+            general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
+            excluded_middleware=frozenset(
+                {"SummarizationMiddleware", "PatchToolCallsMiddleware"}
+            ),
+            tool_description_overrides={
+                "task": (
+                    "Delegate one complete research or verification assignment to a fixed "
+                    "specialist. Available specialists:\n{available_agents}\n"
+                    "Send independent assignments as multiple task calls in one response. "
+                    "Each specialist sees only its assignment and returns one Markdown report."
+                )
+            },
         ),
     )
 
 
-def build_model() -> Any:
-    """Build the fixed model after applying the provider profile."""
+def build_model(reasoning_effort: str = REASONING_EFFORT) -> Any:
+    """Build the fixed Layer 2 model; the agent owns its response format."""
     from deepagents.profiles.provider import apply_provider_profile
     from langchain.chat_models import init_chat_model
 
     configure_provider()
-    return init_chat_model(MODEL_SPEC, **apply_provider_profile(MODEL_SPEC))
-
-
-def context_middleware(model: Any, backend: Any) -> Any:
-    """Compact only Layer 3's long research conversations."""
-    from deepagents.middleware.summarization import SummarizationMiddleware
-
-    return SummarizationMiddleware(
-        model=model,
-        backend=backend,
-        trigger=("tokens", SUMMARIZATION_TRIGGER_TOKENS),
-        keep=("tokens", SUMMARIZATION_KEEP_TOKENS),
-        trim_tokens_to_summarize=None,
-        truncate_args_settings={
-            "trigger": ("tokens", SUMMARIZATION_TRIGGER_TOKENS),
-            "keep": ("tokens", SUMMARIZATION_KEEP_TOKENS),
-        },
-    )
+    options = apply_provider_profile(MODEL_SPEC)
+    options["reasoning_effort"] = reasoning_effort
+    return init_chat_model(MODEL_SPEC, **options)

@@ -90,10 +90,15 @@ class UsageCallback(BaseCallbackHandler):
 
 
 def summarize_usage(run_dir: Path) -> dict[str, int]:
-    records = [
-        json.loads(line) for line in read_text(run_dir / "usage.jsonl").splitlines()
-        if line.strip()
-    ] if (run_dir / "usage.jsonl").exists() else []
+    records = []
+    if (run_dir / "usage.jsonl").exists():
+        for line in read_text(run_dir / "usage.jsonl").splitlines():
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                records.append(value)
     fields = (
         "input_tokens", "cached_input_tokens", "cache_creation_input_tokens",
         "output_tokens", "reasoning_output_tokens", "total_tokens",

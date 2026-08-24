@@ -62,6 +62,15 @@ def slug(text: str) -> str:
     return f"x-{text_hash(text)[:12]}" if text.strip() else ""
 
 
+def run_group_name(source: Path) -> str:
+    """Readable stable folder name for every run created from one input path."""
+    label = "-".join(
+        part for part in (slug(source.parent.name)[:32], slug(source.stem)[:48]) if part
+    )
+    identity = text_hash(str(source.resolve()).casefold())[:8]
+    return f"{label or 'fact-sheet'}-{identity}"
+
+
 def sha256(path: Path) -> str:
     """Hex digest of a file's bytes, read in 1 MiB chunks.
 

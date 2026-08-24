@@ -6,13 +6,12 @@ from pathlib import Path
 MODEL_SPEC = "openai:gpt-5.6-luna"
 MODEL_NAME = "gpt-5.6-luna"
 REASONING_EFFORT = "max"
-MODEL_INPUT_TOKEN_LIMIT = 200_000
-PROVIDER_MAX_RETRIES = 2
-
-# Layer 3 still uses these to compact its long research conversations. Layer 2
-# has one fresh invocation per chunk and therefore has no summarizer.
-SUMMARIZATION_TRIGGER_TOKENS = 180_000
-SUMMARIZATION_KEEP_TOKENS = 100_000
+REASONING_EFFORTS = frozenset({"low", "medium", "high", "max"})
+# Read from the model profile, not assumed: `init_chat_model(MODEL_SPEC).profile`
+# reports max_input_tokens = 1_050_000. Recorded as run metadata only; nothing
+# enforces it. Layer 3 owns the thresholds that act on it.
+MODEL_INPUT_TOKEN_LIMIT = 1_050_000
+PROVIDER_MAX_RETRIES = 3
 
 LAYER2_SCHEMA_VERSION = 2
 CHUNK_SIZE_TOKENS = 50_000

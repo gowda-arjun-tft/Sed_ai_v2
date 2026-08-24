@@ -10,7 +10,7 @@ from ML.deep_research.layer2.fs import (
     write_json,
 )
 from ML.deep_research.layer2.create_run import create_run
-from ML.deep_research.layer2.report import run_checks as run_l2_checks
+from ML.deep_research.layer2.mission_markdown import write_mission_markdown
 from ML.deep_research.layer2.settings import AGENT_NAMES, PLANNER_PATH
 
 
@@ -83,33 +83,34 @@ def create_complete_run(root: Path) -> Path:
             "error": "",
         }
     ]
+    record["status"] = "complete"
     write_json(run_dir / "run.json", record)
 
     for index, name in enumerate(AGENT_NAMES):
         holds_facts = index == 0
-        write_json(
-            run_dir / "missions" / f"{slug(name)}.json",
-            {
-                "agent": name,
-                "mission": (
-                    "Establish the property position on this subject."
-                    if holds_facts
-                    else SILENT
-                ),
-                "context": list(CONTEXT) if holds_facts else [],
-            },
+        mission = {
+            "agent": name,
+            "mission": (
+                "Establish the property position on this subject."
+                if holds_facts
+                else SILENT
+            ),
+            "context": list(CONTEXT) if holds_facts else [],
+        }
+        filename = slug(name)
+        write_json(run_dir / "missions" / f"{filename}.json", mission)
+        write_mission_markdown(
+            run_dir / "mission_md" / f"{filename}.md",
+            mission,
         )
-    run_l2_checks(run_dir)
     return run_dir
 
 
 def create_complete_l3_run(root: Path) -> Path:
-    """A complete Layer 3 run assembled without model or web calls."""
-    from ML.deep_research.layer3.contracts import Document
+    """A complete permissive Layer 3 run assembled without model or web calls."""
     from ML.deep_research.layer3.pipeline.create_run import create_run as create_l3_run
     from ML.deep_research.layer3.pipeline.run_checks import run_checks
     from ML.deep_research.layer3.settings import DOMAIN_NAMES
-    from ML.deep_research.layer3.sources import SourceStore
 
     l2_run = create_complete_run(root)
     l3_run = create_l3_run(
@@ -117,72 +118,25 @@ def create_complete_l3_run(root: Path) -> Path:
         root / "runs",
         public_input_confirmed=True,
     )
-    store = SourceStore(l3_run)
-    source = store.store(
-        Document(
-            url="https://example.com/public-record",
-            content_type="text/html; charset=utf-8",
-            body=b"<p>Verified public fact.</p>",
-            fetched_at=now_iso(),
-            publisher="Example Registry",
-        )
-    )
     run = load_json(l3_run / "run.json")
     execution = run["execution"]
-    markers = []
     for domain in DOMAIN_NAMES:
         record = execution["domains"][domain]
-        session_id = record["thread_id"]
-        store.record_query(
-            session_id=session_id,
-            agent=domain,
-            lens=domain,
-            query=f"public property record {domain}",
-            new_sources=1,
-        )
-        marker = store.record_citation(
-            source_id=source["source_sha256"],
-            quote="Verified public fact.",
-            tier=1,
-            agent=domain,
-            lens=domain,
-            session_id=session_id,
-        )
-        markers.append(marker)
-        report = f"# {domain}\n\nVerified public fact. {marker}\n"
-        atomic_write_text(l3_run / "domains" / f"{slug(domain)}.partial.md", report)
-        atomic_write_text(l3_run / "domains" / f"{slug(domain)}.md", report)
+        report_path = l3_run / "domains" / slug(domain) / "final.md"
+        atomic_write_text(report_path, f"# {domain}\n\nModel response.\n")
         record.update(
             status="complete",
-            outcome="answered",
-            artifact=f"domains/{slug(domain)}.md",
+            output_path=report_path.relative_to(l3_run).as_posix(),
             model_turns=1,
             elapsed_seconds=1.0,
             updated_at=now_iso(),
         )
-    atomic_write_text(
-        l3_run / "review" / "final_review.md",
-        f"# Review\n\nEvidence rechecked. {markers[0]}\n",
-    )
-    atomic_write_text(
-        l3_run / "research" / "final.md",
-        f"# Answer\n\nVerified public fact. {markers[0]}\n",
-    )
-    execution["review"].update(
-        status="complete",
-        outcome="complete",
-        questions={},
-        artifact="review/final_review.md",
-        model_turns=1,
-        elapsed_seconds=1.0,
-        updated_at=now_iso(),
-    )
+    final_path = l3_run / "research" / "final.md"
+    atomic_write_text(final_path, "# Answer\n\nModel synthesis.\n")
     execution["final"].update(
         status="complete",
-        outcome="answered",
-        reason="",
         error="",
-        artifact="research/final.md",
+        output_path="research/final.md",
         model_turns=1,
         elapsed_seconds=1.0,
         updated_at=now_iso(),

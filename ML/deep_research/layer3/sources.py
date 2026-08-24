@@ -27,8 +27,12 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
         return []
     records = []
     for line in read_text(path).splitlines():
-        if line.strip():
-            records.append(json.loads(line))
+        try:
+            value = json.loads(line)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(value, dict):
+            records.append(value)
     return records
 
 
@@ -76,9 +80,9 @@ class SourceStore:
                 else ""
             ),
             "text_sha256": text_hash(text) if text is not None else "",
-            "citation_supported": text is not None,
-            # Recorded so an unexplained citation failure can be traced back to a
-            # decoding guess rather than looking like the model invented a quote.
+            "canonical_text_available": text is not None,
+            # Preserve decoding provenance so a verifier can distinguish source
+            # text from a best-effort character-set guess.
             "encoding": detect_encoding(document.body, document.content_type),
             "encoding_declared": encoding_was_declared(
                 document.body, document.content_type
@@ -113,71 +117,6 @@ class SourceStore:
             "query_id",
         )
 
-    def record_citation(
-        self,
-        *,
-        source_id: str,
-        quote: str,
-        tier: int,
-        agent: str,
-        lens: str,
-        session_id: str,
-    ) -> str:
-        """Verify a retained exact quote and record it once."""
-        citation = {
-            "source_sha256": source_id,
-            "quote": quote,
-            "tier": tier,
-            "agent": agent,
-            "lens": lens,
-            "session_id": session_id,
-        }
-        valid, detail = self.validate_citation(citation)
-        if not valid:
-            raise ValueError(detail)
-        normalized_quote = _normalize_whitespace(quote)
-        citation_id = text_hash(
-            f"{session_id}\n{agent}\n{lens}\n{source_id}\n{normalized_quote}\n{tier}"
-        )
-        citation["citation_id"] = citation_id
-        _append_unique(
-            self.root / "citations.jsonl",
-            citation,
-            "citation_id",
-        )
-        return f"[citation:{citation_id}]"
-
-    def validate_citation(self, citation: dict[str, Any]) -> tuple[bool, str]:
-        """Revalidate a citation record against retained canonical source text."""
-        source_id = str(citation.get("source_sha256", ""))
-        record = self.source_record(source_id)
-        if record is None:
-            return False, f"unknown source: {source_id}"
-        quote = citation.get("quote")
-        if not isinstance(quote, str) or not _normalize_whitespace(quote):
-            return False, "citation quote cannot be empty"
-        tier = citation.get("tier")
-        if type(tier) is not int or tier not in range(1, 5):
-            return False, "citation tier must be an integer from 1 through 4"
-        if not all(
-            str(citation.get(field, "")).strip()
-            for field in ("session_id", "agent", "lens")
-        ):
-            return False, "citation identity fields cannot be empty"
-        text = self.source_text(source_id)
-        if not record.get("citation_supported") or text is None:
-            return False, "source has no canonical text and cannot be cited"
-        if _normalize_whitespace(quote) not in _normalize_whitespace(text):
-            return False, "citation quote does not occur in the canonical source text"
-        expected_id = text_hash(
-            f"{citation.get('session_id', '')}\n{citation.get('agent', '')}\n"
-            f"{citation.get('lens', '')}\n{source_id}\n"
-            f"{_normalize_whitespace(quote)}\n{tier}"
-        )
-        if citation.get("citation_id") not in (None, expected_id):
-            return False, "citation ID does not match its evidence record"
-        return True, ""
-
     def source_record(self, source_id: str) -> dict[str, Any] | None:
         return next(
             (
@@ -205,9 +144,6 @@ class SourceStore:
             return None
         path = self.run_dir / str(record["text_path"])
         return read_text(path) if path.is_file() else None
-
-    def citations(self) -> list[dict[str, Any]]:
-        return load_jsonl(self.root / "citations.jsonl")
 
     def cache_path(self, query: str) -> Path:
         return self.root / "query_cache" / f"{text_hash(' '.join(query.split()))}.json"

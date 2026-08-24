@@ -1,4 +1,8 @@
-# Layer 2 & Layer 3 output — verification
+# Archived schema-5 Layer 2 & Layer 3 output verification
+
+> Historical run audit only. This document records the retired direct-research/reviewer workflow
+> and is not the current schema-6 STORM architecture contract. See
+> `260818_Deep_Research_Module_Architecture_ENG.html` at the repository root for the active design.
 
 Verification only. No code changed. Every number is measured from
 `runs/L2_20260820_968d` and `runs/L3_20260821_29a2`.

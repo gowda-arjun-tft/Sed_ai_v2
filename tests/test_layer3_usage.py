@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 
-from ML.deep_research.layer3.contracts import ResearchContext
+from langchain_core.messages import ToolMessage
+
+from ML.deep_research.layer3.contracts import LENS_NAMES, VERIFIER_NAME
 from ML.deep_research.layer3.pipeline.create_run import create_run
+from ML.deep_research.layer3.pipeline.progress import model_turns, stage_event
 from ML.deep_research.layer3.providers.openai_search import OpenAISearchRetriever
-from ML.deep_research.layer3.research_tools import _append_fragment
-from ML.deep_research.layer3.settings import DOMAIN_NAMES, REASONING_EFFORT
+from ML.deep_research.layer3.settings import DOMAIN_NAMES
 from ML.deep_research.layer3.sources import load_jsonl
 from ML.deep_research.layer3.usage import (
     UsageCallback,
@@ -97,25 +101,135 @@ class Layer3UsageTests(unittest.TestCase):
             self.assertEqual(summary["events"], 1)
             self.assertEqual(summary["cached_input_tokens"], 43)
             self.assertEqual(summary["reasoning_output_tokens"], 8)
+            model_record = next(item for item in records if item["phase"] == "model")
+            self.assertEqual(model_record["operation"], "research")
+            self.assertFalse(model_record["over_soft_target"])
 
-
-    def test_progressive_append_records_one_replay_safe_event(self):
+    def test_summarization_and_compaction_are_observable_without_gating(self):
         with tempfile.TemporaryDirectory() as temporary:
-            run_dir = Path(temporary)
-            context = ResearchContext(
-                run_dir, DOMAIN_NAMES[0], "domain-thread", object()
+            root = Path(temporary)
+            run_dir = create_run(
+                create_complete_run(root),
+                root / "l3-runs",
+                public_input_confirmed=True,
             )
-            _append_fragment(context, DOMAIN_NAMES[0], "finding-1", "Finding one.\n")
-            _append_fragment(context, DOMAIN_NAMES[0], "finding-1", "Finding one.\n")
+            callback = UsageCallback(run_dir, "thread-summary")
+            run_id = uuid4()
+            callback.on_chat_model_start(
+                {},
+                [[
+                    ToolMessage(
+                        content="source pointer",
+                        tool_call_id="source-1",
+                        response_metadata={
+                            "context_editing": {
+                                "cleared": True,
+                                "strategy": "clear_tool_uses",
+                            }
+                        },
+                    ),
+                    ToolMessage(
+                        content="ordinary tool result",
+                        tool_call_id="search-1",
+                    ),
+                ]],
+                run_id=run_id,
+                metadata={
+                    "lc_agent_name": "historian",
+                    "lc_source": "summarization",
+                },
+            )
+            response = SimpleNamespace(
+                generations=[[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            name=None,
+                            usage_metadata={
+                                "input_tokens": 210_000,
+                                "output_tokens": 100,
+                                "total_tokens": 210_100,
+                            },
+                        )
+                    )
+                ]]
+            )
+            callback.on_llm_end(response, run_id=run_id)
+            record = load_jsonl(run_dir / "usage.jsonl")[0]
+            summary = summarize_usage(run_dir)
 
+        self.assertEqual(record["operation"], "summarization")
+        self.assertEqual(record["compacted_source_results"], 1)
+        self.assertTrue(record["over_soft_target"])
+        self.assertEqual(record["soft_target_tokens"], 200_000)
+        self.assertEqual(summary["summarization_calls"], 1)
+        self.assertEqual(summary["over_soft_target_calls"], 1)
+        self.assertEqual(summary["compacted_source_results"], 1)
+
+    def test_attempt_sessions_remain_distinct_and_roll_up_to_one_thread(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run_dir = create_run(
+                create_complete_run(root),
+                root / "l3-runs",
+                public_input_confirmed=True,
+            )
+            response = SimpleNamespace(
+                generations=[[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            name=None,
+                            usage_metadata={"input_tokens": 10, "total_tokens": 10},
+                        )
+                    )
+                ]]
+            )
+            for attempt in (1, 2):
+                callback = UsageCallback(run_dir, f"thread-1:attempt-{attempt}")
+                model_run_id = uuid4()
+                callback.on_chat_model_start(
+                    {}, [], run_id=model_run_id, metadata={"agent": DOMAIN_NAMES[0]}
+                )
+                callback.on_llm_end(response, run_id=model_run_id)
+                stage_event(
+                    run_dir,
+                    {
+                        "thread_id": "thread-1",
+                        "attempt": attempt,
+                        "actor": DOMAIN_NAMES[0],
+                    },
+                    "stage_start",
+                )
             records = load_jsonl(run_dir / "usage.jsonl")
-            self.assertEqual(len(records), 1)
-            self.assertEqual(records[0]["phase"], "report_progress")
-            self.assertEqual(summarize_usage(run_dir)["api_calls"], 0)
+            turns = model_turns(run_dir, "thread-1")
+            summary = summarize_usage(run_dir)
+
+        self.assertEqual(turns, 2)
+        self.assertEqual(
+            {item["session_id"] for item in records},
+            {"thread-1:attempt-1", "thread-1:attempt-2"},
+        )
+        self.assertEqual(summary["total_tokens"], 20)
+
+    def test_usage_accepts_named_storm_actors(self):
+        self.assertEqual(
+            {*LENS_NAMES, VERIFIER_NAME},
+            {"practitioner", "academic", "skeptic", "economist", "historian", "citation-verifier"},
+        )
 
 
 class Layer3SearchRequestTests(unittest.IsolatedAsyncioTestCase):
-    async def test_search_uses_low_context_and_layer3_reasoning(self):
+    def test_search_client_retries_transient_failures_three_times(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}):
+            retriever = OpenAISearchRetriever(
+                Path("unused"),
+                reasoning_effort="low",
+                context_size="low",
+                verbosity="low",
+            )
+
+        self.assertEqual(retriever.client.max_retries, 3)
+
+    async def test_search_uses_recorded_controls(self):
         seen = {}
 
         class Responses:
@@ -128,13 +242,17 @@ class Layer3SearchRequestTests(unittest.IsolatedAsyncioTestCase):
 
         retriever = object.__new__(OpenAISearchRetriever)
         retriever.run_dir = Path("unused")
+        retriever.reasoning_effort = "high"
+        retriever.context_size = "medium"
+        retriever.verbosity = "low"
         retriever.client = SimpleNamespace(responses=Responses())
         await retriever.search("official property record", actor=DOMAIN_NAMES[0])
 
         self.assertEqual(
-            seen["tools"], [{"type": "web_search", "search_context_size": "low"}]
+            seen["tools"], [{"type": "web_search", "search_context_size": "medium"}]
         )
-        self.assertEqual(seen["reasoning"], {"effort": REASONING_EFFORT})
+        self.assertEqual(seen["reasoning"], {"effort": "high"})
+        self.assertEqual(seen["text"], {"verbosity": "low"})
 
 
 if __name__ == "__main__":
