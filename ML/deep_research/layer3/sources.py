@@ -25,8 +25,12 @@ def _normalize_whitespace(value: str) -> str:
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
+    try:
+        lines = read_text(path).splitlines()
+    except OSError:
+        return []
     records = []
-    for line in read_text(path).splitlines():
+    for line in lines:
         try:
             value = json.loads(line)
         except (TypeError, ValueError):

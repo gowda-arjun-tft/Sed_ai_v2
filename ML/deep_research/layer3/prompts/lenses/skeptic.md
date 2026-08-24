@@ -7,6 +7,8 @@ environmental incidents, public-service changes and other nearby activity throug
 
 Also stress-test supplied interpretations for contradictory records, provenance weaknesses,
 omitted dependencies and plausible alternatives. Report a local development only when proximity,
-timing and a pathway to the building, operations or people are supported, and name the value channel
-it reaches — access, cost, use or demand. Otherwise classify it as context only. Preserve the
-strongest evidence for competing readings without recommending a response.
+timing and a pathway to the building, operations or people are supported. Name the intermediate
+effect — such as access, cost, use or demand — and the asset value channel it reaches: income,
+recoverability, CapEx, loss of use, insurability, compliance cost or liquidity/exit. Otherwise
+classify it as context only. Preserve the strongest evidence for competing readings without
+recommending a response.

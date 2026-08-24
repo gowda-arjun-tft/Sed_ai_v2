@@ -9,85 +9,26 @@ from uuid import UUID
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import ToolMessage
 
-from ML.deep_research.layer2.fs import load_json, now_iso, read_text, text_hash
+from ML.deep_research.layer2.fs import load_json, now_iso, text_hash
+from ML.deep_research.layer2.usage import _mapping, _tokens
+
+from .sources import load_jsonl
 
 
 _LOCK = threading.RLock()
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if hasattr(value, "model_dump"):
-        return value.model_dump()
-    try:
-        return dict(value or {})
-    except (TypeError, ValueError):
-        return {}
-
-
-def _detail(values: dict[str, Any], groups: tuple[str, ...], keys: tuple[str, ...]) -> int:
-    for group in groups:
-        details = _mapping(values.get(group))
-        for key in keys:
-            if key in details:
-                return int(details.get(key) or 0)
-    return 0
-
-
-def _tokens(values: dict[str, Any]) -> dict[str, int]:
-    return {
-        "input_tokens": int(values.get("input_tokens", 0) or 0),
-        "cached_input_tokens": _detail(
-            values,
-            ("input_token_details", "input_tokens_details"),
-            ("cache_read", "cached_tokens"),
-        ),
-        "cache_creation_input_tokens": _detail(
-            values,
-            ("input_token_details", "input_tokens_details"),
-            ("cache_creation",),
-        ),
-        "output_tokens": int(values.get("output_tokens", 0) or 0),
-        "reasoning_output_tokens": _detail(
-            values,
-            ("output_token_details", "output_tokens_details"),
-            ("reasoning", "reasoning_tokens"),
-        ),
-        "total_tokens": int(values.get("total_tokens", 0) or 0),
-    }
 
 
 def _append(run_dir: Path, record: dict[str, Any]) -> None:
     path = run_dir / "usage.jsonl"
     try:
         with _LOCK:
-            existing = {item.get("usage_id") for item in _jsonl(path)}
+            existing = {item.get("usage_id") for item in load_jsonl(path)}
             if record.get("usage_id") in existing:
                 return
             with path.open("a", encoding="utf-8", newline="\n") as handle:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
     except (OSError, TypeError, ValueError):
         return
-
-
-def _jsonl(path: Path) -> list[dict[str, Any]]:
-    records = []
-    if not path.exists():
-        return records
-    try:
-        lines = read_text(path).splitlines()
-    except OSError:
-        return records
-    for line in lines:
-        try:
-            value = json.loads(line)
-        except (TypeError, ValueError):
-            continue
-        if isinstance(value, dict):
-            records.append(value)
-    return records
-
 
 class UsageCallback(BaseCallbackHandler):
     """Record model calls for one direct Layer 3 invocation."""
@@ -218,7 +159,7 @@ def record_event(
 
 
 def summarize_usage(run_dir: Path) -> dict[str, int]:
-    records = _jsonl(run_dir / "usage.jsonl")
+    records = load_jsonl(run_dir / "usage.jsonl")
     token_fields = (
         "input_tokens",
         "cached_input_tokens",

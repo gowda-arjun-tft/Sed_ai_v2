@@ -93,6 +93,9 @@ class Layer3HarnessSurfaceTests(unittest.TestCase):
         for spec in specs:
             self.assertEqual({tool.name for tool in spec["tools"]}, {"search_web", "read_source"})
             self.assertNotIn("task", {tool.name for tool in spec["tools"]})
+            descriptions = {tool.name: tool.description for tool in spec["tools"]}
+            self.assertIn("candidate sources", descriptions["search_web"])
+            self.assertIn("canonical text", descriptions["read_source"])
 
     def test_fixed_subagents_are_domain_neutral(self):
         with tempfile.TemporaryDirectory() as temporary:

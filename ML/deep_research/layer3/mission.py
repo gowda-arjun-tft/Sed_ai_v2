@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from ML.deep_research.layer2.fs import read_text, slug
@@ -21,13 +20,6 @@ def stage_thread_id(
     return str(uuid5(NAMESPACE_URL, f"cdi:{run_id}:{stage}:{actor}:{batch}:{attempt}"))
 
 
-def _boundaries(definition: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "mandate": definition["mandate"],
-        "handoffs": definition["handoffs"],
-    }
-
-
 def load_research_input(run_dir: Path) -> list[dict[str, Any]]:
     """Load the eight isolated domain assignments."""
     _, definitions = load_planner(run_dir / "inputs" / "planner_prompt.md")
@@ -40,7 +32,10 @@ def load_research_input(run_dir: Path) -> list[dict[str, Any]]:
         {
             "name": name,
             "mission": mission,
-            "boundaries": _boundaries(by_name[name]),
+            "boundaries": {
+                "mandate": by_name[name]["mandate"],
+                "handoffs": by_name[name]["handoffs"],
+            },
         }
         for name, mission in zip(AGENT_NAMES, missions, strict=True)
     ]

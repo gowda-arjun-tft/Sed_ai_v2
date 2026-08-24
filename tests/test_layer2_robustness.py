@@ -183,7 +183,7 @@ Use every supplied fact.
     def test_one_failed_chunk_does_not_block_available_missions(self):
         class Graph:
             async def ainvoke(self, value, **_kwargs):
-                if "chunk 1" in value["messages"][0]["content"]:
+                if 'index="1"' in value["messages"][0]["content"]:
                     raise RuntimeError("transport failed")
                 return _result("available")
 
@@ -214,7 +214,7 @@ Use every supplied fact.
         class FirstGraph:
             async def ainvoke(self, value, **kwargs):
                 callbacks.append(kwargs["config"]["callbacks"][0].thread_id)
-                if "chunk 1" in value["messages"][0]["content"]:
+                if 'index="1"' in value["messages"][0]["content"]:
                     raise RuntimeError("temporary")
                 return _result("saved")
 

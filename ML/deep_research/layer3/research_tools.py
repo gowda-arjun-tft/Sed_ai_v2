@@ -106,7 +106,9 @@ def make_research_tools(researcher: str) -> list[Any]:
         query: str,
         runtime: ToolRuntime[ResearchContext, Any],
     ) -> str:
-        """Search the public web and return source URLs.
+        """Search the public web for candidate sources and discovery snippets.
+
+        Snippets identify pages to open; they are not evidence for a claim.
 
         Args:
             query: The research query to send to the search provider.
@@ -129,7 +131,10 @@ def make_research_tools(researcher: str) -> list[Any]:
         url: str,
         runtime: ToolRuntime[ResearchContext, Any],
     ) -> str:
-        """Fetch, retain, and read one public source.
+        """Open one public URL and return retained canonical text with its source ID.
+
+        Use this result, not a search snippet, as evidence for a claim. An unreadable
+        source returns an explicit limitation instead of inferred content.
 
         Args:
             url: The HTTP or HTTPS source address.

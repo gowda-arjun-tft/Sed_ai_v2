@@ -1,4 +1,6 @@
-# CDI Layer 2 planner
+# Layer 2 routing contract
+
+## Domain behavior
 
 All eight agents run for every property. A silent fact sheet is a valid starting point, but silence
 does not justify a generic chunk mission. The standing domain mandate supplies baseline scope in
@@ -9,6 +11,8 @@ allocates facts and writes questions; it performs no research.
 A fact may belong to several agents. Copy evidence and interpretations exactly.
 Preserve both sides of every disagreement. Each mandate assigns accountable outcomes; its handoffs
 name evidence that should also reach neighboring missions.
+
+## Domain definitions
 
 <!-- AGENTS_JSON_START -->
 [
@@ -79,7 +83,7 @@ name evidence that should also reach neighboring missions.
 ]
 <!-- AGENTS_JSON_END -->
 
-## Mission contract
+## Output — mission contract
 
 Write exactly one JSON mission per agent, in roster order:
 
@@ -97,6 +101,7 @@ Every fact an agent needs becomes one context entry. Preserve each fact and inte
 Route explicit property identifiers to each domain that needs them. A non-empty mission names only
 anchors stated in the chunk and distinct questions created by its facts, anomalies, disagreements
 or missing linkages. Each question identifies the supplied trigger, the current or external
-evidence to test, and the possible property or people effect. Do not restate the standing mandate,
-summarize the chunk, prescribe a response or invent an anchor. An agent whose subject is silent in
-this chunk receives an empty mission and empty context; Layer 3 still runs its standing mandate.
+evidence to test, the possible property or people effect, and the value-transmission channel it may
+reach. Do not restate the standing mandate, summarize the chunk, prescribe a response or invent an
+anchor. An agent whose subject is silent in this chunk receives an empty mission and empty context;
+Layer 3 still runs its standing mandate.

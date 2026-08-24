@@ -68,7 +68,9 @@ class StructuredHarnessTests(unittest.TestCase):
 
     def test_prompt_and_request_keep_roster_separate_from_chunk_data(self):
         prompt = system_prompt(PLANNER_PATH)
-        self.assertIn("<domain_definitions>", prompt)
+        self.assertIn("<routing_contract>", prompt)
+        self.assertIn("# Success criteria", prompt)
+        self.assertIn("# Inputs and authority", prompt)
         self.assertIn(AGENT_NAMES[-1], prompt)
         self.assertIn("property-specific risk questions", prompt)
         self.assertIn("Do not restate a domain mandate", prompt)
@@ -76,8 +78,8 @@ class StructuredHarnessTests(unittest.TestCase):
         self.assertIn("or an empty string", prompt)
         self.assertNotIn("still receives a non-empty mission", prompt)
         request = chunk_request("## Input\ntext", 2, 3)
-        self.assertIn("chunk 2 of 3", request)
-        self.assertIn("<fact_sheet_chunk>", request)
+        self.assertIn('<fact_sheet_chunk index="2" total="3">', request)
+        self.assertNotIn("Return one JSON object", request)
 
     def test_response_accepts_any_json_object_without_content_validation(self):
         value = {"unexpected": {"shape": True}}

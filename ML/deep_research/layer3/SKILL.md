@@ -5,12 +5,21 @@ description: Mandatory STORM procedure for property-specific risk research in on
 
 # CDI domain-scoped STORM research
 
-## Objective
+## Goal
 
 Produce one compact Markdown report of current and emerging risks that reach the value of the
 assigned property through its assigned domain. Find what retrieved evidence adds, contradicts or
 dates about this address; expose disagreement; verify citations and property linkages; and preserve
 material uncertainty. Supplied defects are anchors to research outward from, not findings.
+
+## Success criteria
+
+- Every reported risk contains the complete property-linkage and value-transmission chain.
+- New evidence, supplied property facts, inferences, contradictions and unknowns remain distinct.
+- Retrieved evidence extends, dates, contradicts or materially contextualizes the supplied anchors.
+- A researched subject with no supported property pathway is reported as context, not forced into a
+  risk finding.
+- The final response contains the required Markdown sections and no recommendations or decisions.
 
 ## Procedure
 
@@ -35,8 +44,9 @@ material uncertainty. Supplied defects are anchors to research outward from, not
    assurance.
 5. Review the draft for unsupported claims, lost disagreement, repeated input, double counting,
    missing property linkages and generic national or macro commentary, then revise it. Delete every
-   line that carries no name, date, quantity, identifier, classification or source link, and every
-   finding that would read the same about another comparable building.
+   substantive sentence or bullet that carries no name, date, quantity, identifier, classification
+   or source link, and every finding that would read the same about another comparable building.
+   Required headings, field labels and table headers are exempt.
 6. Group the draft's cited claims and sources into coherent verification clusters. Send one `task`
    call per cluster to `citation-verifier`, emitting the calls in one response. Include the exact
    claims, property linkages, value transmissions, quotations, source titles and URLs in each task.

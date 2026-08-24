@@ -26,7 +26,7 @@ def system_prompt(planner_path: Path) -> str:
     """Combine the lean routing contract with the planner snapshot verbatim."""
     instructions = read_text(PROMPTS_DIR / "chunk_router.md").rstrip()
     planner = read_text(planner_path).rstrip()
-    return f"{instructions}\n\n<domain_definitions>\n{planner}\n</domain_definitions>"
+    return f"{instructions}\n\n<routing_contract>\n{planner}\n</routing_contract>"
 
 
 def create_chunk_agent(run_dir: Path) -> Any:
@@ -61,8 +61,7 @@ def create_chunk_agent(run_dir: Path) -> Any:
 def chunk_request(chunk: str, index: int, total: int) -> str:
     """Build the single user message for one isolated chunk invocation."""
     return (
-        f"Route chunk {index} of {total}. Return one JSON object.\n\n"
-        "<fact_sheet_chunk>\n"
+        f'<fact_sheet_chunk index="{index}" total="{total}">\n'
         f"{chunk}\n"
         "</fact_sheet_chunk>"
     )
