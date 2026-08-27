@@ -1,39 +1,24 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any
 
 from ML.deep_research.layer2.fs import now_iso, write_json
 
 from ..mission import stage_thread_id
+from ..sources import load_jsonl
 from ..usage import record_event, summarize_usage
 
 
 def model_turns(run_dir: Path, thread_id: str) -> int:
-    path = run_dir / "usage.jsonl"
-    if not path.is_file():
-        return 0
-    records = []
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return 0
-    for line in lines:
-        try:
-            value = json.loads(line)
-        except (TypeError, ValueError):
-            continue
-        if isinstance(value, dict):
-            records.append(value)
     return sum(
         item.get("phase") == "model"
         and (
             item.get("session_id") == thread_id
             or str(item.get("session_id", "")).startswith(f"{thread_id}:attempt-")
         )
-        for item in records
+        for item in load_jsonl(run_dir / "usage.jsonl")
     )
 
 

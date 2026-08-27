@@ -6,6 +6,7 @@ import asyncio
 from typing import Any
 
 from langchain.tools import ToolRuntime, tool
+from langgraph.types import interrupt
 
 from ML.deep_research.layer2.fs import (
     load_json,
@@ -13,6 +14,14 @@ from ML.deep_research.layer2.fs import (
 )
 
 from .contracts import ResearchContext, SearchHit
+from .document_extraction import (
+    MAX_DOCUMENT_ATTEMPTS,
+    PendingDocument,
+    ensure_document_job,
+    extraction_policy,
+    process_pass_through,
+    render_document,
+)
 from .retrieval import normalize_url
 from .sources import SourceStore
 
@@ -72,7 +81,12 @@ def _source_result(store: SourceStore, record: dict[str, Any]) -> str:
     )
 
 
-async def _read(context: ResearchContext, url: str) -> str:
+async def _read(
+    context: ResearchContext,
+    url: str,
+    pages: str | None = None,
+    find: str | None = None,
+) -> str | PendingDocument:
     store = SourceStore(context.run_dir)
     lock = _lock(
         _SOURCE_LOCKS,
@@ -83,7 +97,36 @@ async def _read(context: ResearchContext, url: str) -> str:
         if record is None:
             document = await context.retriever.fetch(url)
             record = store.store(document)
-        return _source_result(store, record)
+        policy = extraction_policy(context.run_dir)
+        if policy is None:
+            return _source_result(store, record)
+        if int(record.get("bytes", 0)) > policy.max_document_bytes:
+            return (
+                f"Stored {record['source_sha256']}, but it exceeds the "
+                f"{policy.max_document_bytes // (1024 * 1024)} MiB document limit."
+            )
+        manifest = ensure_document_job(context.run_dir, record, policy)
+        if manifest is None:
+            return _source_result(store, record)
+        source_id = str(record["source_sha256"])
+        if manifest.get("kind") == "pass_through" and manifest.get("status") != "complete":
+            manifest = process_pass_through(context.run_dir, source_id)
+        if (
+            manifest.get("status") == "failed"
+            and manifest.get("retryable", True)
+            and int(manifest.get("attempt", 0)) < MAX_DOCUMENT_ATTEMPTS
+        ):
+            return PendingDocument(source_id, str(record["url"]))
+        if manifest.get("status") in {"complete", "failed"}:
+            return render_document(
+                context.run_dir,
+                source_id,
+                policy,
+                pages=pages,
+                find=find,
+                source_url=str(record["url"]),
+            )
+        return PendingDocument(source_id, str(record["url"]))
 
 
 def _format_hit(hit: SearchHit) -> str:
@@ -130,21 +173,37 @@ def make_research_tools(researcher: str) -> list[Any]:
     async def read_source(
         url: str,
         runtime: ToolRuntime[ResearchContext, Any],
+        pages: str | None = None,
+        find: str | None = None,
     ) -> str:
         """Open one public URL and return retained canonical text with its source ID.
 
         Use this result, not a search snippet, as evidence for a claim. An unreadable
-        source returns an explicit limitation instead of inferred content.
+        source returns an explicit limitation instead of inferred content. Large
+        documents return a map; request pages or find text without downloading again.
 
         Args:
             url: The HTTP or HTTPS source address.
+            pages: Optional page number or range, for example ``3-7``.
+            find: Optional exact text to locate in retained document pages.
         """
         try:
-            return await _read(runtime.context, url)
+            result = await _read(runtime.context, url, pages, find)
         except Exception as error:
             return f"Fetching {url} failed: {type(error).__name__}: {error}"
+        # LangGraph interrupts must escape the broad operational error boundary.
+        if isinstance(result, PendingDocument):
+            interrupt(result.payload())
+            try:
+                resumed = await _read(runtime.context, url, pages, find)
+            except Exception as error:
+                return f"Reading retained source {url} failed: {type(error).__name__}: {error}"
+            if isinstance(resumed, PendingDocument):
+                return (
+                    f"Stored {resumed.source_id}, but document extraction did not reach "
+                    "a terminal state after resume."
+                )
+            return resumed
+        return result
 
     return [search_web, read_source]
-
-
-__all__ = ["make_research_tools"]

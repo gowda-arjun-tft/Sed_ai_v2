@@ -7,11 +7,14 @@ from pathlib import Path
 from time import monotonic
 from typing import Any, AsyncIterator
 
+from langgraph.types import Command, Interrupt
+
 from ML.deep_research.layer2.fs import (
     atomic_write_text, load_json, now_iso, read_text, slug,
 )
 
 from .contracts import ResearchContext
+from .document_supervisor import preflight_document_worker, process_document_interrupts
 from .llm import (
     create_domain_coordinator_harness,
     create_synthesis_harness,
@@ -32,6 +35,57 @@ from .prompts import domain_message, synthesis_message
 from .providers import from_run
 from .settings import DOMAIN_NAMES, SCHEMA_VERSION
 from .usage import UsageCallback
+
+
+def _interrupts(value: Any) -> tuple[Interrupt, ...]:
+    if not isinstance(value, dict):
+        return ()
+    return tuple(
+        item
+        for item in value.get("__interrupt__", ())
+        if isinstance(item, Interrupt)
+    )
+
+
+def _saved_interrupts(record: dict[str, Any]) -> tuple[Interrupt, ...]:
+    return tuple(
+        Interrupt(value=item["value"], id=item["id"])
+        for item in record.get("document_interrupts", ())
+        if isinstance(item, dict) and "id" in item and "value" in item
+    )
+
+
+async def _resume_document_interrupts(
+    graph: Any,
+    run_dir: Path,
+    run: dict[str, Any],
+    record: dict[str, Any],
+    result: dict[str, Any],
+    config: dict[str, Any],
+    context: ResearchContext,
+    lock: asyncio.Lock,
+) -> dict[str, Any]:
+    while pending := _interrupts(result):
+        record.update(
+            status="waiting_for_documents",
+            document_interrupts=[
+                {"id": item.id, "value": item.value} for item in pending
+            ],
+            updated_at=now_iso(),
+        )
+        run["status"] = "waiting_for_documents"
+        stage_event(run_dir, record, "documents_waiting", str(len(pending)))
+        await persist_run(run_dir, run, lock)
+
+        resumes = await process_document_interrupts(run_dir, list(pending))
+        record.update(status="running", document_interrupts=[], updated_at=now_iso())
+        run["status"] = "running"
+        stage_event(run_dir, record, "documents_ready", str(len(resumes)))
+        await persist_run(run_dir, run, lock)
+        result = await graph.ainvoke(
+            Command(resume=resumes), config=config, context=context
+        )
+    return result
 
 
 @asynccontextmanager
@@ -71,12 +125,18 @@ async def _run_stage(
     }
     context = ResearchContext(run_dir, record["actor"], session_id, retriever)
     started = monotonic()
-    record.update(status="running", error="", updated_at=now_iso())
+    was_waiting = record["status"] == "waiting_for_documents"
+    if not was_waiting:
+        record.update(status="running", error="", updated_at=now_iso())
     stage_event(run_dir, record, "stage_start")
     await persist_run(run_dir, run, lock)
     try:
         snapshot = await graph.aget_state(config)
-        if snapshot.values:
+        checkpoint_interrupts = tuple(getattr(snapshot, "interrupts", ()))
+        saved_interrupts = _saved_interrupts(record) if was_waiting else ()
+        if checkpoint_interrupts or saved_interrupts:
+            result = {"__interrupt__": checkpoint_interrupts or saved_interrupts}
+        elif snapshot.values:
             result = (
                 await graph.ainvoke(None, config=config, context=context)
                 if snapshot.next
@@ -84,10 +144,14 @@ async def _run_stage(
             )
         else:
             result = await graph.ainvoke(initial, config=config, context=context)
-        record.update(status="staged", error="")
+        result = await _resume_document_interrupts(
+            graph, run_dir, run, record, result, config, context, lock
+        )
+        record.update(status="staged", error="", document_interrupts=[])
         stage_event(run_dir, record, "stage_result")
         return result
     except Exception as error:
+        run["status"] = "running"
         await fail_record(run_dir, run, record, error, lock)
         return None
     finally:
@@ -182,6 +246,7 @@ async def run_research(run_dir: Path, *, retry_failed: bool = False) -> None:
             f"Layer 3 schema {run.get('schema_version')!r} cannot resume in schema "
             f"{SCHEMA_VERSION}; start a fresh Layer 3 run from the completed Layer 2 run"
         )
+    await preflight_document_worker(run_dir)
     retriever = from_run(run, run_dir)
     assignments = {item["name"]: item for item in load_research_input(run_dir)}
     lock = asyncio.Lock()

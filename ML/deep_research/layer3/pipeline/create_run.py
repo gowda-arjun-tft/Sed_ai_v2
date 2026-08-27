@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 import shutil
 import sqlite3
@@ -21,7 +22,9 @@ from ..settings import (
     CHECKPOINT_PACKAGE_VERSION,
     CONTEXT_POLICY_VERSION,
     CONTEXT_SOFT_TARGET_TOKENS,
+    DEFAULT_OCR_LANGUAGES,
     DEEPAGENTS_VERSION,
+    DOCUMENT_EXTRACTION_POLICY_VERSION,
     DOMAIN_NAMES,
     EMERGENCY_EVICTION_KEEP_TOOL_RESULTS,
     EMERGENCY_EVICTION_TRIGGER_TOKENS,
@@ -29,12 +32,18 @@ from ..settings import (
     EVICTION_KEEP_TOOL_RESULTS,
     EVICTION_TRIGGER_TOKENS,
     FETCH_TIMEOUT_SECONDS,
+    FIND_MAX_HITS,
+    FULL_DOCUMENT_RESPONSE_TOKENS,
     HARNESS_NAME,
+    MAX_DOCUMENT_BYTES,
+    MAX_PDF_PAGES,
+    MAX_REQUESTED_PAGES,
     MAX_SOURCE_BYTES,
     MODEL_INPUT_TOKEN_LIMIT,
     MODEL_MAX_RETRIES,
     MODEL_NAME,
     MODEL_TIMEOUT_SECONDS,
+    PDF_BATCH_PAGES,
     PROMPTS_DIR,
     REASONING_EFFORT,
     RUN_PREFIX,
@@ -46,7 +55,25 @@ from ..settings import (
     WEB_SEARCH_CONTEXT_SIZE,
     WEB_SEARCH_LEVELS,
     WEB_SEARCH_VERBOSITY,
+    WORKER_HEARTBEAT_SECONDS,
+    WORKER_STALE_SECONDS,
 )
+
+
+def normalize_ocr_languages(value: str | tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    items = value.split(",") if isinstance(value, str) else value
+    languages: list[str] = []
+    for item in items:
+        language = str(item).strip().casefold()
+        if not language:
+            continue
+        if not re.fullmatch(r"[a-z][a-z0-9_-]*", language):
+            raise ValueError(f"invalid OCR language code: {item!r}")
+        if language not in languages:
+            languages.append(language)
+    if not languages:
+        raise ValueError("at least one OCR language is required")
+    return tuple(languages)
 
 
 def _load_l2(run_dir: Path) -> tuple[dict, Path, list[Path]]:
@@ -103,6 +130,7 @@ def create_run(
     reasoning_effort: str = REASONING_EFFORT,
     web_search_context_size: str = WEB_SEARCH_CONTEXT_SIZE,
     web_search_verbosity: str = WEB_SEARCH_VERBOSITY,
+    ocr_languages: str | tuple[str, ...] | list[str] = DEFAULT_OCR_LANGUAGES,
 ) -> Path:
     if reasoning_effort not in REASONING_EFFORTS:
         raise ValueError(f"unsupported reasoning effort: {reasoning_effort}")
@@ -110,6 +138,7 @@ def create_run(
         raise ValueError(f"unsupported web-search context size: {web_search_context_size}")
     if web_search_verbosity not in WEB_SEARCH_LEVELS:
         raise ValueError(f"unsupported web-search verbosity: {web_search_verbosity}")
+    selected_ocr_languages = normalize_ocr_languages(ocr_languages)
     l2_run = l2_run.resolve()
     source, planner, missions = _load_l2(l2_run)
     if not public_input_confirmed:
@@ -124,6 +153,7 @@ def create_run(
         run_dir / "research",
         run_dir / "sources" / "raw",
         run_dir / "sources" / "text",
+        run_dir / "sources" / "documents",
     ):
         path.mkdir(parents=True, exist_ok=True)
     planner_copy = run_dir / "inputs" / "planner_prompt.md"
@@ -169,6 +199,20 @@ def create_run(
             "web_search": {
                 "context_size": web_search_context_size,
                 "verbosity": web_search_verbosity,
+            },
+            "document_extraction": {
+                "policy_version": DOCUMENT_EXTRACTION_POLICY_VERSION,
+                "backend": "local_docling",
+                "ocr_engine": "easyocr",
+                "ocr_languages": list(selected_ocr_languages),
+                "max_document_bytes": MAX_DOCUMENT_BYTES,
+                "max_pdf_pages": MAX_PDF_PAGES,
+                "pdf_batch_pages": PDF_BATCH_PAGES,
+                "full_response_token_threshold": FULL_DOCUMENT_RESPONSE_TOKENS,
+                "max_requested_pages": MAX_REQUESTED_PAGES,
+                "max_find_hits": FIND_MAX_HITS,
+                "worker_heartbeat_seconds": WORKER_HEARTBEAT_SECONDS,
+                "worker_stale_seconds": WORKER_STALE_SECONDS,
             },
             "model_context_window_tokens": MODEL_INPUT_TOKEN_LIMIT,
             "deepagents_version": DEEPAGENTS_VERSION,

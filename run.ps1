@@ -5,7 +5,8 @@ param(
     [switch]$Online,
     [switch]$PublicInputConfirmed,
     [string]$ResumeL3,
-    [switch]$RetryFailed
+    [switch]$RetryFailed,
+    [string]$OcrLanguages
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,6 +35,9 @@ if ($Research -and -not $PublicInputConfirmed) {
 if ($RetryFailed -and -not $ResumeL3) {
     throw '-RetryFailed requires -ResumeL3.'
 }
+if ($OcrLanguages -and -not $Research) {
+    throw '-OcrLanguages requires -Research.'
+}
 if (@($FactSheet, $Resume, $Research, $ResumeL3).Where({ $_ }).Count -gt 1) {
     throw 'Choose only one of -FactSheet, -Resume, -Research or -ResumeL3.'
 }
@@ -45,6 +49,9 @@ if ($Research) {
     }
     if ($PublicInputConfirmed) {
         $Layer3Args += '--public-input-confirmed'
+    }
+    if ($OcrLanguages) {
+        $Layer3Args += @('--ocr-languages', $OcrLanguages)
     }
     & $Python -m ML.deep_research.layer3 @Layer3Args
 } elseif ($ResumeL3) {

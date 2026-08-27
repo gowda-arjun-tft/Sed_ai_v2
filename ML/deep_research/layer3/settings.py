@@ -30,6 +30,18 @@ WEB_SEARCH_LEVELS = frozenset({"low", "medium", "high"})
 FETCH_TIMEOUT_SECONDS = 30
 MAX_SOURCE_BYTES = 10 * 1024 * 1024
 
+# Frozen into new runs. Runs without this policy retain legacy source reading.
+DOCUMENT_EXTRACTION_POLICY_VERSION = 1
+DEFAULT_OCR_LANGUAGES = ("de", "en")
+MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
+MAX_PDF_PAGES = 2_000
+PDF_BATCH_PAGES = 25
+FULL_DOCUMENT_RESPONSE_TOKENS = 16_000
+MAX_REQUESTED_PAGES = 30
+FIND_MAX_HITS = 40
+WORKER_HEARTBEAT_SECONDS = 10
+WORKER_STALE_SECONDS = 60
+
 # Defaults copied into each new run. Runtime middleware reads the run-local
 # policy instead, so changing these values cannot change a resumable run.
 CONTEXT_POLICY_VERSION = 1

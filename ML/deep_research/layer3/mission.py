@@ -24,18 +24,16 @@ def load_research_input(run_dir: Path) -> list[dict[str, Any]]:
     """Load the eight isolated domain assignments."""
     _, definitions = load_planner(run_dir / "inputs" / "planner_prompt.md")
     by_name = {item["name"]: item for item in definitions}
-    missions = []
-    for name in AGENT_NAMES:
-        mission = read_text(run_dir / "inputs" / "mission_md" / f"{slug(name)}.md")
-        missions.append(mission)
     return [
         {
             "name": name,
-            "mission": mission,
+            "mission": read_text(
+                run_dir / "inputs" / "mission_md" / f"{slug(name)}.md"
+            ),
             "boundaries": {
                 "mandate": by_name[name]["mandate"],
                 "handoffs": by_name[name]["handoffs"],
             },
         }
-        for name, mission in zip(AGENT_NAMES, missions, strict=True)
+        for name in AGENT_NAMES
     ]

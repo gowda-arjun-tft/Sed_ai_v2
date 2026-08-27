@@ -111,7 +111,7 @@ class GlobalReadinessTests(unittest.TestCase):
                     "ML.deep_research.layer3.providers.openai_search.MAX_SOURCE_BYTES",
                     10,
                 ),
-                self.assertRaisesRegex(ValueError, "10 MiB"),
+                self.assertRaisesRegex(ValueError, "10 bytes"),
             ):
                 _fetch("https://public.example/report")
 

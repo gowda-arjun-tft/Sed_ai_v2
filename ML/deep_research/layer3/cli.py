@@ -11,7 +11,7 @@ from ML.deep_research.layer2.fs import load_json
 from .pipeline.create_run import create_run
 from .pipeline.run_checks import Check, run_checks
 from .runner import run_research
-from .settings import REPO_ROOT, RUNS_DIR, SCHEMA_VERSION
+from .settings import DEFAULT_OCR_LANGUAGES, REPO_ROOT, RUNS_DIR, SCHEMA_VERSION
 
 
 async def run_all(run_dir: Path, *, retry_failed: bool = False) -> None:
@@ -47,6 +47,14 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="resume failed invocations from their durable checkpoints",
     )
+    parser.add_argument(
+        "--ocr-languages",
+        metavar="LANGUAGES",
+        help=(
+            "comma-separated EasyOCR languages for a new run "
+            f"(default: {','.join(DEFAULT_OCR_LANGUAGES)})"
+        ),
+    )
     return parser
 
 
@@ -54,8 +62,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     if args.check_only:
-        if args.online or args.public_input_confirmed or args.retry_failed:
-            parser.error("--check-only does not accept run or provider options")
+        if (
+            args.online
+            or args.public_input_confirmed
+            or args.retry_failed
+            or args.ocr_languages is not None
+        ):
+            parser.error("--check-only does not accept run options")
         try:
             checks = run_checks(args.check_only.resolve())
         except ValueError as error:
@@ -76,13 +89,16 @@ def main(argv: list[str] | None = None) -> int:
                 args.research,
                 RUNS_DIR,
                 public_input_confirmed=args.public_input_confirmed,
+                ocr_languages=(
+                    args.ocr_languages or ",".join(DEFAULT_OCR_LANGUAGES)
+                ),
             )
         except ValueError as error:
             parser.error(str(error))
         print(f"Created {run_dir}", flush=True)
     else:
-        if args.online or args.public_input_confirmed:
-            parser.error("provider options are recorded by the existing Layer 3 run")
+        if args.online or args.public_input_confirmed or args.ocr_languages is not None:
+            parser.error("new-run options are recorded by the existing Layer 3 run")
         run_dir = args.resume_l3.resolve()
         if not (run_dir / "run.json").is_file():
             parser.error("--resume-l3 must point to a CDI Layer 3 run folder")

@@ -12,6 +12,7 @@ from openai import AsyncOpenAI
 from ML.deep_research.layer2.fs import now_iso
 
 from ..contracts import Document, SearchHit
+from ..document_extraction import extraction_kind
 from ..retrieval import hit_id, validate_public_url
 from ..settings import (
     FETCH_TIMEOUT_SECONDS,
@@ -37,7 +38,7 @@ class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _fetch(url: str) -> Document:
+def _fetch(url: str, max_document_bytes: int | None = None) -> Document:
     validate_public_url(url)
     opener = urllib.request.build_opener(_SafeRedirectHandler())
     request = urllib.request.Request(
@@ -54,19 +55,31 @@ def _fetch(url: str) -> Document:
     with opener.open(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
         final_url = response.geturl()
         validate_public_url(final_url)
+        content_type = response.headers.get_content_type()
+        limit = MAX_SOURCE_BYTES
+        if (
+            max_document_bytes is not None
+            and extraction_kind(str(content_type), final_url) is not None
+        ):
+            limit = max_document_bytes
+        limit_label = (
+            f"{limit // (1024 * 1024)} MiB"
+            if limit >= 1024 * 1024 and limit % (1024 * 1024) == 0
+            else f"{limit} bytes"
+        )
         declared_length = response.headers.get("Content-Length")
         try:
             declared_bytes = int(declared_length) if declared_length else 0
         except ValueError:
             declared_bytes = 0
-        if declared_bytes > MAX_SOURCE_BYTES:
-            raise ValueError("source exceeds the 10 MiB download limit")
-        body = response.read(MAX_SOURCE_BYTES + 1)
-        if len(body) > MAX_SOURCE_BYTES:
-            raise ValueError("source exceeds the 10 MiB download limit")
+        if declared_bytes > limit:
+            raise ValueError(f"source exceeds the {limit_label} download limit")
+        body = response.read(limit + 1)
+        if len(body) > limit:
+            raise ValueError(f"source exceeds the {limit_label} download limit")
         return Document(
             url=final_url,
-            content_type=response.headers.get_content_type()
+            content_type=content_type
             + (
                 f"; charset={response.headers.get_content_charset()}"
                 if response.headers.get_content_charset()
@@ -125,11 +138,13 @@ class OpenAISearchRetriever:
         reasoning_effort: str,
         context_size: str,
         verbosity: str,
+        max_document_bytes: int | None = None,
     ) -> None:
         self.run_dir = run_dir
         self.reasoning_effort = reasoning_effort
         self.context_size = context_size
         self.verbosity = verbosity
+        self.max_document_bytes = max_document_bytes
         self.client = AsyncOpenAI(
             timeout=MODEL_TIMEOUT_SECONDS,
             max_retries=MODEL_MAX_RETRIES,
@@ -156,4 +171,4 @@ class OpenAISearchRetriever:
         return _hits(response)
 
     async def fetch(self, url: str) -> Document:
-        return await asyncio.to_thread(_fetch, url)
+        return await asyncio.to_thread(_fetch, url, self.max_document_bytes)

@@ -67,6 +67,8 @@ Enable live research only for public or invented input:
 
 ```powershell
 .\run.ps1 -Research '.\runs\<fact-sheet>\L2_YYYYMMDD_HHMMSS_xxxx' -Online -PublicInputConfirmed
+# Optional for a new run; German and English are the default.
+.\run.ps1 -Research '.\runs\<fact-sheet>\L2_YYYYMMDD_HHMMSS_xxxx' -Online -PublicInputConfirmed -OcrLanguages 'de,en'
 ```
 
 Resume an interrupted run, or explicitly retry only failed stages from their checkpoints:
@@ -81,6 +83,16 @@ to five fixed lenses: practitioner, academic, skeptic, economist, and historian.
 the citation verifier receive only `search_web` and `read_source`. After contradiction mapping,
 drafting, and agent-led citation verification, the coordinator's final assistant Markdown is saved
 verbatim. The synthesis harness receives the available domain responses directly and has no tools.
+
+For new runs, `read_source` retains every fetched file by content hash. Text, Markdown, and JSON
+use the same durable lifecycle directly; PDF, DOCX, PPTX, HTML, and images are converted by an
+isolated local Docling worker. A document wait is checkpointed as `waiting_for_documents`, and the
+same coordinator thread resumes automatically when extraction finishes. Large documents return a
+map and can be reopened with `pages` or `find`; extracted pages, combined Markdown, manifests, and
+batch Docling JSON remain under `sources/documents/<source-sha256>/`. Runs created before this
+policy retain the legacy source-reading behavior. Before a new-policy run can make a provider call,
+a local preflight imports Docling and EasyOCR, constructs the converter, and completes a worker
+subprocess; a failure stops locally without API usage.
 
 Citation accuracy is judged by the verifier agents rather than a Python quote parser. Python retains
 secure URL handling, raw page bytes, canonical text, query caching, usage, checkpoints, and atomic
