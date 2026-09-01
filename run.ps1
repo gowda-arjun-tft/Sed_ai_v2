@@ -2,9 +2,11 @@ param(
     [string]$FactSheet,
     [string]$Resume,
     [string]$Research,
+    [string]$ExternalResearch,
     [switch]$Online,
     [switch]$PublicInputConfirmed,
     [string]$ResumeL3,
+    [string]$ResumeL4,
     [switch]$RetryFailed
 )
 
@@ -22,8 +24,8 @@ if (-not (Test-Path -LiteralPath $Python)) {
     throw "Required compute interpreter not found: $Python"
 }
 
-if (($Online -or $PublicInputConfirmed) -and -not $Research) {
-    throw '-Online and -PublicInputConfirmed require -Research.'
+if (($Online -or $PublicInputConfirmed) -and -not ($Research -or $ExternalResearch)) {
+    throw '-Online and -PublicInputConfirmed require -Research or -ExternalResearch.'
 }
 if ($Research -and -not $Online) {
     throw '-Research requires -Online.'
@@ -31,11 +33,17 @@ if ($Research -and -not $Online) {
 if ($Research -and -not $PublicInputConfirmed) {
     throw '-Research requires -PublicInputConfirmed.'
 }
-if ($RetryFailed -and -not $ResumeL3) {
-    throw '-RetryFailed requires -ResumeL3.'
+if ($ExternalResearch -and -not $Online) {
+    throw '-ExternalResearch requires -Online.'
 }
-if (@($FactSheet, $Resume, $Research, $ResumeL3).Where({ $_ }).Count -gt 1) {
-    throw 'Choose only one of -FactSheet, -Resume, -Research or -ResumeL3.'
+if ($ExternalResearch -and -not $PublicInputConfirmed) {
+    throw '-ExternalResearch requires -PublicInputConfirmed.'
+}
+if ($RetryFailed -and -not ($ResumeL3 -or $ResumeL4)) {
+    throw '-RetryFailed requires -ResumeL3 or -ResumeL4.'
+}
+if (@($FactSheet, $Resume, $Research, $ResumeL3, $ExternalResearch, $ResumeL4).Where({ $_ }).Count -gt 1) {
+    throw 'Choose only one run action.'
 }
 
 if ($Research) {
@@ -47,12 +55,21 @@ if ($Research) {
         $Layer3Args += '--public-input-confirmed'
     }
     & $Python -m ML.deep_research.layer3 @Layer3Args
+} elseif ($ExternalResearch) {
+    $Layer4Args = @('--external-research', $ExternalResearch, '--online', '--public-input-confirmed')
+    & $Python -m ML.deep_research.layer4 @Layer4Args
 } elseif ($ResumeL3) {
     $Layer3Args = @('--resume-l3', $ResumeL3)
     if ($RetryFailed) {
         $Layer3Args += '--retry-failed'
     }
     & $Python -m ML.deep_research.layer3 @Layer3Args
+} elseif ($ResumeL4) {
+    $Layer4Args = @('--resume-l4', $ResumeL4)
+    if ($RetryFailed) {
+        $Layer4Args += '--retry-failed'
+    }
+    & $Python -m ML.deep_research.layer4 @Layer4Args
 } elseif ($Resume) {
     & $Python -m ML.deep_research.layer2 --resume $Resume
 } else {

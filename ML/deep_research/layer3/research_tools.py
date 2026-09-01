@@ -1,4 +1,4 @@
-"""Web evidence tools exposed to one STORM lens or citation verifier."""
+"""Web evidence tools exposed to the direct domain researcher."""
 
 from __future__ import annotations
 

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from ML.deep_research.layer2.fs import load_json, write_json
-from ML.deep_research.layer3.contracts import ResearchContext, SearchHit
+from ML.deep_research.layer3.contracts import RESEARCHER_NAME, ResearchContext, SearchHit
 from ML.deep_research.layer3.mission import load_research_input
 from ML.deep_research.layer3.pipeline.create_run import create_run
 from ML.deep_research.layer3.pipeline.run_checks import run_checks
@@ -21,17 +21,23 @@ def _new_l3(root: Path) -> Path:
 
 
 class Layer3SchemaTests(unittest.TestCase):
-    def test_schema_seven_has_only_domain_coordinators_and_synthesis(self):
+    def test_schema_eight_has_only_domain_researchers_and_synthesis(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = _new_l3(Path(temporary))
             run = load_json(run_dir / "run.json")
 
         self.assertEqual(run["schema_version"], SCHEMA_VERSION)
         self.assertEqual(run["harness"], HARNESS_NAME)
+        self.assertEqual(run["skill"]["path"], "inputs/prompts/SKILL.md")
+        self.assertEqual(set(run["prompt_hashes"]), {"synthesis.md"})
+        self.assertEqual(
+            run["context_management"]["applies_to"],
+            "domain_researcher",
+        )
         self.assertEqual(set(run["execution"]), {"domains", "final"})
         self.assertEqual(list(run["execution"]["domains"]), list(DOMAIN_NAMES))
         self.assertTrue(
-            all(item["stage"] == "coordinator" for item in run["execution"]["domains"].values())
+            all(item["stage"] == "researcher" for item in run["execution"]["domains"].values())
         )
         self.assertEqual(run["limits"]["transient_retries"], 3)
         self.assertNotIn("output_tokens_per_model_call", run["limits"])
@@ -46,14 +52,14 @@ class Layer3SchemaTests(unittest.TestCase):
 
 
 class Layer3EvidenceTests(unittest.TestCase):
-    def test_lens_tools_are_only_search_and_read(self):
+    def test_researcher_tools_are_only_search_and_read(self):
         self.assertEqual(
-            {tool.name for tool in make_research_tools("practitioner")},
+            {tool.name for tool in make_research_tools(RESEARCHER_NAME)},
             {"search_web", "read_source"},
         )
         self.assertFalse(hasattr(SourceStore(Path("unused")), "record_citation"))
 
-    def test_identical_queries_share_cache_across_lenses(self):
+    def test_identical_queries_share_cache_across_callers(self):
         class Retriever:
             calls = 0
 
@@ -66,8 +72,8 @@ class Layer3EvidenceTests(unittest.TestCase):
 
             async def exercise():
                 return await asyncio.gather(
-                    _search(context, "same query", "practitioner"),
-                    _search(context, "same query", "academic"),
+                    _search(context, "same query", "first-caller"),
+                    _search(context, "same query", "second-caller"),
                 )
 
             first, second = asyncio.run(exercise())
@@ -78,7 +84,7 @@ class Layer3EvidenceTests(unittest.TestCase):
 
 
 class Layer3ChecksTests(unittest.TestCase):
-    def test_fabricated_schema_seven_run_has_true_operational_observations(self):
+    def test_fabricated_schema_eight_run_has_true_operational_observations(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = create_complete_l3_run(Path(temporary))
             checks = run_checks(run_dir)

@@ -1,4 +1,4 @@
-"""Build the domain-scoped STORM Deep Agent harnesses."""
+"""Build the direct domain-research and synthesis Deep Agent harnesses."""
 
 from __future__ import annotations
 
@@ -14,15 +14,9 @@ from ML.deep_research.layer2.harness import (
 )
 from ML.deep_research.layer2.fs import load_json
 
-from .contracts import LENS_NAMES, VERIFIER_NAME, ResearchContext
+from .contracts import RESEARCHER_NAME, ResearchContext
 from .memory import context_policy, evidence_eviction, research_summarization
-from .prompts import (
-    LENS_DESCRIPTIONS,
-    coordinator_system_prompt,
-    lens_system_prompt,
-    synthesis_system_prompt,
-    verifier_system_prompt,
-)
+from .prompts import researcher_system_prompt, synthesis_system_prompt
 from .research_tools import make_research_tools
 from .settings import (
     MODEL_MAX_RETRIES,
@@ -33,7 +27,7 @@ from .settings import (
 
 
 class _NoFilesystemMiddleware(AgentMiddleware):
-    """Replace Deep Agents' file middleware for evidence-only subagents."""
+    """Replace Deep Agents' file middleware for evidence-only graphs."""
 
     @property
     def name(self) -> str:
@@ -63,56 +57,18 @@ def build_layer3_model(run_dir: Path) -> Any:
     return init_chat_model(MODEL_SPEC, **options)
 
 
-def _subagents(
-    run_dir: Path,
-    *,
-    model: Any = None,
-    backend: Any = None,
-) -> list[dict[str, Any]]:
-    """Build the six looping research subagents from the run-frozen policy.
-
-    These are the only agents that loop while pulling large payloads into their
-    own history, so they are the only ones given eviction and summarization.
-    Runs created before the versioned context policy keep their original
-    no-compaction behavior.
-
-    `model` is optional because the summarizer needs a resolved chat model while
-    the rest of a spec does not, and constructing one requires an API key.
-    Without a model the specs still evict when their run enables compaction;
-    only summarization is absent.
-    """
+def _research_middleware(run_dir: Path, model: Any, backend: Any) -> list[Any]:
+    """Build the direct researcher's run-frozen context management stack."""
     order = [_NoFilesystemMiddleware()]
     policy = context_policy(run_dir)
     if policy is not None:
         order.append(evidence_eviction(policy))
-        if model is not None:
-            order.append(research_summarization(model, backend, policy))
-
-    def spec(name: str, description: str, system_prompt: str) -> dict[str, Any]:
-        return {
-            "name": name,
-            "description": description,
-            "system_prompt": system_prompt,
-            "tools": make_research_tools(name),
-            "middleware": list(order),
-        }
-
-    agents = [
-        spec(lens, LENS_DESCRIPTIONS[lens], lens_system_prompt(run_dir, lens))
-        for lens in LENS_NAMES
-    ]
-    agents.append(
-        spec(
-            VERIFIER_NAME,
-            "Independently verifies a coherent cluster of cited claims and sources.",
-            verifier_system_prompt(run_dir),
-        )
-    )
-    return agents
+        order.append(research_summarization(model, backend, policy))
+    return order
 
 
 def _model_and_backend(run_dir: Path) -> tuple[Any, Any]:
-    """Resolve the shared model and backend a graph and its subagents both need."""
+    """Resolve the shared model and state backend for one graph."""
     from deepagents.backends import StateBackend
 
     configure_deepagents()
@@ -124,7 +80,8 @@ def _graph(
     system_prompt: str,
     model: Any,
     backend: Any,
-    subagents: list[dict[str, Any]],
+    tools: list[Any],
+    middleware: list[Any],
     name: str,
     checkpointer: Any,
 ) -> Any:
@@ -134,10 +91,10 @@ def _graph(
     return create_deep_agent(
         model=model,
         system_prompt=system_prompt,
-        tools=[],
-        middleware=[_NoFilesystemMiddleware()],
+        tools=tools,
+        middleware=middleware,
         backend=backend,
-        subagents=subagents,
+        subagents=[],
         context_schema=ResearchContext,
         checkpointer=checkpointer,
         response_format=None,
@@ -145,32 +102,64 @@ def _graph(
     )
 
 
-def create_domain_coordinator_harness(
+def create_direct_research_harness(
+    run_dir: Path,
+    system_prompt: str,
+    name: str,
+    checkpointer: Any = None,
+) -> Any:
+    """Build one looping evidence researcher for Layer 3 or Layer 4."""
+    model, backend = _model_and_backend(run_dir)
+    return _graph(
+        system_prompt=system_prompt,
+        model=model,
+        backend=backend,
+        tools=make_research_tools(name),
+        middleware=_research_middleware(run_dir, model, backend),
+        name=name,
+        checkpointer=checkpointer,
+    )
+
+
+def create_tool_free_harness(
+    run_dir: Path,
+    system_prompt: str,
+    name: str,
+    checkpointer: Any = None,
+) -> Any:
+    """Build one checkpointed free-form Markdown call without tools or loops."""
+    model, backend = _model_and_backend(run_dir)
+    return _graph(
+        system_prompt=system_prompt,
+        model=model,
+        backend=backend,
+        tools=[],
+        middleware=[_NoFilesystemMiddleware()],
+        name=name,
+        checkpointer=checkpointer,
+    )
+
+
+def create_domain_researcher_harness(
     run_dir: Path,
     checkpointer: Any = None,
 ) -> Any:
-    model, backend = _model_and_backend(run_dir)
-    return _graph(
-        system_prompt=coordinator_system_prompt(run_dir),
-        model=model,
-        backend=backend,
-        subagents=_subagents(run_dir, model=model, backend=backend),
-        name="domain-storm-coordinator",
-        checkpointer=checkpointer,
+    return create_direct_research_harness(
+        run_dir,
+        researcher_system_prompt(run_dir),
+        RESEARCHER_NAME,
+        checkpointer,
     )
 
 
 def create_synthesis_harness(run_dir: Path, checkpointer: Any = None) -> Any:
     # One stateless call over the eight finished domain reports: no loop, no
     # tools, nothing to compact.
-    model, backend = _model_and_backend(run_dir)
-    return _graph(
-        system_prompt=synthesis_system_prompt(run_dir),
-        model=model,
-        backend=backend,
-        subagents=[],
-        name="property-synthesis",
-        checkpointer=checkpointer,
+    return create_tool_free_harness(
+        run_dir,
+        synthesis_system_prompt(run_dir),
+        "property-synthesis",
+        checkpointer,
     )
 
 

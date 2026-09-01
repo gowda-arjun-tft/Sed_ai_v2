@@ -8,11 +8,10 @@ from unittest.mock import patch
 
 from langchain_core.messages import AIMessage
 
-from ML.deep_research.layer3.contracts import LENS_NAMES, VERIFIER_NAME
+from ML.deep_research.layer3.contracts import RESEARCHER_NAME
 from ML.deep_research.layer3.llm import (
-    _subagents,
     build_layer3_model,
-    create_domain_coordinator_harness,
+    create_domain_researcher_harness,
     create_synthesis_harness,
     final_text,
 )
@@ -55,22 +54,24 @@ class Layer3HarnessSurfaceTests(unittest.TestCase):
         self.assertEqual(model.request_timeout, 600.0)
         self.assertEqual(model.max_retries, 3)
 
-    def test_coordinator_has_only_task_and_synthesis_has_no_tools(self):
+    def test_researcher_has_only_evidence_tools_and_synthesis_has_none(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(
             os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}
         ):
             run_dir = _new_l3(Path(temporary))
-            coordinator = create_domain_coordinator_harness(run_dir)
+            researcher = create_domain_researcher_harness(run_dir)
             synthesis = create_synthesis_harness(run_dir)
-            task = coordinator.nodes["tools"].bound.tools_by_name["task"]
 
-        self.assertEqual(_tools(coordinator), {"task"})
+        self.assertEqual(_tools(researcher), {"search_web", "read_source"})
         self.assertEqual(_tools(synthesis), set())
-        self.assertNotIn("general-purpose", task.description)
-        for name in (*LENS_NAMES, VERIFIER_NAME):
-            self.assertIn(f"- {name}:", task.description)
-        for forbidden in ("search_web", "read_source", "run_python", "execute"):
-            self.assertNotIn(forbidden, _tools(coordinator))
+        for forbidden in ("task", "run_python", "execute"):
+            self.assertNotIn(forbidden, _tools(researcher))
+        descriptions = {
+            name: researcher.nodes["tools"].bound.tools_by_name[name].description
+            for name in _tools(researcher)
+        }
+        self.assertIn("candidate sources", descriptions["search_web"])
+        self.assertIn("canonical text", descriptions["read_source"])
 
     def test_implicit_summarization_and_tool_call_repair_are_disabled(self):
         from deepagents.profiles.harness.harness_profiles import _get_harness_profile
@@ -84,26 +85,24 @@ class Layer3HarnessSurfaceTests(unittest.TestCase):
             frozenset({"SummarizationMiddleware", "PatchToolCallsMiddleware"}),
         )
 
-    def test_each_fixed_subagent_has_only_two_evidence_tools(self):
-        with tempfile.TemporaryDirectory() as temporary:
+    def test_researcher_identity_is_stable_and_prompt_is_domain_neutral(self):
+        import deepagents
+
+        captured = {}
+
+        def record(**kwargs):
+            captured.update(kwargs)
+            return object()
+
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}
+        ), patch.object(deepagents, "create_deep_agent", record):
             run_dir = _new_l3(Path(temporary))
-            specs = _subagents(run_dir)
+            create_domain_researcher_harness(run_dir)
 
-        self.assertEqual([spec["name"] for spec in specs], [*LENS_NAMES, VERIFIER_NAME])
-        for spec in specs:
-            self.assertEqual({tool.name for tool in spec["tools"]}, {"search_web", "read_source"})
-            self.assertNotIn("task", {tool.name for tool in spec["tools"]})
-            descriptions = {tool.name: tool.description for tool in spec["tools"]}
-            self.assertIn("candidate sources", descriptions["search_web"])
-            self.assertIn("canonical text", descriptions["read_source"])
-
-    def test_fixed_subagents_are_domain_neutral(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l3(Path(temporary))
-            specs = _subagents(run_dir)
-
-        for spec in specs:
-            self.assertNotIn(DOMAIN_NAMES[0], spec["system_prompt"])
+        self.assertEqual(captured["name"], RESEARCHER_NAME)
+        self.assertEqual(captured["subagents"], [])
+        self.assertNotIn(DOMAIN_NAMES[0], captured["system_prompt"])
 
 
 if __name__ == "__main__":

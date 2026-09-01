@@ -1,4 +1,4 @@
-"""Context management for the looping research subagents.
+"""Context management for the looping direct domain researcher.
 
 Two things are pinned here. First the framework assumptions the design rests on,
 so a dependency bump fails loudly instead of silently dropping compaction.
@@ -17,11 +17,10 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.messages.utils import count_tokens_approximately
 
-from ML.deep_research.layer3.contracts import LENS_NAMES, VERIFIER_NAME
+from ML.deep_research.layer3.contracts import RESEARCHER_NAME
 from ML.deep_research.layer3.llm import (
-    _subagents,
     build_layer3_model,
-    create_domain_coordinator_harness,
+    create_domain_researcher_harness,
     create_synthesis_harness,
 )
 from ML.deep_research.layer3.memory import (
@@ -47,10 +46,6 @@ def _new_l3(root: Path) -> Path:
         root / "l3",
         public_input_confirmed=True,
     )
-
-
-def _names(spec: dict) -> list[str]:
-    return [middleware.name for middleware in spec["middleware"]]
 
 
 def _policy(run_dir: Path):
@@ -148,40 +143,9 @@ class FrameworkAssumptionTests(unittest.TestCase):
         self.assertEqual(profile.get("max_input_tokens"), MODEL_INPUT_TOKEN_LIMIT)
 
 
-class SubagentWiringTests(unittest.TestCase):
-    def test_only_research_subagents_get_context_management(self):
-        with tempfile.TemporaryDirectory() as temporary, patch.dict(
-            os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}
-        ):
-            run_dir = _new_l3(Path(temporary))
-            model = build_layer3_model(run_dir)
-            specs = _subagents(run_dir, model=model)
-            coordinator = create_domain_coordinator_harness(run_dir)
-            synthesis = create_synthesis_harness(run_dir)
-
-        self.assertEqual([spec["name"] for spec in specs], [*LENS_NAMES, VERIFIER_NAME])
-        for spec in specs:
-            self.assertEqual(
-                _names(spec),
-                [
-                    "FilesystemMiddleware",
-                    "ContextEditingMiddleware",
-                    "CdiResearchSummarization",
-                ],
-            )
-
-        # Both graphs still build; compaction is asserted separately, because a
-        # compiled graph does not expose its middleware stack.
-        self.assertEqual(set(coordinator.nodes), {"__start__", "model", "tools"})
-        self.assertIn("model", synthesis.nodes)
-
-    def test_neither_coordinator_nor_synthesizer_is_compacted(self):
-        """Captured at the construction boundary: a compiled graph hides its stack.
-
-        The coordinator's own history is the merge state it drafts from, and the
-        synthesizer is one stateless call over finished reports. Compacting
-        either would discard exactly the specifics they exist to carry.
-        """
+class ResearcherWiringTests(unittest.TestCase):
+    def test_only_direct_researcher_gets_context_management(self):
+        """Capture construction because a compiled graph hides its middleware."""
         import deepagents
 
         captured: list[dict] = []
@@ -194,35 +158,31 @@ class SubagentWiringTests(unittest.TestCase):
             os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}
         ), patch.object(deepagents, "create_deep_agent", record):
             run_dir = _new_l3(Path(temporary))
-            create_domain_coordinator_harness(run_dir)
+            create_domain_researcher_harness(run_dir)
             create_synthesis_harness(run_dir)
 
         self.assertEqual(len(captured), 2)
-        coordinator, synthesis = captured
-
-        for call in (coordinator, synthesis):
-            self.assertEqual(
-                [middleware.name for middleware in call["middleware"]],
-                ["FilesystemMiddleware"],
-            )
-
+        researcher, synthesis = captured
+        self.assertEqual(researcher["name"], RESEARCHER_NAME)
+        self.assertEqual(
+            [middleware.name for middleware in researcher["middleware"]],
+            [
+                "FilesystemMiddleware",
+                "ContextEditingMiddleware",
+                "CdiResearchSummarization",
+            ],
+        )
+        self.assertEqual(
+            {tool.name for tool in researcher["tools"]},
+            {"search_web", "read_source"},
+        )
+        self.assertEqual(researcher["subagents"], [])
+        self.assertEqual(
+            [middleware.name for middleware in synthesis["middleware"]],
+            ["FilesystemMiddleware"],
+        )
+        self.assertEqual(synthesis["tools"], [])
         self.assertEqual(synthesis["subagents"], [])
-        self.assertEqual(len(coordinator["subagents"]), len(LENS_NAMES) + 1)
-        for spec in coordinator["subagents"]:
-            self.assertIn("CdiResearchSummarization", _names(spec))
-
-    def test_specs_are_complete_without_a_model(self):
-        """The no-model path keeps eviction and stays a valid spec."""
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l3(Path(temporary))
-            specs = _subagents(run_dir)
-
-        for spec in specs:
-            self.assertEqual(
-                _names(spec),
-                ["FilesystemMiddleware", "ContextEditingMiddleware"],
-            )
-            self.assertEqual({tool.name for tool in spec["tools"]}, {"search_web", "read_source"})
 
 
 def _conversation(read_bodies: int) -> list:

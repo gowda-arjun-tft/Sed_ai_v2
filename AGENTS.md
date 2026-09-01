@@ -3,9 +3,11 @@
 ## Project Structure & Module Organization
 
 `ML/deep_research/layer2/` splits Markdown fact sheets and merges available JSON chunk responses
-into eight mission files. `ML/deep_research/layer3/` runs eight domain-scoped STORM coordinators
-sequentially, then one property synthesis. Prompts sit below each layer's `prompts/`; design notes
-are in `ML/deep_research/docs/`; tests are in `tests/`.
+into eight mission files. `ML/deep_research/layer3/` runs eight direct domain researchers
+sequentially, then one property synthesis. `ML/deep_research/layer4/` segregates each domain report
+through two tool-free calls, reuses the direct researcher for external influences, then synthesizes
+the available external reports. Prompts sit below each layer; design notes are in
+`ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
 Group new runs as `runs/<parent>-<markdown-name>-<short-path-id>/L2_*` and place the derived `L3_*`
 beside its Layer 2 source. Keep legacy flat run folders resumable.
@@ -63,17 +65,23 @@ and network safety, protect atomic writes, record attribution and usage, and exp
 failures. These operational boundaries must never resend completed content to an LLM for repair or
 replace the model's judgement with application-authored conclusions.
 
-Each Layer 3 coordinator receives only `task`. Its five lens subagents and citation verifier receive
-only `search_web` and `read_source`; synthesis has no tools. Python schedules one coordinator at a
-time, saves each final assistant response verbatim, then synthesizes every available response.
-Prompts own research, contradiction mapping, citation verification, and corrections. Python may
+Each Layer 3 domain researcher receives only `search_web` and `read_source`; it has no `task` tool or
+subagents, and synthesis has no tools. Python schedules one researcher at a time, saves each final
+assistant response verbatim, then synthesizes every available response. Prompts own research,
+contradiction mapping, source checking, and corrections. Python may
 enforce network safety, persistence, attribution, and atomic publication, but must not grade
 Markdown, require auxiliary model-written files, or trigger content-repair calls. Implicit
 framework summarization and tool-call repair middleware stay disabled. A run-frozen CDI
-summarizer may compact only the five lenses and citation verifier; it must retain source pointers,
+summarizer may compact only the direct domain researcher; it must retain source pointers,
 must not grade content, and must not block publication. Never add
 keyword-based research policy, host shell, `run_python`, cross-property memory, or model-writable
 host folders without explicit approval.
+
+Layer 4 follows the same output-freedom contract. Its internal and candidate segregators and final
+synthesis have no tools; its external researcher receives only `search_web` and `read_source`.
+Python must not inspect segregation or research prose to decide whether another stage runs. Save
+each completed response verbatim, continue after failed stages, and use fixed missing-response
+markers only as downstream invocation context.
 
 ## Commits and Pull Requests
 

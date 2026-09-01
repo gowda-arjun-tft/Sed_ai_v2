@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +12,9 @@ from langchain_core.messages.utils import count_tokens_approximately
 
 from ML.deep_research.layer2.fs import load_json, write_json
 from ML.deep_research.layer3.contracts import Document, ResearchContext
-from ML.deep_research.layer3.llm import _subagents
+from deepagents.backends import StateBackend
+
+from ML.deep_research.layer3.llm import _research_middleware, build_layer3_model
 from ML.deep_research.layer3.memory import (
     EVICTED_SOURCE_PLACEHOLDER,
     CdiResearchSummarization,
@@ -38,8 +41,17 @@ def _policy(run_dir: Path):
     return value
 
 
-def _names(spec: dict) -> list[str]:
-    return [middleware.name for middleware in spec["middleware"]]
+def _middleware(run_dir: Path) -> list:
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "test-not-a-real-key"}):
+        return _research_middleware(
+            run_dir,
+            build_layer3_model(run_dir),
+            StateBackend(),
+        )
+
+
+def _names(middleware: list) -> list[str]:
+    return [item.name for item in middleware]
 
 
 class ContextPolicyTests(unittest.TestCase):
@@ -64,9 +76,9 @@ class ContextPolicyTests(unittest.TestCase):
                 "ML.deep_research.layer3.settings.EVICTION_TRIGGER_TOKENS",
                 999,
             ):
-                specs = _subagents(run_dir)
+                middleware = _middleware(run_dir)
 
-        eviction = specs[0]["middleware"][1]
+        eviction = middleware[1]
         self.assertEqual(eviction.edits[0].trigger, 150_000)
         self.assertEqual([edit.clear_at_least for edit in eviction.edits], [0, 0])
 
@@ -77,10 +89,9 @@ class ContextPolicyTests(unittest.TestCase):
             run["context_management"]["policy_version"] = 99
             write_json(run_dir / "run.json", run)
             with self.assertWarnsRegex(RuntimeWarning, "compaction is disabled"):
-                specs = _subagents(run_dir)
+                middleware = _middleware(run_dir)
 
-        for spec in specs:
-            self.assertEqual(_names(spec), ["FilesystemMiddleware"])
+        self.assertEqual(_names(middleware), ["FilesystemMiddleware"])
 
     def test_versionless_run_keeps_legacy_no_compaction_behavior(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -88,12 +99,11 @@ class ContextPolicyTests(unittest.TestCase):
             run = load_json(run_dir / "run.json")
             run.pop("context_management")
             write_json(run_dir / "run.json", run)
-            specs = _subagents(run_dir)
+            middleware = _middleware(run_dir)
             loaded_policy = context_policy(run_dir)
 
         self.assertIsNone(loaded_policy)
-        for spec in specs:
-            self.assertEqual(_names(spec), ["FilesystemMiddleware"])
+        self.assertEqual(_names(middleware), ["FilesystemMiddleware"])
 
 
 class EarlyCompactionTests(unittest.IsolatedAsyncioTestCase):

@@ -5,14 +5,7 @@ from pathlib import Path
 from typing import Any
 
 
-LENS_NAMES = (
-    "practitioner",
-    "academic",
-    "skeptic",
-    "economist",
-    "historian",
-)
-VERIFIER_NAME = "citation-verifier"
+RESEARCHER_NAME = "domain-researcher"
 
 
 @dataclass(frozen=True)

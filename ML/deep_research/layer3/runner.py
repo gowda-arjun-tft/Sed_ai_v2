@@ -13,7 +13,7 @@ from ML.deep_research.layer2.fs import (
 
 from .contracts import ResearchContext
 from .llm import (
-    create_domain_coordinator_harness,
+    create_domain_researcher_harness,
     create_synthesis_harness,
     final_text,
 )
@@ -46,7 +46,7 @@ async def checkpoint_saver(run_dir: Path) -> AsyncIterator[Any]:
         yield saver
 
 
-async def _run_stage(
+async def run_stage(
     graph: Any,
     run_dir: Path,
     run: dict[str, Any],
@@ -116,7 +116,7 @@ async def _publish_domain(
             return read_text(target)
         record["status"] = "pending"
 
-    state = await _run_stage(
+    state = await run_stage(
         graph,
         run_dir,
         run,
@@ -154,7 +154,7 @@ async def _publish_synthesis(
             return True
         record["status"] = "pending"
 
-    state = await _run_stage(
+    state = await run_stage(
         graph,
         run_dir,
         run,
@@ -191,11 +191,11 @@ async def run_research(run_dir: Path, *, retry_failed: bool = False) -> None:
     reports: dict[str, str] = {}
     domain_changed = False
     async with checkpoint_saver(run_dir) as saver:
-        coordinator = create_domain_coordinator_harness(run_dir, saver)
+        researcher = create_domain_researcher_harness(run_dir, saver)
         for name in DOMAIN_NAMES:
             was_complete = run["execution"]["domains"][name]["status"] == "complete"
             report = await _publish_domain(
-                coordinator,
+                researcher,
                 run_dir,
                 run,
                 run["execution"]["domains"][name],

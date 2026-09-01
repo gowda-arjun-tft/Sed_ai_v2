@@ -1,4 +1,4 @@
-"""Context management for the six looping research subagents.
+"""Context management for the looping direct domain researcher.
 
 Two mechanisms, applied in that order:
 
@@ -21,7 +21,7 @@ merging caller middleware, so a plain instance would be dropped in silence.
 The public `SummarizationMiddleware` alias reports the shared name only for its
 exact implementation and falls back to `type(self).__name__` for subclasses.
 Subclassing therefore keeps implicit summarization off while allowing this one
-explicitly configured CDI summarizer on the lenses and verifier.
+explicitly configured CDI summarizer on the direct researcher.
 """
 
 from __future__ import annotations
@@ -127,7 +127,7 @@ class SourcePointerEdit(ClearToolUsesEdit):
 
 # Preserves the `<messages>` marker the summarization engine substitutes into.
 # Everything the research procedure needs to keep going is enumerated, and the
-# recovery path named is `read_source` -- these subagents have no filesystem
+# recovery path named is `read_source` -- the researcher has no filesystem
 # tools, so pointing them at a conversation-history file would be a dead end.
 CDI_SUMMARY_PROMPT = """You are compacting a property-risk research conversation \
 so it can continue in a smaller context. Compress by removing narration and \
@@ -221,7 +221,7 @@ def evidence_eviction(policy: ContextPolicy) -> ContextEditingMiddleware:
 def research_summarization(
     model: Any, backend: Any, policy: ContextPolicy
 ) -> CdiResearchSummarization:
-    """Build early rolling summarization for one looping research subagent."""
+    """Build early rolling summarization for the looping domain researcher."""
     return CdiResearchSummarization(
         model,
         backend=backend,

@@ -16,7 +16,7 @@ def stage_thread_id(
     batch: int,
     attempt: int,
 ) -> str:
-    """Stable isolated checkpoint identity for one STORM stage attempt."""
+    """Stable isolated checkpoint identity for one Layer 3 stage attempt."""
     return str(uuid5(NAMESPACE_URL, f"cdi:{run_id}:{stage}:{actor}:{batch}:{attempt}"))
 
 

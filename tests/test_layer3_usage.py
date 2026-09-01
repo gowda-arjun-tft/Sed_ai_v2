@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from langchain_core.messages import ToolMessage
 
-from ML.deep_research.layer3.contracts import LENS_NAMES, VERIFIER_NAME
+from ML.deep_research.layer3.contracts import RESEARCHER_NAME
 from ML.deep_research.layer3.pipeline.create_run import create_run
 from ML.deep_research.layer3.pipeline.progress import model_turns, stage_event
 from ML.deep_research.layer3.providers.openai_search import OpenAISearchRetriever
@@ -135,7 +135,7 @@ class Layer3UsageTests(unittest.TestCase):
                 ]],
                 run_id=run_id,
                 metadata={
-                    "lc_agent_name": "historian",
+                    "lc_agent_name": RESEARCHER_NAME,
                     "lc_source": "summarization",
                 },
             )
@@ -210,11 +210,8 @@ class Layer3UsageTests(unittest.TestCase):
         )
         self.assertEqual(summary["total_tokens"], 20)
 
-    def test_usage_accepts_named_storm_actors(self):
-        self.assertEqual(
-            {*LENS_NAMES, VERIFIER_NAME},
-            {"practitioner", "academic", "skeptic", "economist", "historian", "citation-verifier"},
-        )
+    def test_usage_accepts_direct_researcher_actor(self):
+        self.assertEqual(RESEARCHER_NAME, "domain-researcher")
 
 
 class Layer3SearchRequestTests(unittest.IsolatedAsyncioTestCase):

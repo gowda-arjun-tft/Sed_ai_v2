@@ -17,8 +17,8 @@ MODULE_DIR = Path(__file__).resolve().parent
 PROMPTS_DIR = MODULE_DIR / "prompts"
 SKILL_PATH = MODULE_DIR / "SKILL.md"
 RUN_PREFIX = "L3"
-SCHEMA_VERSION = 7
-HARNESS_NAME = "domain_scoped_storm_direct_output"
+SCHEMA_VERSION = 8
+HARNESS_NAME = "domain_plain_research_direct_output"
 CHECKPOINT_PACKAGE_VERSION = "3.1.1"
 
 MODEL_TIMEOUT_SECONDS = 600

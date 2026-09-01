@@ -179,11 +179,11 @@ def create_run(
                 "fetch_timeout_seconds": FETCH_TIMEOUT_SECONDS,
                 "maximum_source_bytes": MAX_SOURCE_BYTES,
             },
-            # Applied to the five lenses and the citation verifier only. These
-            # shape context size, never model content.
+            # Applied to the looping domain researcher only. These shape
+            # context size, never model content.
             "context_management": {
                 "policy_version": CONTEXT_POLICY_VERSION,
-                "applies_to": "research_subagents",
+                "applies_to": "domain_researcher",
                 "soft_target_tokens": CONTEXT_SOFT_TARGET_TOKENS,
                 "eviction_trigger_tokens": EVICTION_TRIGGER_TOKENS,
                 "eviction_keep_tool_results": EVICTION_KEEP_TOOL_RESULTS,
@@ -239,7 +239,7 @@ def _record(run_id: str, stage: str, actor: str, batch: int, started: str) -> di
 def _execution(run_id: str, started: str) -> dict:
     return {
         "domains": {
-            name: _record(run_id, "coordinator", name, 0, started)
+            name: _record(run_id, "researcher", name, 0, started)
             for name in DOMAIN_NAMES
         },
         "final": _record(run_id, "synthesis", "property-synthesis", 0, started),
