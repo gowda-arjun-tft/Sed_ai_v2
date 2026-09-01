@@ -14,11 +14,14 @@ MODEL_INPUT_TOKEN_LIMIT = 1_050_000
 PROVIDER_MAX_RETRIES = 3
 
 LAYER2_SCHEMA_VERSION = 2
-CHUNK_SIZE_TOKENS = 50_000
-CHUNK_OVERLAP_TOKENS = 5_000
+CHUNK_STRATEGY = "fixed_token_windows"
+CHUNK_INPUT_PARTITIONING = "overlap_context_v1"
+CHUNK_SIZE_TOKENS = 60_000
+CHUNK_OVERLAP_TOKENS = 10_000
 CHUNK_ENCODING = "o200k_base"
 MAX_CHUNK_CONCURRENCY = 5
-CHUNK_SEPARATORS = ("\n## ", "\n### ", "\n\n", "\n", " ", "")
+# Schema-2 runs created before fixed token windows recorded these separators.
+LEGACY_CHUNK_SEPARATORS = ("\n## ", "\n### ", "\n\n", "\n", " ", "")
 
 DEEPAGENTS_VERSION = "0.7.7"
 MODULE_DIR = Path(__file__).resolve().parent

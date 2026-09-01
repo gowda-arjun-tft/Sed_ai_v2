@@ -54,8 +54,10 @@ context remains low.
 .\run.ps1 -Resume '.\runs\<fact-sheet>\L2_YYYYMMDD_HHMMSS_xxxx'
 ```
 
-Layer 2 targets 50,000 tokens per chunk with a 5,000-token overlap and runs at most five independent
-calls concurrently. The reusable graph uses LangChain `ProviderStrategy` with a permissive top-level
+Layer 2 uses fixed 60,000-token source windows with a 10,000-token overlap (50,000-token stride) and
+runs at most five independent calls concurrently. It does not align chunks to headings or
+paragraphs. Repeated overlap is labelled as continuity context so the model allocates output from
+new source content while retaining cross-boundary meaning. The reusable graph uses LangChain
 JSON-object type and has no tools, subagents, memory, checkpointer, summarizer, semantic schema or
 content-repair retry. Transient provider failures receive up to three retries. Responses are saved
 under `chunks/`; resume reuses any JSON object and reruns only failed, missing or invalid JSON.

@@ -10,7 +10,7 @@ from pydantic import RootModel
 
 from .fs import load_json, read_text, slug
 from .harness import build_model, configure_harness
-from .settings import PROMPTS_DIR
+from .settings import CHUNK_INPUT_PARTITIONING, PROMPTS_DIR
 
 
 class Layer2Response(RootModel[dict[str, Any]]):
@@ -58,8 +58,40 @@ def create_chunk_agent(run_dir: Path) -> Any:
     return graph
 
 
-def chunk_request(chunk: str, index: int, total: int) -> str:
-    """Build the single user message for one isolated chunk invocation."""
+def _partition_chunk(
+    chunk: str, index: int, encoding_name: str, overlap_tokens: int
+) -> tuple[str, str]:
+    """Separate repeated source context from new source tokens."""
+    if index == 1:
+        return "", chunk
+    import tiktoken
+
+    encoding = tiktoken.get_encoding(encoding_name)
+    tokens = encoding.encode(chunk)
+    boundary = min(overlap_tokens, len(tokens))
+    return encoding.decode(tokens[:boundary]), encoding.decode(tokens[boundary:])
+
+
+def chunk_request(
+    chunk: str,
+    index: int,
+    total: int,
+    chunking: dict[str, Any] | None = None,
+) -> str:
+    """Build one legacy or overlap-aware isolated chunk invocation."""
+    if (chunking or {}).get("input_partitioning") == CHUNK_INPUT_PARTITIONING:
+        overlap, new = _partition_chunk(
+            chunk,
+            index,
+            str(chunking.get("encoding") or "o200k_base"),
+            int(chunking.get("overlap_tokens") or 0),
+        )
+        return (
+            f'<fact_sheet_chunk index="{index}" total="{total}">\n'
+            f"<overlap_context>\n{overlap}\n</overlap_context>\n"
+            f"<new_content>\n{new}\n</new_content>\n"
+            "</fact_sheet_chunk>"
+        )
     return (
         f'<fact_sheet_chunk index="{index}" total="{total}">\n'
         f"{chunk}\n"

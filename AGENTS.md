@@ -44,8 +44,10 @@ reasoning and low web-search context and verbosity; new runs may select supporte
 freeze those controls in `run.json`. Do not
 restate model, search, token, source, or report limits in prompts.
 
-Layer 2 uses 50K-token chunks, 5K overlap, concurrency five, and no tools, subagents, memory,
-checkpointer, summarizer, semantic response schema, or content-repair retry. Use LangChain
+Layer 2 uses fixed 60K-token chunks, 10K overlap, a 50K stride, concurrency five, and no tools,
+subagents, memory, checkpointer, summarizer, semantic response schema, or content-repair retry.
+The prompt treats overlap as continuity context and allocates output from new source content; Python
+does not deduplicate model output. Use LangChain
 `ProviderStrategy` only to require one top-level JSON object and three provider retries for transient
 transport failures. Accept any keys and nested values, save the object atomically, and merge
 available results in order without semantic verification, deduplication, all-or-nothing publication,

@@ -16,9 +16,10 @@ from .report import run_checks
 from .settings import (
     CHUNK_ENCODING,
     CHUNK_OVERLAP_TOKENS,
-    CHUNK_SEPARATORS,
     CHUNK_SIZE_TOKENS,
+    CHUNK_STRATEGY,
     LAYER2_SCHEMA_VERSION,
+    LEGACY_CHUNK_SEPARATORS,
     MAX_CHUNK_CONCURRENCY,
     AGENT_NAMES,
     PLANNER_PATH,
@@ -42,18 +43,54 @@ def load_dotenv_key(project_dir: Path = REPO_ROOT) -> None:
             return
 
 
-def split_fact_sheet(text: str) -> list[str]:
-    """Split Markdown by model tokens, preferring heading and paragraph boundaries."""
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
+def split_fact_sheet(
+    text: str,
+    *,
+    strategy: str = CHUNK_STRATEGY,
+    encoding: str = CHUNK_ENCODING,
+    size_tokens: int = CHUNK_SIZE_TOKENS,
+    overlap_tokens: int = CHUNK_OVERLAP_TOKENS,
+    separators: list[str] | None = None,
+) -> list[str]:
+    """Split source text using a new or run-frozen token policy."""
+    if size_tokens <= 0 or overlap_tokens < 0 or overlap_tokens >= size_tokens:
+        raise ValueError("invalid Layer 2 chunk size or overlap")
+    if strategy == "fixed_token_windows":
+        from langchain_text_splitters import TokenTextSplitter
 
-    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        encoding_name=CHUNK_ENCODING,
-        chunk_size=CHUNK_SIZE_TOKENS,
-        chunk_overlap=CHUNK_OVERLAP_TOKENS,
-        separators=list(CHUNK_SEPARATORS),
-        keep_separator="start",
-    )
+        splitter = TokenTextSplitter(
+            encoding_name=encoding,
+            chunk_size=size_tokens,
+            chunk_overlap=overlap_tokens,
+        )
+    elif strategy == "recursive_markdown":
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+        splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            encoding_name=encoding,
+            chunk_size=size_tokens,
+            chunk_overlap=overlap_tokens,
+            separators=separators or list(LEGACY_CHUNK_SEPARATORS),
+            keep_separator="start",
+        )
+    else:
+        raise ValueError(f"unsupported Layer 2 chunk strategy: {strategy}")
     return splitter.split_text(text)
+
+
+def _split_run_fact_sheet(run_dir: Path) -> list[str]:
+    """Use the policy frozen in the run, including the pre-fixed-window format."""
+    record = load_json(run_dir / "run.json")
+    chunking = record.get("chunking", {})
+    strategy = chunking.get("strategy") or "recursive_markdown"
+    return split_fact_sheet(
+        read_text(run_dir / "inputs" / "fact_sheet.md"),
+        strategy=strategy,
+        encoding=str(chunking.get("encoding") or CHUNK_ENCODING),
+        size_tokens=int(chunking.get("size_tokens") or CHUNK_SIZE_TOKENS),
+        overlap_tokens=int(chunking.get("overlap_tokens", CHUNK_OVERLAP_TOKENS)),
+        separators=chunking.get("separators"),
+    )
 
 
 def _chunk_path(run_dir: Path, index: int) -> Path:
@@ -159,8 +196,14 @@ async def _run_chunk(
     async with semaphore:
         attempt = await _start_chunk(run_dir, index, lock)
         try:
+            request = chunk_request(
+                chunk,
+                index,
+                total,
+                load_json(run_dir / "run.json").get("chunking", {}),
+            )
             result = await graph.ainvoke(
-                {"messages": [{"role": "user", "content": chunk_request(chunk, index, total)}]},
+                {"messages": [{"role": "user", "content": request}]},
                 config={
                     "callbacks": [
                         UsageCallback(
@@ -221,7 +264,7 @@ def merge_chunks(run_dir: Path, values: list[dict[str, Any]]) -> None:
 
 async def write_missions(run_dir: Path) -> dict[str, int]:
     """Run missing chunks concurrently, save them, and append their outputs."""
-    chunks = split_fact_sheet(read_text(run_dir / "inputs" / "fact_sheet.md"))
+    chunks = _split_run_fact_sheet(run_dir)
     graph = create_chunk_agent(run_dir)
     _record_chunks(run_dir, chunks)
     semaphore = asyncio.Semaphore(MAX_CHUNK_CONCURRENCY)

@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from ML.deep_research.layer2.agent import (
     Layer2Response,
+    _partition_chunk,
     chunk_request,
     create_chunk_agent,
     domain_key,
@@ -16,7 +17,12 @@ from ML.deep_research.layer2.agent import (
 )
 from ML.deep_research.layer2.create_run import create_run
 from ML.deep_research.layer2.harness import build_model
-from ML.deep_research.layer2.settings import AGENT_NAMES, PLANNER_PATH
+from ML.deep_research.layer2.settings import (
+    AGENT_NAMES,
+    CHUNK_ENCODING,
+    CHUNK_INPUT_PARTITIONING,
+    PLANNER_PATH,
+)
 from tests.common import FACT_SHEET
 
 
@@ -74,12 +80,46 @@ class StructuredHarnessTests(unittest.TestCase):
         self.assertIn(AGENT_NAMES[-1], prompt)
         self.assertIn("property-specific risk questions", prompt)
         self.assertIn("Do not restate a domain mandate", prompt)
+        self.assertIn("contained solely", prompt)
+        self.assertIn("completes, changes, contradicts or materially qualifies", prompt)
         self.assertIn("empty mission and empty context", prompt)
         self.assertIn("or an empty string", prompt)
         self.assertNotIn("still receives a non-empty mission", prompt)
         request = chunk_request("## Input\ntext", 2, 3)
         self.assertIn('<fact_sheet_chunk index="2" total="3">', request)
+        self.assertNotIn("<overlap_context>", request)
+        legacy = chunk_request("text", 2, 3, {"strategy": "fixed_token_windows"})
+        self.assertNotIn("<overlap_context>", legacy)
         self.assertNotIn("Return one JSON object", request)
+
+    def test_overlap_aware_request_labels_exact_source_parts(self):
+        import tiktoken
+
+        encoding = tiktoken.get_encoding(CHUNK_ENCODING)
+        token = encoding.encode(" property")[0]
+        chunk = encoding.decode([token] * 60_000)
+        overlap, new = _partition_chunk(chunk, 2, CHUNK_ENCODING, 10_000)
+        self.assertEqual(len(encoding.encode(overlap)), 10_000)
+        self.assertEqual(len(encoding.encode(new)), 50_000)
+        self.assertEqual(encoding.encode(overlap + new), encoding.encode(chunk))
+
+        request = chunk_request(
+            chunk,
+            2,
+            14,
+            {
+                "input_partitioning": CHUNK_INPUT_PARTITIONING,
+                "encoding": CHUNK_ENCODING,
+                "overlap_tokens": 10_000,
+            },
+        )
+        self.assertIn("<overlap_context>", request)
+        self.assertIn("<new_content>", request)
+
+    def test_first_overlap_aware_request_marks_everything_as_new(self):
+        overlap, new = _partition_chunk("first source", 1, CHUNK_ENCODING, 10_000)
+        self.assertEqual(overlap, "")
+        self.assertEqual(new, "first source")
 
     def test_response_accepts_any_json_object_without_content_validation(self):
         value = {"unexpected": {"shape": True}}
