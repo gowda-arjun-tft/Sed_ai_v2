@@ -1,5 +1,1 @@
-"""Split one fact sheet into structured chunks and merge eight CDI missions."""
-
-from .cli import main
-
-__all__ = ["main"]
+"""Route one fact sheet into eight Layer 2 domain-context artifacts."""

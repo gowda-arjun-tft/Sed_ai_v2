@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from ML.deep_research.layer2.fs import (
@@ -12,6 +13,31 @@ from ML.deep_research.layer2.fs import (
 from ML.deep_research.layer2.create_run import create_run
 from ML.deep_research.layer2.mission_markdown import write_mission_markdown
 from ML.deep_research.layer2.settings import AGENT_NAMES, PLANNER_PATH
+
+
+class NativeBatchGraph:
+    """Small fake of Runnable.abatch_as_completed for offline runner tests."""
+
+    async def abatch_as_completed(
+        self, inputs, config=None, *, return_exceptions=False, **_kwargs
+    ):
+        configs = config if isinstance(config, list) else [config] * len(inputs)
+        concurrency = int(configs[0].get("max_concurrency", len(inputs)))
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def invoke(index):
+            async with semaphore:
+                try:
+                    result = await self.ainvoke(inputs[index], config=configs[index])
+                except Exception as exc:
+                    if not return_exceptions:
+                        raise
+                    result = exc
+                return index, result
+
+        tasks = [asyncio.create_task(invoke(index)) for index in range(len(inputs))]
+        for task in asyncio.as_completed(tasks):
+            yield await task
 
 
 FACT_SHEET = """# Property fact sheet
@@ -56,19 +82,8 @@ CONTEXT = [
     },
 ]
 
-SILENT = (
-    "The fact sheet is silent on this subject. Establish the position from "
-    "public sources."
-)
-
-
 def create_complete_run(root: Path) -> Path:
-    """A finished Layer 2 run, built without a model call.
-
-    Stands in for what the agent produces: the run folder, the two input copies,
-    and eight mission files. The first agent gets the facts; the rest get a
-    silent-subject mission, which is a normal outcome.
-    """
+    """Build a complete context-only Layer 2 fixture without a model call."""
     fact_sheet = root / "fact_sheet.md"
     fact_sheet.write_text(FACT_SHEET, encoding="utf-8")
     run_dir = create_run(fact_sheet, PLANNER_PATH, root / "runs")
@@ -88,15 +103,7 @@ def create_complete_run(root: Path) -> Path:
 
     for index, name in enumerate(AGENT_NAMES):
         holds_facts = index == 0
-        mission = {
-            "agent": name,
-            "mission": (
-                "Establish the property position on this subject."
-                if holds_facts
-                else SILENT
-            ),
-            "context": list(CONTEXT) if holds_facts else [],
-        }
+        mission = {"agent": name, "context": list(CONTEXT) if holds_facts else []}
         filename = slug(name)
         write_json(run_dir / "missions" / f"{filename}.json", mission)
         write_mission_markdown(

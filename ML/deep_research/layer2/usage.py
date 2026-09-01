@@ -17,6 +17,7 @@ _LOCK = threading.RLock()
 
 
 def _mapping(value: Any) -> dict[str, Any]:
+    """Input provider metadata; return a plain mapping reused by Layer 3 usage parsing."""
     if isinstance(value, dict):
         return value
     if hasattr(value, "model_dump"):
@@ -28,6 +29,7 @@ def _mapping(value: Any) -> dict[str, Any]:
 
 
 def _detail(values: dict[str, Any], groups: tuple[str, ...], keys: tuple[str, ...]) -> int:
+    """Input token metadata aliases; return the first matching integer detail."""
     for group in groups:
         details = _mapping(values.get(group))
         for key in keys:
@@ -37,6 +39,7 @@ def _detail(values: dict[str, Any], groups: tuple[str, ...], keys: tuple[str, ..
 
 
 def _tokens(values: dict[str, Any]) -> dict[str, int]:
+    """Input provider usage metadata; return normalized token counters for all layers."""
     return {
         "input_tokens": int(values.get("input_tokens", 0) or 0),
         "cached_input_tokens": _detail(
@@ -59,6 +62,7 @@ class UsageCallback(BaseCallbackHandler):
     """Persist usage after every completed chunk response."""
 
     def __init__(self, run_dir: Path, thread_id: str) -> None:
+        """Input run and attempt identity; initialize per-call usage persistence."""
         self.path = run_dir / "usage.jsonl"
         self.thread_id = thread_id
         self._actors: dict[UUID, str] = {}
@@ -67,10 +71,12 @@ class UsageCallback(BaseCallbackHandler):
         self, _serialized: dict[str, Any], _messages: list[list[Any]], *,
         run_id: UUID, metadata: dict[str, Any] | None = None, **_: Any,
     ) -> None:
+        """Input a model-start event; remember its actor for the matching completion."""
         with _LOCK:
             self._actors[run_id] = str((metadata or {}).get("lc_agent_name") or "cdi-layer2")
 
     def on_llm_end(self, response: Any, *, run_id: UUID, **_: Any) -> None:
+        """Input a completed response; append any provider usage rows to usage.jsonl."""
         with _LOCK:
             actor = self._actors.pop(run_id, "cdi-layer2")
             for position, generations in enumerate(response.generations):
@@ -90,6 +96,7 @@ class UsageCallback(BaseCallbackHandler):
 
 
 def summarize_usage(run_dir: Path) -> dict[str, int]:
+    """Input a run path; return cumulative model-call and token totals for reporting."""
     records = []
     if (run_dir / "usage.jsonl").exists():
         for line in read_text(run_dir / "usage.jsonl").splitlines():

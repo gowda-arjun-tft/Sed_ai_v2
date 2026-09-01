@@ -1,6 +1,6 @@
 # CDI Deep Research
 
-CDI turns one structured real-estate fact sheet into research missions, property-risk reports and
+CDI turns one structured real-estate fact sheet into routed domain context, property-risk reports and
 an external-influence landscape. Python runs through the `compute` Conda interpreter at
 `C:\src\anaconda3\envs\compute\python.exe`.
 
@@ -55,16 +55,21 @@ context remains low.
 ```
 
 Layer 2 uses fixed 60,000-token source windows with a 10,000-token overlap (50,000-token stride) and
-runs at most five independent calls concurrently. It does not align chunks to headings or
-paragraphs. Repeated overlap is labelled as continuity context so the model allocates output from
-new source content while retaining cross-boundary meaning. The reusable graph uses LangChain
+runs at most five independent calls concurrently through the graph's native batch interface. It
+does not align chunks to headings or paragraphs. Repeated overlap is labelled as continuity context
+so the model allocates output from new source content while retaining cross-boundary meaning. The reusable graph uses LangChain
 JSON-object type and has no tools, subagents, memory, checkpointer, summarizer, semantic schema or
 content-repair retry. Transient provider failures receive up to three retries. Responses are saved
 under `chunks/`; resume reuses any JSON object and reruns only failed, missing or invalid JSON.
 Python appends available results in order without semantic checking or deduplication, so one failed
 chunk does not block the others. Partial runs print each failed chunk and the resume command.
-Technical checks run only through `--check-only`. `usage.jsonl` records each application attempt
-as it finishes and malformed usage lines are ignored.
+New runs publish only each domain's routed facts and supported meaning; they do not generate a
+separate mission or question section. Layer 2 schema 3 accepts only this fixed-window,
+overlap-partitioned contract; schema-2 artifacts remain unchanged but cannot resume or run checks.
+Technical checks run read-only through `--check-only`. `usage.jsonl` records each application attempt
+as it finishes and malformed usage lines are ignored. `run.log` records append-only operational
+status without prompts, source text, model responses or secrets. The notebook prints one start
+status followed by final status, run path and log path.
 
 ## Layer 3
 

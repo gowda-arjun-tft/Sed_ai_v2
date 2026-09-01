@@ -11,7 +11,6 @@ from ML.deep_research.layer2.agent import (
     _partition_chunk,
     chunk_request,
     create_chunk_agent,
-    domain_key,
     response_value,
     system_prompt,
 )
@@ -20,7 +19,7 @@ from ML.deep_research.layer2.harness import build_model
 from ML.deep_research.layer2.settings import (
     AGENT_NAMES,
     CHUNK_ENCODING,
-    CHUNK_INPUT_PARTITIONING,
+    CHUNK_OVERLAP_TOKENS,
     PLANNER_PATH,
 )
 from tests.common import FACT_SHEET
@@ -43,9 +42,6 @@ class StructuredHarnessTests(unittest.TestCase):
         self.assertEqual(tools, set())
         self.assertIsNone(graph.checkpointer)
         self.assertFalse(any("summar" in name.casefold() for name in graph.nodes))
-
-    def test_domain_keys_remain_stable(self):
-        self.assertEqual(len({domain_key(name) for name in AGENT_NAMES}), 8)
 
     def test_provider_has_no_application_output_cap(self):
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}):
@@ -70,26 +66,38 @@ class StructuredHarnessTests(unittest.TestCase):
         self.assertIs(strategy.schema, Layer2Response)
         self.assertFalse(strategy.schema_spec.strict)
         self.assertEqual(strategy.schema_spec.json_schema["type"], "object")
+        self.assertEqual(strategy.schema_spec.json_schema["properties"], {})
         self.assertTrue(strategy.schema_spec.json_schema["additionalProperties"])
+
+    def test_provider_strategy_binds_the_permissive_schema_without_a_model_call(self):
+        strategy = ProviderStrategy(Layer2Response, strict=False)
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}):
+            model = build_model("medium")
+            bound = model.bind_tools([], **strategy.to_model_kwargs())
+
+        response_format = bound.kwargs["response_format"]
+        self.assertEqual(response_format["type"], "json_schema")
+        self.assertEqual(response_format["json_schema"]["schema"]["properties"], {})
 
     def test_prompt_and_request_keep_roster_separate_from_chunk_data(self):
         prompt = system_prompt(PLANNER_PATH)
         self.assertIn("<routing_contract>", prompt)
-        self.assertIn("# Success criteria", prompt)
         self.assertIn("# Inputs and authority", prompt)
         self.assertIn(AGENT_NAMES[-1], prompt)
-        self.assertIn("property-specific risk questions", prompt)
-        self.assertIn("Do not restate a domain mandate", prompt)
-        self.assertIn("contained solely", prompt)
-        self.assertIn("completes, changes, contradicts or materially qualifies", prompt)
-        self.assertIn("empty mission and empty context", prompt)
-        self.assertIn("or an empty string", prompt)
-        self.assertNotIn("still receives a non-empty mission", prompt)
-        request = chunk_request("## Input\ntext", 2, 3)
+        self.assertIn('"missions": [', prompt)
+        self.assertIn("Produce domain context only", prompt)
+        self.assertIn("Do not reproduce", prompt)
+        self.assertIn("completes, changes, contradicts or materially", prompt)
+        self.assertIn("qualifies information", prompt)
+        self.assertNotIn('"mission":', prompt)
+        self.assertNotIn('"domains":', prompt)
+        self.assertNotIn("write questions", prompt.casefold())
+        request = chunk_request(
+            "## Input\ntext", 2, 3, CHUNK_ENCODING, CHUNK_OVERLAP_TOKENS
+        )
         self.assertIn('<fact_sheet_chunk index="2" total="3">', request)
-        self.assertNotIn("<overlap_context>", request)
-        legacy = chunk_request("text", 2, 3, {"strategy": "fixed_token_windows"})
-        self.assertNotIn("<overlap_context>", legacy)
+        self.assertIn("<overlap_context>", request)
+        self.assertIn("<new_content>", request)
         self.assertNotIn("Return one JSON object", request)
 
     def test_overlap_aware_request_labels_exact_source_parts(self):
@@ -107,11 +115,8 @@ class StructuredHarnessTests(unittest.TestCase):
             chunk,
             2,
             14,
-            {
-                "input_partitioning": CHUNK_INPUT_PARTITIONING,
-                "encoding": CHUNK_ENCODING,
-                "overlap_tokens": 10_000,
-            },
+            CHUNK_ENCODING,
+            10_000,
         )
         self.assertIn("<overlap_context>", request)
         self.assertIn("<new_content>", request)

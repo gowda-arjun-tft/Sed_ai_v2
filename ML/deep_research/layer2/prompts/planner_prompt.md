@@ -2,15 +2,12 @@
 
 ## Domain behavior
 
-All eight agents run for every property. A silent fact sheet is a valid starting point, but silence
-does not justify a generic chunk mission. The standing domain mandate supplies baseline scope in
-Layer 3; each Layer 2 mission contains only property-specific anchors and risk questions created by
-the supplied facts. A general fact is context, not automatically a property risk. This layer
-allocates facts and writes questions; it performs no research.
+Represent all eight domains for every property. Layer 2 only allocates supplied facts and their
+supported meaning; Layer 3 later forms and researches questions under each standing mandate.
 
 A fact may belong to several agents. Copy evidence and interpretations exactly.
 Preserve both sides of every disagreement. Each mandate assigns accountable outcomes; its handoffs
-name evidence that should also reach neighboring missions.
+name evidence that should also reach neighboring domains.
 
 ## Domain definitions
 
@@ -83,25 +80,25 @@ name evidence that should also reach neighboring missions.
 ]
 <!-- AGENTS_JSON_END -->
 
-## Output — mission contract
+## Output — routed context contract
 
-Write exactly one JSON mission per agent, in roster order:
+Return one top-level object whose `missions` array contains one entry per domain in roster order.
+`missions` is only the wire-format envelope; each entry contains routed context, not a research
+mission:
 
 ```json
 {
-  "agent": "exact roster name",
-  "mission": "property-specific anchors and risk questions, or an empty string",
-  "context": [
-    {"section": "fact heading", "fact": "exact evidence", "means": "interpretation"}
+  "missions": [
+    {
+      "agent": "exact roster name",
+      "context": [
+        {"section": "fact heading", "fact": "exact evidence", "means": "interpretation"}
+      ]
+    }
   ]
 }
 ```
 
-Every fact an agent needs becomes one context entry. Preserve each fact and interpretation exactly.
-Route explicit property identifiers to each domain that needs them. A non-empty mission names only
-anchors stated in the chunk and distinct questions created by its facts, anomalies, disagreements
-or missing linkages. Each question identifies the supplied trigger, the current or external
-evidence to test, the possible property or people effect, and the value-transmission channel it may
-reach. Do not restate the standing mandate, summarize the chunk, prescribe a response or invent an
-anchor. An agent whose subject is silent in this chunk receives an empty mission and empty context;
-Layer 3 still runs its standing mandate.
+`context` preserves each required fact and supported interpretation as `section`, `fact` and
+`means`. Do not generate research questions or risk hypotheses. A silent domain receives an empty
+`context`; Layer 3 still runs its standing mandate.

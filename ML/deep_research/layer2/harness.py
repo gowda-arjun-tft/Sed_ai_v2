@@ -1,4 +1,4 @@
-"""Shared Deep Agents model configuration for Layer 2 and Layer 3."""
+"""Shared Deep Agents model configuration for Layers 2, 3, and 4."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from .settings import (
 
 @cache
 def configure_provider() -> None:
-    """Register the shared Responses API profile without an output-token cap."""
+    """Input none; cache the provider profile used by all CDI model builders."""
     from deepagents import ProviderProfile, register_provider_profile
 
     register_provider_profile(
@@ -33,7 +33,7 @@ def configure_provider() -> None:
 
 @cache
 def configure_harness() -> None:
-    """Disable the process-wide implicit general-purpose subagent."""
+    """Input none; cache the no-subagent, no-repair profile used by CDI graphs."""
     from deepagents import (
         GeneralPurposeSubagentProfile,
         HarnessProfile,
@@ -47,20 +47,12 @@ def configure_harness() -> None:
             excluded_middleware=frozenset(
                 {"SummarizationMiddleware", "PatchToolCallsMiddleware"}
             ),
-            tool_description_overrides={
-                "task": (
-                    "Delegate one complete research or verification assignment to a fixed "
-                    "specialist. Available specialists:\n{available_agents}\n"
-                    "Send independent assignments as multiple task calls in one response. "
-                    "Each specialist sees only its assignment and returns one Markdown report."
-                )
-            },
         ),
     )
 
 
 def build_model(reasoning_effort: str = REASONING_EFFORT) -> Any:
-    """Build the fixed Layer 2 model; the agent owns its response format."""
+    """Input reasoning effort; return the fixed provider model used by CDI agents."""
     from deepagents.profiles.provider import apply_provider_profile
     from langchain.chat_models import init_chat_model
 

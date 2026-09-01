@@ -2,15 +2,17 @@
 
 ## Project Structure & Module Organization
 
-`ML/deep_research/layer2/` splits Markdown fact sheets and merges available JSON chunk responses
-into eight mission files. `ML/deep_research/layer3/` runs eight direct domain researchers
+`ML/deep_research/layer2/` splits Markdown fact sheets, runs chunks through the graph's native batch
+interface, and merges available JSON responses into eight routed-context files. Its CLI is only an adapter;
+operational events go to each run's `run.log`. `ML/deep_research/layer3/` runs eight direct domain researchers
 sequentially, then one property synthesis. `ML/deep_research/layer4/` segregates each domain report
 through two tool-free calls, reuses the direct researcher for external influences, then synthesizes
 the available external reports. Prompts sit below each layer; design notes are in
 `ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
 Group new runs as `runs/<parent>-<markdown-name>-<short-path-id>/L2_*` and place the derived `L3_*`
-beside its Layer 2 source. Keep legacy flat run folders resumable.
+beside its Layer 2 source. Existing schema-2 Layer 2 artifacts are read-only; start a schema-3 run
+for new routing or resume work.
 
 ## Build, Test, and Development Commands
 
@@ -46,12 +48,17 @@ restate model, search, token, source, or report limits in prompts.
 
 Layer 2 uses fixed 60K-token chunks, 10K overlap, a 50K stride, concurrency five, and no tools,
 subagents, memory, checkpointer, summarizer, semantic response schema, or content-repair retry.
+The runner reads concurrency from frozen run metadata and uses `abatch_as_completed`; do not add a
+second semaphore or task scheduler.
 The prompt treats overlap as continuity context and allocates output from new source content; Python
 does not deduplicate model output. Use LangChain
 `ProviderStrategy` only to require one top-level JSON object and three provider retries for transient
 transport failures. Accept any keys and nested values, save the object atomically, and merge
 available results in order without semantic verification, deduplication, all-or-nothing publication,
 or automatic completion checks.
+Layer 2 schema 3 routes facts and supported meaning through one `missions` wire envelope without an
+inner `mission` field. It supports only the frozen fixed-window and overlap-partitioned contract;
+schema-2 runs are not resumed or checked by the Layer 2 CLI.
 
 ## Model-Output Freedom
 

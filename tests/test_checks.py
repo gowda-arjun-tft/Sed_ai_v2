@@ -21,6 +21,8 @@ class ReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = create_complete_run(Path(temporary))
             self.assertEqual(main(["--check-only", str(run_dir)]), 0)
+            self.assertFalse((run_dir / "run.log").exists())
+            self.assertFalse((run_dir / "check_report.md").exists())
 
     def test_a_missing_mission_is_reported_without_changing_run_status(self):
         with tempfile.TemporaryDirectory() as temporary:

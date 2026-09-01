@@ -36,12 +36,14 @@ class StructureTests(unittest.TestCase):
         ):
             self.assertIn(control, notebook_text)
         self.assertIn("C07_PLAIN_RESEARCH_EVIDENCE_HARDENED_HIGH", notebook_text)
-        for control in (
-            "LAYER4_MODEL_REASONING_EFFORT",
-            "LAYER4_WEB_SEARCH_DEPTH",
-            "LAYER4_WEB_SEARCH_VERBOSITY",
-        ):
-            self.assertIn(f'{control} = "low"', notebook_text)
+        self.assertRegex(
+            notebook_text,
+            r'LAYER4_MODEL_REASONING_EFFORT = "(?:low|medium|high|max)"',
+        )
+        for control in ("LAYER4_WEB_SEARCH_DEPTH", "LAYER4_WEB_SEARCH_VERBOSITY"):
+            self.assertRegex(
+                notebook_text, rf'{control} = "(?:low|medium|high)"'
+            )
         self.assertIn(
             'candidate.get("reasoning_effort") == LAYER4_MODEL_REASONING_EFFORT',
             notebook_text,
@@ -58,6 +60,24 @@ class StructureTests(unittest.TestCase):
         self.assertIn("run_layer4", notebook_text)
         self.assertNotIn("Source Scout", notebook_text)
         self.assertNotIn("clarification", notebook_text.casefold())
+        layer2_text = "".join(cells[0]["source"])
+        self.assertIn(r'FACT_SHEET_PATH = Path(r"inputs\fact_sheet.md")', layer2_text)
+        self.assertIn('print("Layer 2: running")', layer2_text)
+        self.assertIn('print("Layer 2: complete")', layer2_text)
+        self.assertIn("asyncio.to_thread(run_layer2, L2_RUN)", layer2_text)
+        self.assertIn("run.log", layer2_text)
+        for retired in (
+            "PREVIEW_MISSION",
+            "Recorded Layer 2 usage",
+            "Mission preview",
+            "display(JSON",
+            "display(Markdown",
+            "clear_output",
+            "L2_TASK",
+            "while not",
+            "summary =",
+        ):
+            self.assertNotIn(retired, layer2_text)
         for cell in cells:
             compile(
                 "".join(cell["source"]),
@@ -75,6 +95,21 @@ class StructureTests(unittest.TestCase):
             prefix = f"{package.__name__}."
             for module in pkgutil.walk_packages(package.__path__, prefix):
                 importlib.import_module(module.name)
+
+    def test_layer2_production_functions_have_docstrings_and_less_code(self):
+        root = REPO_ROOT / "ML" / "deep_research" / "layer2"
+        missing = []
+        total_lines = 0
+        for path in sorted(root.glob("*.py")):
+            source = path.read_text(encoding="utf-8-sig")
+            total_lines += len(source.splitlines())
+            tree = ast.parse(source, filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if ast.get_docstring(node) is None:
+                        missing.append(f"{path.name}:{node.lineno}:{node.name}")
+        self.assertEqual(missing, [])
+        self.assertLess(total_lines, 1305)
 
     def test_retired_layer3_phase_controller_is_gone(self):
         root = REPO_ROOT / "ML" / "deep_research" / "layer3"

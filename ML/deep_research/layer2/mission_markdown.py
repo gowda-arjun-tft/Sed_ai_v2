@@ -1,4 +1,4 @@
-"""Deterministic Markdown view of one authoritative mission JSON object."""
+"""Render one authoritative domain-context JSON object as Markdown."""
 
 from __future__ import annotations
 
@@ -9,27 +9,21 @@ from .fs import atomic_write_text
 
 
 def _text(value: Any) -> str:
+    """Input any routed value; return display text used by the Markdown renderer."""
     return value if isinstance(value, str) else "" if value is None else str(value)
 
 
-def render_mission_markdown(mission: dict[str, Any]) -> str:
-    """Group complete context entries by exact section without rewriting them."""
+def render_mission_markdown(domain: dict[str, Any]) -> str:
+    """Input one domain object; return context grouped by exact source section."""
     groups: dict[str, list[dict[str, Any]]] = {}
-    context = mission.get("context")
+    context = domain.get("context")
     for value in context if isinstance(context, list) else []:
         entry = value if isinstance(value, dict) else {"fact": value, "means": ""}
         section = entry.get("section")
         heading = section if isinstance(section, str) and section else "Unsectioned"
         groups.setdefault(heading, []).append(entry)
 
-    lines = [
-        f"# {_text(mission.get('agent')) or 'Mission'}",
-        "",
-        "## Mission",
-        "",
-        _text(mission.get("mission")),
-        "",
-    ]
+    lines = [f"# {_text(domain.get('agent')) or 'Domain'}", ""]
     for section, entries in groups.items():
         lines.extend([f"## {section}", ""])
         for entry in entries:
@@ -41,5 +35,6 @@ def render_mission_markdown(mission: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_mission_markdown(path: Path, mission: dict[str, Any]) -> None:
-    atomic_write_text(path, render_mission_markdown(mission))
+def write_mission_markdown(path: Path, domain: dict[str, Any]) -> None:
+    """Input a path and domain object; atomically save its Markdown handoff for Layer 3."""
+    atomic_write_text(path, render_mission_markdown(domain))

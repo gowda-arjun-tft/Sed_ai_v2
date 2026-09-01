@@ -1,18 +1,4 @@
-"""Load the human-authored domain roster embedded in the planner prompt.
-
-`prompts/planner_prompt.md` is two things at once: prose the agent reads as part
-of its system prompt, and a machine-readable list of the eight agent
-definitions embedded in it between two HTML comments.
-
-```markdown
-<!-- AGENTS_JSON_START -->
-[{"name": "...", "mandate": "...", "handoffs": ["..."]}, ...]
-<!-- AGENTS_JSON_END -->
-```
-
-One file keeps the definitions the agent reads and the definitions used for
-mission filenames together.
-"""
+"""Load the trusted eight-domain roster embedded in the planner prompt."""
 
 from __future__ import annotations
 
@@ -25,11 +11,7 @@ from .fs import read_text
 
 
 def load_planner(path: Path) -> tuple[str, list[dict[str, Any]]]:
-    """Read the planner prompt and return `(full text, agent definitions)`.
-
-    Only the JSON envelope is parsed. Domain quality and completeness remain a
-    prompt concern rather than an execution gate.
-    """
+    """Input a planner path; return its full prompt and roster for prompting and setup."""
     text = read_text(path)
     match = re.search(
         r"<!-- AGENTS_JSON_START -->\s*(.*?)\s*<!-- AGENTS_JSON_END -->",

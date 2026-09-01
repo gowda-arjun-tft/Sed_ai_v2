@@ -1,47 +1,31 @@
 import asyncio
 import contextlib
 import io
-import json
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
-from uuid import uuid4
 
-from ML.deep_research.layer2.agent import Layer2Response, domain_key
-from ML.deep_research.layer2.cli import main, merge_chunks, run_all, write_missions
+from ML.deep_research.layer2.agent import Layer2Response
+from ML.deep_research.layer2.cli import main
 from ML.deep_research.layer2.create_run import create_run
 from ML.deep_research.layer2.fs import load_json, slug, write_json
 from ML.deep_research.layer2.mission_markdown import render_mission_markdown
+from ML.deep_research.layer2.runner import merge_chunks, run_all, write_missions
 from ML.deep_research.layer2.settings import AGENT_NAMES, PLANNER_PATH
-from ML.deep_research.layer2.usage import UsageCallback, summarize_usage
-from tests.common import FACT_SHEET
+from tests.common import FACT_SHEET, NativeBatchGraph
 
 
 def _batch(label: str):
     return {
-        domain_key(name): {
-            "mission": f"mission-{label}-{index}",
-            "context": [{"section": "S", "fact": label, "means": "M"}],
-        }
-        for index, name in enumerate(AGENT_NAMES)
-    }
-
-
-def _wrapped_batch(label: str):
-    batch = _batch(label)
-    return {
         "missions": [
-            {"agent": name, **batch[domain_key(name)]}
+            {
+                "agent": name,
+                "context": [{"section": "S", "fact": label, "means": "M"}],
+            }
             for name in AGENT_NAMES
         ]
     }
-
-
-def _named_batch(label: str):
-    batch = _batch(label)
-    return {name: batch[domain_key(name)] for name in AGENT_NAMES}
 
 
 def _result(label: str):
@@ -61,14 +45,15 @@ class ParallelRunnerTests(unittest.TestCase):
             mission = load_json(run_dir / "missions" / f"{slug(AGENT_NAMES[0])}.json")
             markdown = run_dir / "mission_md" / f"{slug(AGENT_NAMES[0])}.md"
             self.assertTrue(markdown.is_file())
-        self.assertEqual(mission["mission"], "mission-same-0\n\nmission-same-0")
+            markdown_text = markdown.read_text(encoding="utf-8")
+        self.assertNotIn("mission", mission)
+        self.assertNotIn("## Mission", markdown_text)
         self.assertEqual([item["fact"] for item in mission["context"]], ["same", "same"])
         self.assertNotIn("where", mission["context"][0])
 
     def test_mission_markdown_groups_exact_sections_without_rewriting(self):
         mission = {
             "agent": "Test domain",
-            "mission": "Use every supplied fact.",
             "context": [
                 {
                     "section": "Smoke extraction",
@@ -86,10 +71,6 @@ class ParallelRunnerTests(unittest.TestCase):
         self.assertEqual(
             markdown,
             """# Test domain
-
-## Mission
-
-Use every supplied fact.
 
 ## Smoke extraction
 
@@ -110,23 +91,18 @@ Use every supplied fact.
         for removed in ("### Entry", "Fact:", "Means:"):
             self.assertNotIn(removed, markdown)
 
-    def test_merge_accepts_wrapped_and_exact_domain_name_outputs(self):
+    def test_unexpected_json_shape_does_not_block_available_context(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = self._run(Path(temporary))
-            merge_chunks(run_dir, [_wrapped_batch("wrapped"), _named_batch("named")])
+            merge_chunks(run_dir, [_batch("available"), {"unexpected": True}])
             mission = load_json(
                 run_dir / "missions" / f"{slug(AGENT_NAMES[0])}.json"
             )
-        self.assertEqual(
-            mission["mission"], "mission-wrapped-0\n\nmission-named-0"
-        )
-        self.assertEqual(
-            [item["fact"] for item in mission["context"]],
-            ["wrapped", "named"],
-        )
+        self.assertNotIn("mission", mission)
+        self.assertEqual([item["fact"] for item in mission["context"]], ["available"])
 
-    def test_seven_chunks_run_with_at_most_five_concurrent_calls(self):
-        class Graph:
+    def test_runner_uses_frozen_max_concurrency(self):
+        class Graph(NativeBatchGraph):
             active = 0
             maximum = 0
 
@@ -140,17 +116,39 @@ Use every supplied fact.
         graph = Graph()
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = self._run(Path(temporary))
+            record = load_json(run_dir / "run.json")
+            record["chunking"]["max_concurrency"] = 3
+            write_json(run_dir / "run.json", record)
             with (
-                patch("ML.deep_research.layer2.cli.split_fact_sheet", return_value=list("1234567")),
-                patch("ML.deep_research.layer2.cli.create_chunk_agent", return_value=graph),
+                patch("ML.deep_research.layer2.runner.split_fact_sheet", return_value=list("1234567")),
+                patch("ML.deep_research.layer2.runner.create_chunk_agent", return_value=graph),
             ):
                 asyncio.run(write_missions(run_dir))
             record = load_json(run_dir / "run.json")
-        self.assertEqual(graph.maximum, 5)
+        self.assertEqual(graph.maximum, 3)
         self.assertTrue(all(item["status"] == "complete" for item in record["chunking"]["chunks"]))
 
+    def test_out_of_order_batch_merges_in_source_order(self):
+        class Graph(NativeBatchGraph):
+            async def ainvoke(self, value, **_kwargs):
+                first = 'index="1"' in value["messages"][0]["content"]
+                if first:
+                    await asyncio.sleep(0.02)
+                return _result("first" if first else "second")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._run(Path(temporary))
+            with (
+                patch("ML.deep_research.layer2.runner.split_fact_sheet", return_value=["one", "two"]),
+                patch("ML.deep_research.layer2.runner.create_chunk_agent", return_value=Graph()),
+            ):
+                asyncio.run(write_missions(run_dir))
+            mission = load_json(run_dir / "missions" / f"{slug(AGENT_NAMES[0])}.json")
+
+        self.assertEqual([item["fact"] for item in mission["context"]], ["first", "second"])
+
     def test_resume_reuses_schema_different_json_and_reruns_only_invalid_json(self):
-        class Graph:
+        class Graph(NativeBatchGraph):
             calls = 0
 
             async def ainvoke(self, *_args, **_kwargs):
@@ -169,8 +167,8 @@ Use every supplied fact.
             write_json(run_dir / "run.json", record)
             graph = Graph()
             with (
-                patch("ML.deep_research.layer2.cli.split_fact_sheet", return_value=["one", "two"]),
-                patch("ML.deep_research.layer2.cli.create_chunk_agent", return_value=graph),
+                patch("ML.deep_research.layer2.runner.split_fact_sheet", return_value=["one", "two"]),
+                patch("ML.deep_research.layer2.runner.create_chunk_agent", return_value=graph),
             ):
                 asyncio.run(write_missions(run_dir))
             mission = load_json(run_dir / "missions" / f"{slug(AGENT_NAMES[0])}.json")
@@ -181,7 +179,7 @@ Use every supplied fact.
         self.assertEqual([item["attempt"] for item in record["chunking"]["chunks"]], [0, 1])
 
     def test_one_failed_chunk_does_not_block_available_missions(self):
-        class Graph:
+        class Graph(NativeBatchGraph):
             async def ainvoke(self, value, **_kwargs):
                 if 'index="1"' in value["messages"][0]["content"]:
                     raise RuntimeError("transport failed")
@@ -190,8 +188,8 @@ Use every supplied fact.
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = self._run(Path(temporary))
             with (
-                patch("ML.deep_research.layer2.cli.split_fact_sheet", return_value=["one", "two"]),
-                patch("ML.deep_research.layer2.cli.create_chunk_agent", return_value=Graph()),
+                patch("ML.deep_research.layer2.runner.split_fact_sheet", return_value=["one", "two"]),
+                patch("ML.deep_research.layer2.runner.create_chunk_agent", return_value=Graph()),
             ):
                 asyncio.run(write_missions(run_dir))
             record = load_json(run_dir / "run.json")
@@ -206,19 +204,19 @@ Use every supplied fact.
             record["chunking"]["summary"],
             {"total": 2, "completed": 1, "failed": 1},
         )
-        self.assertEqual(mission["mission"], "mission-available-0")
+        self.assertNotIn("mission", mission)
 
     def test_resume_retries_only_failed_chunk_with_a_new_attempt(self):
         callbacks = []
 
-        class FirstGraph:
+        class FirstGraph(NativeBatchGraph):
             async def ainvoke(self, value, **kwargs):
                 callbacks.append(kwargs["config"]["callbacks"][0].thread_id)
                 if 'index="1"' in value["messages"][0]["content"]:
                     raise RuntimeError("temporary")
                 return _result("saved")
 
-        class ResumeGraph:
+        class ResumeGraph(NativeBatchGraph):
             calls = 0
 
             async def ainvoke(self, _value, **kwargs):
@@ -229,14 +227,14 @@ Use every supplied fact.
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = self._run(Path(temporary))
             with (
-                patch("ML.deep_research.layer2.cli.split_fact_sheet", return_value=["one", "two"]),
-                patch("ML.deep_research.layer2.cli.create_chunk_agent", return_value=FirstGraph()),
+                patch("ML.deep_research.layer2.runner.split_fact_sheet", return_value=["one", "two"]),
+                patch("ML.deep_research.layer2.runner.create_chunk_agent", return_value=FirstGraph()),
             ):
                 asyncio.run(write_missions(run_dir))
             resumed = ResumeGraph()
             with (
-                patch("ML.deep_research.layer2.cli.split_fact_sheet", return_value=["one", "two"]),
-                patch("ML.deep_research.layer2.cli.create_chunk_agent", return_value=resumed),
+                patch("ML.deep_research.layer2.runner.split_fact_sheet", return_value=["one", "two"]),
+                patch("ML.deep_research.layer2.runner.create_chunk_agent", return_value=resumed),
             ):
                 asyncio.run(write_missions(run_dir))
             record = load_json(run_dir / "run.json")
@@ -270,7 +268,7 @@ Use every supplied fact.
                 result = main(["--resume", str(run_dir)])
 
         self.assertEqual(result, 0)
-        self.assertIn("published partial missions", output.getvalue())
+        self.assertIn("published partial domain context", output.getvalue())
         self.assertIn("Chunk 1 attempt 2: APIConnectionError: connection failed", output.getvalue())
         self.assertIn(f'.\\run.ps1 -Resume "{run_dir.resolve()}"', output.getvalue())
 
@@ -280,68 +278,52 @@ Use every supplied fact.
             with (
                 patch.dict("os.environ", {"OPENAI_API_KEY": "test"}),
                 patch(
-                    "ML.deep_research.layer2.cli.write_missions",
+                    "ML.deep_research.layer2.runner.write_missions",
                     new=AsyncMock(return_value={"model_calls": 1}),
                 ),
                 patch("ML.deep_research.layer2.cli.run_checks") as checks,
             ):
                 usage = run_all(run_dir)
             record = load_json(run_dir / "run.json")
+            log = (run_dir / "run.log").read_text(encoding="utf-8")
 
         checks.assert_not_called()
         self.assertEqual(usage, {"model_calls": 1})
         self.assertEqual(record["status"], "complete")
         self.assertNotIn("checks", record)
+        self.assertIn("run_started", log)
+        self.assertIn("run_complete", log)
 
-    def test_legacy_resume_is_rejected_clearly(self):
+    def test_resume_appends_one_log_sequence_without_duplicate_handlers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._run(Path(temporary))
+            with (
+                patch.dict("os.environ", {"OPENAI_API_KEY": "secret-value"}),
+                patch(
+                    "ML.deep_research.layer2.runner.write_missions",
+                    new=AsyncMock(return_value={"model_calls": 0}),
+                ),
+            ):
+                run_all(run_dir)
+                run_all(run_dir)
+            log = (run_dir / "run.log").read_text(encoding="utf-8")
+
+        self.assertEqual(log.count("run_started"), 1)
+        self.assertEqual(log.count("run_resumed"), 1)
+        self.assertEqual(log.count("run_complete"), 2)
+        self.assertNotIn("secret-value", log)
+
+    def test_schema_two_resume_and_check_are_rejected_without_mutation(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = self._run(Path(temporary))
             record = load_json(run_dir / "run.json")
-            record.pop("schema_version")
+            record["schema_version"] = 2
             write_json(run_dir / "run.json", record)
-            with self.assertRaises(SystemExit) as caught:
-                main(["--resume", str(run_dir)])
-        self.assertEqual(caught.exception.code, 2)
-
-
-class UsageRecordTests(unittest.TestCase):
-    def test_concurrent_callback_records_and_sums_usage(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = Path(temporary)
-            callback = UsageCallback(run_dir, "chunk-0001")
-            run_id = uuid4()
-            callback.on_chat_model_start({}, [], run_id=run_id, metadata={})
-            message = SimpleNamespace(
-                name=None,
-                usage_metadata={
-                    "input_tokens": 1200,
-                    "output_tokens": 300,
-                    "total_tokens": 1500,
-                    "input_token_details": {"cache_read": 400},
-                    "output_token_details": {"reasoning": 200},
-                },
-            )
-            callback.on_llm_end(
-                SimpleNamespace(generations=[[SimpleNamespace(message=message)]]),
-                run_id=run_id,
-            )
-            rows = [json.loads(line) for line in (run_dir / "usage.jsonl").read_text().splitlines()]
-            summary = summarize_usage(run_dir)
-        self.assertEqual(rows[0]["thread_id"], "chunk-0001")
-        self.assertEqual(summary["input_tokens"], 1200)
-        self.assertEqual(summary["reasoning_output_tokens"], 200)
-
-    def test_malformed_usage_line_is_ignored(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = Path(temporary)
-            (run_dir / "usage.jsonl").write_text(
-                'not json\n{"input_tokens": 12, "output_tokens": 3}\n',
-                encoding="utf-8",
-            )
-            summary = summarize_usage(run_dir)
-        self.assertEqual(summary["model_calls"], 1)
-        self.assertEqual(summary["input_tokens"], 12)
-
-
+            before = (run_dir / "run.json").read_bytes()
+            for option in ("--resume", "--check-only"):
+                with self.subTest(option=option), self.assertRaises(SystemExit) as caught:
+                    main([option, str(run_dir)])
+                self.assertEqual(caught.exception.code, 2)
+            self.assertEqual((run_dir / "run.json").read_bytes(), before)
 if __name__ == "__main__":
     unittest.main()
