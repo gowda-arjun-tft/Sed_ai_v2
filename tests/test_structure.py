@@ -35,7 +35,10 @@ class StructureTests(unittest.TestCase):
             "LAYER4_RETRY_FAILED",
         ):
             self.assertIn(control, notebook_text)
-        self.assertIn("C07_PLAIN_RESEARCH_EVIDENCE_HARDENED_HIGH", notebook_text)
+        self.assertRegex(
+            notebook_text,
+            r'LAYER4_SOURCE_RUN_PATH = r"runs\\[^"\r\n]+\\L3_[^"\r\n]+"',
+        )
         self.assertRegex(
             notebook_text,
             r'LAYER4_MODEL_REASONING_EFFORT = "(?:low|medium|high|max)"',
@@ -61,7 +64,10 @@ class StructureTests(unittest.TestCase):
         self.assertNotIn("Source Scout", notebook_text)
         self.assertNotIn("clarification", notebook_text.casefold())
         layer2_text = "".join(cells[0]["source"])
-        self.assertIn(r'FACT_SHEET_PATH = Path(r"inputs\fact_sheet.md")', layer2_text)
+        self.assertRegex(
+            layer2_text,
+            r'FACT_SHEET_PATH = Path\(r"inputs\\[^"\r\n]+\.md"\)',
+        )
         self.assertIn('print("Layer 2: running")', layer2_text)
         self.assertIn('print("Layer 2: complete")', layer2_text)
         self.assertIn("asyncio.to_thread(run_layer2, L2_RUN)", layer2_text)

@@ -5,9 +5,13 @@
 Represent all eight domains for every property. Layer 2 only allocates supplied facts and their
 supported meaning; Layer 3 later forms and researches questions under each standing mandate.
 
-A fact may belong to several agents. Copy evidence and interpretations exactly.
-Preserve both sides of every disagreement. Each mandate assigns accountable outcomes; its handoffs
-name evidence that should also reach neighboring domains.
+Route composite facts to every materially relevant domain without turning them into risk claims.
+Preserve applicability exactly as `Installed`, `Specified`, `Approved alternative`,
+`Historic catalogue entry`, `Proposed` or `Unknown applicability`. Never infer an installed asset
+condition from a specification, approval, permitted alternative, catalogue or listing. Keep `fact`
+as supplied evidence and `means` as its neutral supported meaning for that domain. Preserve both
+sides of every disagreement. Each mandate assigns accountable outcomes; its handoffs name evidence
+that should also reach neighboring domains.
 
 ## Domain definitions
 

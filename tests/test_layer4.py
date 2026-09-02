@@ -45,7 +45,8 @@ def _new_l4(root: Path) -> tuple[Path, Path]:
 
 
 class Layer4RunTests(unittest.TestCase):
-    def test_source_layer3_contract_is_frozen_for_layer4_schema_one(self):
+    def test_source_layer3_contract_is_frozen_for_layer4_schema_two(self):
+        self.assertEqual(SCHEMA_VERSION, 2)
         self.assertEqual(LAYER3_SCHEMA_VERSION, 8)
         self.assertEqual(LAYER3_HARNESS_NAME, "domain_plain_research_direct_output")
 
@@ -193,33 +194,78 @@ class Layer4PromptTests(unittest.TestCase):
             researcher = researcher_system_prompt(run_dir)
             synthesis = synthesis_system_prompt(run_dir)
 
-        self.assertIn("Do not perform new research", internal)
+        self.assertIn("not perform new research", internal)
         self.assertIn("Preserve `Established risk`", internal)
-        self.assertIn("Status: Unresearched candidate", candidates)
-        self.assertIn("Create a candidate only when it connects", candidates)
+        self.assertIn("not input to external research", internal)
+        self.assertNotIn("`## Evidence gaps`", internal)
+        self.assertIn("## Prioritized external factors", candidates)
+        self.assertIn("## Research brief", candidates)
+        self.assertIn("Account for every material Layer 3 dependency once", candidates)
+        self.assertIn("No grounded external factor", candidates)
+        self.assertIn("exact Layer 3 dependency", candidates)
+        self.assertIn("direct, indirect, compound and cascading pathways", candidates)
+        self.assertIn("Allow a pathway to branch, converge", candidates)
+        self.assertIn("without a plausible Layer 3", candidates)
+        self.assertIn("geographic scales", candidates)
+        self.assertIn("time horizons", candidates)
+        self.assertNotIn("Status: Unresearched candidate", candidates)
+        self.assertNotIn("## No candidate pathway established", candidates)
+        self.assertNotIn("- `Research questions`", candidates)
+        self.assertNotIn("- `Searchable anchors`", candidates)
         self.assertIn("search_web", researcher)
         self.assertIn("canonical content successfully returned by `read_source`", researcher)
-        self.assertIn("external root cause → intermediate event → transmission channel", researcher)
+        self.assertIn("neither evidence nor a discovery", researcher)
+        self.assertIn("reject, combine, extend or independently discover", researcher)
+        self.assertIn("geographic or sector manifestation", researcher)
+        self.assertIn("asset vulnerability or resilience", researcher)
+        self.assertIn("reinforcing", researcher)
+        self.assertIn("balancing feedback effects", researcher)
+        self.assertIn("consecutively numbered list, starting at 1", researcher)
+        self.assertIn("supported within-domain branching", researcher)
+        self.assertIn("Do not create empty sections or fixed field blocks", researcher)
+        self.assertNotIn("Likelihood: Low | Medium | High | Unknown", researcher)
         for label in (
             "Established external influence",
             "Conditional external pathway",
+            "Property dependency without proven adverse external event",
             "Context only",
             "Evidence gap",
         ):
             self.assertIn(label, researcher)
             self.assertIn(label, synthesis)
         self.assertIn("Do not perform new research", synthesis)
-        self.assertIn("Merge reports only when", synthesis)
+        self.assertIn("Merge findings only when", synthesis)
+        self.assertIn("Relate rather than merge one shared driver", synthesis)
+        self.assertIn("different external drivers that converge", synthesis)
+        self.assertIn("derive cross-domain structural relationships", synthesis)
+        self.assertIn("Do not invent an external driver", synthesis)
+        self.assertIn("Do not independently re-rate", synthesis)
+        self.assertIn("## Executive external-risk picture", synthesis)
+        self.assertIn("## Numbered external-influence register", synthesis)
+        self.assertIn("## Shared external drivers", synthesis)
+        self.assertIn("## Divergent and converging pathways", synthesis)
+        self.assertIn("## Compound and cascading exposures", synthesis)
+        self.assertIn("## Material uncertainty, evidence gaps and context", synthesis)
+        self.assertIn("consecutively from 1 in the register", synthesis)
+        self.assertIn("combine or omit an empty section", synthesis)
+        self.assertIn("amplification or buffering effects", synthesis)
+        self.assertNotIn("- `External driver`", synthesis)
+        self.assertNotIn("`## Evidence gaps`", synthesis)
 
     def test_dynamic_inputs_are_delimited_and_synthesis_is_fixed_order(self):
         internal = internal_message("D", "L3")
-        candidates = candidate_message("D", "L3", "INTERNAL")
-        research = researcher_message("D", "INTERNAL", "CANDIDATES")
+        candidates = candidate_message("D", "L3")
+        research = researcher_message("D", "L3", "CANDIDATES")
         combined = synthesis_message({DOMAIN_NAMES[0]: "AVAILABLE"})
 
         self.assertIn("<layer3_domain_report>\nL3", internal)
-        self.assertIn("<internal_conditions_report>\nINTERNAL", candidates)
-        self.assertIn("<external_candidates_report>\nCANDIDATES", research)
+        self.assertIn("<asset_context>\nL3", candidates)
+        self.assertIn("<asset_context>\nL3", research)
+        self.assertIn("<external_research_brief>\nCANDIDATES", research)
+        self.assertNotIn("internal_conditions_report", candidates)
+        self.assertNotIn("internal_conditions_report", research)
+        self.assertEqual(candidates.count("L3"), 1)
+        self.assertEqual(research.count("L3"), 1)
         positions = [combined.index(f"<domain_name>\n{name}\n") for name in DOMAIN_NAMES]
         self.assertEqual(positions, sorted(positions))
         self.assertEqual(combined.count(MISSING_EXTERNAL_REPORT), len(DOMAIN_NAMES) - 1)

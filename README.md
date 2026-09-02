@@ -10,8 +10,9 @@ an external-influence landscape. Python runs through the `compute` Conda interpr
   JSON-mode Deep Agent calls, then appends available domain results in source order.
 - `ML/deep_research/layer3/` runs eight direct domain researchers sequentially. Each uses the two
   evidence tools and writes one domain report before property synthesis.
-- `ML/deep_research/layer4/` separates internal conditions, forms unresearched external candidates,
-  reuses the direct researcher for external pathways, and writes one cross-domain synthesis.
+- `ML/deep_research/layer4/` stores internal conditions, maps external-factor briefs directly from
+  Layer 3, researches those pathways with full property context, and writes one cross-domain
+  synthesis.
 - `ML/deep_research/docs/` contains archived run-verification and redesign notes; the root
   architecture HTML records the previous schema-7 design.
 - `tests/` contains model-free unit and fabricated end-to-end run tests.
@@ -113,11 +114,12 @@ Resume an interrupted run, or retry only failed model stages from their checkpoi
 .\run.ps1 -ResumeL4 '.\runs\<fact-sheet>\L4_YYYYMMDD_HHMMSS_xxxx' -RetryFailed
 ```
 
-For each domain, Layer 4 makes one tool-free internal-segregation call, one tool-free
-external-candidate call, and one direct external-research run with only `search_web` and
-`read_source`. It copies the source Layer 3 model, web and context settings into its own run,
-checkpoints, source store and usage log. The final synthesis is tool-free. All completed Markdown is
-saved verbatim; Python does not grade, repair or retry completed content.
+Layer 4 schema 2 sends the frozen Layer 3 domain report independently to two sequential, tool-free
+calls. The internal result is a stored user-facing artifact only. The candidate result is a compact
+external-factor research brief. The direct external researcher receives the unchanged Layer 3
+report plus that brief and exposes only `search_web` and `read_source`; final synthesis is
+tool-free. Schema-1 runs remain immutable comparison artifacts and cannot resume in schema 2. All
+completed Markdown is saved verbatim; Python does not grade, repair or retry completed content.
 
 ## Validation
 

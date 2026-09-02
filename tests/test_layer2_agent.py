@@ -81,11 +81,30 @@ class StructuredHarnessTests(unittest.TestCase):
 
     def test_prompt_and_request_keep_roster_separate_from_chunk_data(self):
         prompt = system_prompt(PLANNER_PATH)
+        flat_prompt = " ".join(prompt.split())
         self.assertIn("<routing_contract>", prompt)
         self.assertIn("# Inputs and authority", prompt)
         self.assertIn(AGENT_NAMES[-1], prompt)
         self.assertIn('"missions": [', prompt)
         self.assertIn("Produce domain context only", prompt)
+        self.assertIn("every materially relevant domain", flat_prompt)
+        self.assertIn("Preserve applicability exactly", flat_prompt)
+        for status in (
+            "Installed",
+            "Specified",
+            "Approved alternative",
+            "Historic catalogue entry",
+            "Proposed",
+            "Unknown applicability",
+        ):
+            self.assertIn(status, flat_prompt)
+        self.assertIn("Never infer an installed asset condition", flat_prompt)
+        self.assertIn(
+            "specification, approval, permitted alternative, catalogue or listing",
+            flat_prompt,
+        )
+        self.assertIn("Keep `fact` as supplied evidence", flat_prompt)
+        self.assertIn("neutral supported meaning for that domain", flat_prompt)
         self.assertIn("Do not reproduce", prompt)
         self.assertIn("completes, changes, contradicts or materially", prompt)
         self.assertIn("qualifies information", prompt)

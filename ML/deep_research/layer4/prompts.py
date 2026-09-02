@@ -47,26 +47,25 @@ def internal_message(domain: str, layer3_report: str) -> str:
     )
 
 
-def candidate_message(domain: str, layer3_report: str, internal_report: str) -> str:
+def candidate_message(domain: str, layer3_report: str) -> str:
     return (
         "<external_candidate_input>\n"
         f"<domain_name>\n{domain}\n</domain_name>\n"
-        f"<layer3_domain_report>\n{layer3_report}\n</layer3_domain_report>\n"
-        f"<internal_conditions_report>\n{internal_report}\n</internal_conditions_report>\n"
+        f"<asset_context>\n{layer3_report}\n</asset_context>\n"
         "</external_candidate_input>"
     )
 
 
 def researcher_message(
     domain: str,
-    internal_report: str,
+    layer3_report: str,
     candidate_report: str,
 ) -> str:
     return (
         "<external_research_input>\n"
         f"<domain_name>\n{domain}\n</domain_name>\n"
-        f"<internal_conditions_report>\n{internal_report}\n</internal_conditions_report>\n"
-        f"<external_candidates_report>\n{candidate_report}\n</external_candidates_report>\n"
+        f"<asset_context>\n{layer3_report}\n</asset_context>\n"
+        f"<external_research_brief>\n{candidate_report}\n</external_research_brief>\n"
         "</external_research_input>"
     )
 
@@ -81,4 +80,3 @@ def synthesis_message(reports: dict[str, str]) -> str:
         for name in DOMAIN_NAMES
     )
     return f"<external_synthesis_input>\n{sections}\n</external_synthesis_input>"
-

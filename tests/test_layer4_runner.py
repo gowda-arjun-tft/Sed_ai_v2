@@ -14,10 +14,7 @@ from ML.deep_research.layer2.fs import load_json, read_text, slug, write_json
 from ML.deep_research.layer3.settings import DOMAIN_NAMES
 from ML.deep_research.layer4.create_run import create_run
 from ML.deep_research.layer4.runner import run_external_research
-from ML.deep_research.layer4.settings import (
-    MISSING_INTERNAL_REPORT,
-    SYNTHESIS_NAME,
-)
+from ML.deep_research.layer4.settings import MISSING_CANDIDATE_REPORT, SYNTHESIS_NAME
 from tests.common import create_complete_l3_run
 
 
@@ -156,16 +153,26 @@ class Layer4RunnerTests(unittest.IsolatedAsyncioTestCase):
             run_dir = _new_l4(Path(temporary))
             graphs = await self._run(run_dir, failing=(domain, "internal"))
             run = load_json(run_dir / "run.json")
-            index = graphs["candidates"].actors.index(domain)
-            candidate_input = str(graphs["candidates"].inputs[index])
+            layer3_report = read_text(
+                run_dir / "inputs" / "domains" / f"{slug(domain)}.md"
+            )
+            candidate_input = graphs["candidates"].inputs[
+                graphs["candidates"].actors.index(domain)
+            ]["messages"][0]["content"]
+            research_input = graphs["research"].inputs[
+                graphs["research"].actors.index(domain)
+            ]["messages"][0]["content"]
 
         self.assertEqual(run["status"], "complete")
         self.assertEqual(run["execution"]["domains"][domain]["internal"]["status"], "failed")
-        self.assertIn(MISSING_INTERNAL_REPORT, candidate_input)
+        self.assertEqual(candidate_input.count(layer3_report), 1)
+        self.assertEqual(research_input.count(layer3_report), 1)
+        self.assertNotIn("internal_conditions_report", candidate_input)
+        self.assertNotIn("internal_conditions_report", research_input)
         self.assertIn((domain, "research"), FakeGraph.order)
         self.assertEqual(FakeGraph.order[-1], (SYNTHESIS_NAME, "synthesis"))
 
-    async def test_internal_recovery_reuses_its_thread_and_restarts_dependents(self):
+    async def test_internal_recovery_reuses_only_its_own_thread(self):
         domain = DOMAIN_NAMES[0]
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = _new_l4(Path(temporary))
@@ -181,54 +188,20 @@ class Layer4RunnerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             FakeGraph.order,
-            [
-                (domain, "internal"),
-                (domain, "candidates"),
-                (domain, "research"),
-                (SYNTHESIS_NAME, "synthesis"),
-            ],
+            [(domain, "internal")],
         )
         self.assertIsNone(graphs["internal"].inputs[0])
         self.assertEqual(new["internal"]["thread_id"], old_threads["internal"])
         self.assertEqual(new["internal"]["attempt"], 2)
-        self.assertNotEqual(new["external_candidates"]["thread_id"], old_threads["external_candidates"])
-        self.assertNotEqual(new["external_research"]["thread_id"], old_threads["external_research"])
-        self.assertNotEqual(after["execution"]["final"]["thread_id"], old_final)
+        self.assertEqual(new["external_candidates"]["thread_id"], old_threads["external_candidates"])
+        self.assertEqual(new["external_research"]["thread_id"], old_threads["external_research"])
+        self.assertEqual(after["execution"]["final"]["thread_id"], old_final)
         self.assertEqual(
             after["execution"]["domains"][DOMAIN_NAMES[1]]["internal"]["attempt"],
             1,
         )
 
-    async def test_recovery_persists_dependent_invalidation_before_next_stage(self):
-        class SimulatedCrash(BaseException):
-            pass
-
-        domain = DOMAIN_NAMES[0]
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l4(Path(temporary))
-            await self._run(run_dir, failing=(domain, "internal"))
-            from ML.deep_research.layer4 import runner
-
-            original_publish = runner._publish
-            calls = 0
-
-            async def crash_before_candidate(*args, **kwargs):
-                nonlocal calls
-                calls += 1
-                if calls == 2:
-                    raise SimulatedCrash()
-                return await original_publish(*args, **kwargs)
-
-            with patch.object(runner, "_publish", crash_before_candidate):
-                with self.assertRaises(SimulatedCrash):
-                    await self._run(run_dir, retry_failed=True)
-            recovered = load_json(run_dir / "run.json")["execution"]["domains"][domain]
-
-        self.assertEqual(recovered["internal"]["status"], "complete")
-        self.assertEqual(recovered["external_candidates"]["status"], "pending")
-        self.assertEqual(recovered["external_research"]["status"], "pending")
-
-    async def test_missing_completed_artifact_restarts_its_dependents(self):
+    async def test_missing_internal_artifact_regenerates_only_internal(self):
         domain = DOMAIN_NAMES[0]
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = _new_l4(Path(temporary))
@@ -246,16 +219,11 @@ class Layer4RunnerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             FakeGraph.order,
-            [
-                (domain, "internal"),
-                (domain, "candidates"),
-                (domain, "research"),
-                (SYNTHESIS_NAME, "synthesis"),
-            ],
+            [(domain, "internal")],
         )
-        self.assertNotEqual(new_domain["external_candidates"]["thread_id"], old_candidate)
-        self.assertNotEqual(new_domain["external_research"]["thread_id"], old_research)
-        self.assertNotEqual(after["execution"]["final"]["thread_id"], old_synthesis)
+        self.assertEqual(new_domain["external_candidates"]["thread_id"], old_candidate)
+        self.assertEqual(new_domain["external_research"]["thread_id"], old_research)
+        self.assertEqual(after["execution"]["final"]["thread_id"], old_synthesis)
 
     async def test_candidate_and_research_recovery_restart_only_their_dependents(self):
         domain = DOMAIN_NAMES[0]
@@ -268,10 +236,14 @@ class Layer4RunnerTests(unittest.IsolatedAsyncioTestCase):
                 FakeGraph.order = []
                 FakeGraph.checkpointed = set()
                 run_dir = _new_l4(Path(temporary))
-                await self._run(run_dir, failing=(domain, failed_kind))
+                first_graphs = await self._run(run_dir, failing=(domain, failed_kind))
                 before = load_json(run_dir / "run.json")
                 key = "external_candidates" if failed_kind == "candidates" else "external_research"
                 failed_thread = before["execution"]["domains"][domain][key]["thread_id"]
+                old_research_thread = before["execution"]["domains"][domain][
+                    "external_research"
+                ]["thread_id"]
+                old_final_thread = before["execution"]["final"]["thread_id"]
                 FakeGraph.order = []
                 graphs = await self._run(run_dir, retry_failed=True)
                 after = load_json(run_dir / "run.json")
@@ -279,6 +251,57 @@ class Layer4RunnerTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual([kind for _, kind in FakeGraph.order], expected_kinds)
                 self.assertEqual(after["execution"]["domains"][domain][key]["thread_id"], failed_thread)
                 self.assertIsNone(graphs[failed_kind].inputs[0])
+                self.assertNotEqual(after["execution"]["final"]["thread_id"], old_final_thread)
+                if failed_kind == "candidates":
+                    research_input = first_graphs["research"].inputs[
+                        first_graphs["research"].actors.index(domain)
+                    ]["messages"][0]["content"]
+                    layer3_report = read_text(
+                        run_dir / "inputs" / "domains" / f"{slug(domain)}.md"
+                    )
+                    self.assertIn(MISSING_CANDIDATE_REPORT, research_input)
+                    self.assertEqual(research_input.count(layer3_report), 1)
+                    self.assertNotEqual(
+                        after["execution"]["domains"][domain]["external_research"][
+                            "thread_id"
+                        ],
+                        old_research_thread,
+                    )
+
+    async def test_candidate_recovery_persists_research_invalidation_before_rerun(self):
+        class SimulatedCrash(BaseException):
+            pass
+
+        domain = DOMAIN_NAMES[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = _new_l4(Path(temporary))
+            await self._run(run_dir, failing=(domain, "candidates"))
+            before = load_json(run_dir / "run.json")
+            old_research_thread = before["execution"]["domains"][domain][
+                "external_research"
+            ]["thread_id"]
+            from ML.deep_research.layer4 import runner
+
+            original_publish = runner._publish
+            calls = 0
+
+            async def crash_before_research(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 3:
+                    raise SimulatedCrash()
+                return await original_publish(*args, **kwargs)
+
+            with patch.object(runner, "_publish", crash_before_research):
+                with self.assertRaises(SimulatedCrash):
+                    await self._run(run_dir, retry_failed=True)
+            recovered = load_json(run_dir / "run.json")["execution"]["domains"][domain]
+
+        self.assertEqual(recovered["external_candidates"]["status"], "complete")
+        self.assertEqual(recovered["external_research"]["status"], "pending")
+        self.assertNotEqual(
+            recovered["external_research"]["thread_id"], old_research_thread
+        )
 
     async def test_failed_synthesis_resumes_its_unchanged_thread(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -300,7 +323,7 @@ class Layer4RunnerTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = _new_l4(Path(temporary))
             run = load_json(run_dir / "run.json")
-            run["schema_version"] = 2
+            run["schema_version"] = 1
             write_json(run_dir / "run.json", run)
             with self.assertRaisesRegex(ValueError, "fresh Layer 4"):
                 await run_external_research(run_dir)

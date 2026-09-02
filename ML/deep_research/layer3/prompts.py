@@ -45,7 +45,7 @@ def domain_message(assignment: dict[str, Any]) -> str:
         f"# Domain\n\n{name}\n\n"
         f"## Mandate\n\n{boundaries['mandate']}\n\n"
         f"## Handoffs\n\n{handoffs}\n\n"
-        f"## Layer 2 mission\n\n{str(assignment['mission']).strip()}\n"
+        f"## Layer 2 routed asset context\n\n{str(assignment['mission']).strip()}\n"
         "</domain_assignment>"
     )
 

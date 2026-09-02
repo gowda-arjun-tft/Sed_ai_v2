@@ -1,7 +1,8 @@
 # Goal
 
-Reconcile all available domain external-research reports into one compact world-to-property
-external-influence landscape. Do not perform new research or introduce new facts.
+Reconcile all available domain external-research reports into one compact cross-domain
+world-to-property network. Do not perform new research or introduce new facts, unsupported
+drivers, within-path causal steps or ratings.
 
 # Inputs and authority
 
@@ -12,40 +13,47 @@ external-influence landscape. Do not perform new research or introduce new facts
 
 # Reconciliation rules
 
-- Preserve `Established external influence`, `Conditional external pathway`, `Context only` and
-  `Evidence gap`.
+- Preserve `Established external influence`, `Conditional external pathway`,
+  `Property dependency without proven adverse external event`, `Context only` and `Evidence gap`.
 - Never promote context, an unavailable source or a missing record into an external influence.
-- Merge reports only when they share the same external root cause and materially identical
-  transmission chain.
-- When one driver affects several domains, retain every distinct internal vulnerability and effect.
-- Keep different external causes separate even when they produce the same financial consequence.
+- Never promote a property dependency without a proven adverse external event into the numbered
+  external-influence register.
+- Merge findings only when they contain the identical external cause and a materially identical
+  transmission pathway.
+- Relate rather than merge one shared driver with different downstream branches.
+- Relate rather than merge different external drivers that converge on the same property
+  dependency or effect.
+- You may derive cross-domain structural relationships only by matching supplied external drivers,
+  dependency nodes, geographic scales, horizons and pathway edges across reports.
+- Show supported shared drivers, divergent branches, converging dependencies, compound exposures
+  and cascading effects. State the supplied basis for each relationship.
+- Do not invent an external driver, property dependency or within-path causal step absent from the
+  domain reports.
+- Preserve supported geographic-scale nodes, time horizons and amplification or buffering effects.
+- Preserve every distinct affected domain, property dependency, vulnerability and effect.
 - Do not independently re-rate or strengthen domain findings.
-- Preserve contradictions, missing linkage and unsupported upstream explanations.
+- Preserve contradictions, material uncertainty, missing linkage and unsupported upstream
+  explanations.
 
 # Output
 
-Return only:
+Return one compact Markdown report beginning with `# Property external-influence landscape`. Use
+the following sections only when supported; combine or omit an empty section rather than inventing
+content:
 
-1. `# Property external-influence landscape`
-2. `## Executive external-risk picture`
-3. `## Cross-domain external-influence register` — one compact block per causal family:
-   - `External driver`
-   - `Classification`
-   - `New/current evidence`
-   - `Affected domains`
-   - `Internal vulnerabilities`
-   - `Causal chain`
-   - `Property effects`
-   - `Likelihood`
-   - `Impact`
-   - `Time horizon and status`
-   - `Sources`
-4. `## Shared external dependencies` — only dependencies supported across supplied reports.
-5. `## Contradictions and material unknowns`
-6. `## Evidence gaps` — table `| Gap | Blocks which pathway | Where the record lives |`
-7. `## Context only and pathways not established`
-8. `## Missing domain responses`
+1. `## Executive external-risk picture`
+2. `## Numbered external-influence register`
+3. `## Shared external drivers`
+4. `## Divergent and converging pathways`
+5. `## Compound and cascading exposures`
+6. `## Material uncertainty, evidence gaps and context`
+
+Number distinct established and conditional findings consecutively from 1 in the register. Preserve
+their supplied classifications, ratings, affected domains, property dependencies, causal
+relationships, geographic scales, time horizons, uncertainty and direct links. Place property
+dependencies without a proven adverse external event, contradictions, evidence gaps, context-only
+factors and missing-domain markers in the final section when material. Do not add or re-rate
+anything merely to complete a template.
 
 Write telegraphically; preserve exact specifics and links; state each fact once. Do not include
 recommendations, mitigations, actions, owners, decisions, repricing or investment conclusions.
-

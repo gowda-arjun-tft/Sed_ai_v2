@@ -35,7 +35,6 @@ from .prompts import (
 from .settings import (
     DOMAIN_NAMES,
     MISSING_CANDIDATE_REPORT,
-    MISSING_INTERNAL_REPORT,
     SCHEMA_VERSION,
 )
 
@@ -108,10 +107,7 @@ async def _run_domain(
     research_initially_complete = records["external_research"]["status"] == "complete"
 
     internal_target = domain_dir / "internal.md"
-    internal_reused = (
-        records["internal"]["status"] == "complete" and internal_target.is_file()
-    )
-    internal = await _publish(
+    await _publish(
         internal_graph,
         run_dir,
         run,
@@ -122,14 +118,6 @@ async def _run_domain(
         lock,
         retry_failed=retry_failed,
     )
-    internal_changed = internal is not None and not internal_reused
-    if internal_changed and _restart_started(
-        run,
-        records["external_candidates"],
-        records["external_research"],
-    ):
-        await persist_run(run_dir, run, lock)
-    internal_input = internal if internal is not None else MISSING_INTERNAL_REPORT
 
     candidates_target = domain_dir / "external_candidates.md"
     candidates_reused = (
@@ -142,7 +130,7 @@ async def _run_domain(
         run,
         records["external_candidates"],
         retriever,
-        candidate_message(name, layer3_report, internal_input),
+        candidate_message(name, layer3_report),
         candidates_target,
         lock,
         retry_failed=retry_failed,
@@ -163,13 +151,13 @@ async def _run_domain(
         run,
         records["external_research"],
         retriever,
-        researcher_message(name, internal_input, candidate_input),
+        researcher_message(name, layer3_report, candidate_input),
         research_target,
         lock,
         retry_failed=retry_failed,
     )
     research_changed = (
-        research_initially_complete and (internal_changed or candidates_changed)
+        research_initially_complete and candidates_changed
     ) or (research is not None and not research_reused)
     return research, research_changed
 
