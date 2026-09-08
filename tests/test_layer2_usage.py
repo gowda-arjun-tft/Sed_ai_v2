@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-from ML.deep_research.layer2.usage import UsageCallback, summarize_usage
+from ML.deep_research.layer2.backend.usage import UsageCallback, summarize_usage
 
 
 class UsageRecordTests(unittest.TestCase):

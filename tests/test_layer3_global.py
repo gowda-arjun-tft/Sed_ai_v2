@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 class GlobalReadinessTests(unittest.TestCase):
     def test_slug_survives_every_writing_system(self):
-        from ML.deep_research.layer2.fs import slug
+        from ML.deep_research.layer2.backend.fs import slug
 
         self.assertEqual(slug("Bauträger-Risiko"), "bautrager-risiko")
         self.assertEqual(slug("Marché & valorisation"), "marche-and-valorisation")

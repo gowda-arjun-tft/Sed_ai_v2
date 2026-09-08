@@ -7,7 +7,8 @@ import unittest
 import ML.deep_research.layer2 as layer2
 import ML.deep_research.layer3 as layer3
 import ML.deep_research.layer4 as layer4
-from ML.deep_research.layer2.settings import PLANNER_PATH, REPO_ROOT
+from ML.deep_research.layer2.backend.settings import REPO_ROOT
+from tests.common import PLANNER_PATH
 
 
 class StructureTests(unittest.TestCase):
@@ -69,8 +70,15 @@ class StructureTests(unittest.TestCase):
             r'FACT_SHEET_PATH = Path\(r"inputs\\[^"\r\n]+\.md"\)',
         )
         self.assertIn('print("Layer 2: running")', layer2_text)
-        self.assertIn('print("Layer 2: complete")', layer2_text)
-        self.assertIn("asyncio.to_thread(run_layer2, L2_RUN)", layer2_text)
+        self.assertIn("['status']", layer2_text)
+        self.assertIn("asyncio.to_thread(run_layer2, L2_DYNAMIC_RUN)", layer2_text)
+        self.assertIn("LAYER2_DOMAIN_PLUGIN", layer2_text)
+        self.assertIn("LAYER2_REQUIREMENTS", layer2_text)
+        self.assertIn('LAYER2_REQUIREMENTS = Path(r"inputs\\requirement.md")', layer2_text)
+        self.assertIn("replace template placeholders before running", layer2_text)
+        self.assertIn("from ML.deep_research.layer2 import create_run", layer2_text)
+        self.assertIn("from ML.deep_research.layer2 import run_all", layer2_text)
+        self.assertNotIn("L2_RUN =", layer2_text)
         self.assertIn("run.log", layer2_text)
         for retired in (
             "PREVIEW_MISSION",
@@ -92,9 +100,38 @@ class StructureTests(unittest.TestCase):
                 flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
             )
 
-    def test_planner_has_one_authoritative_location(self):
+    def test_planner_is_only_a_historical_fixture(self):
         self.assertTrue(PLANNER_PATH.is_file())
+        self.assertEqual(PLANNER_PATH.parent, REPO_ROOT / "tests" / "fixtures")
         self.assertFalse((REPO_ROOT / "planner_prompt.md").exists())
+
+    def test_layer2_layout_public_exports_and_industry_neutral_code(self):
+        from ML.deep_research.layer2.backend import settings
+        from ML.deep_research.layer2.backend.create_run import create_run
+        from ML.deep_research.layer2.backend.runner import run_all
+        from ML.deep_research.layer3.settings import AGENT_NAMES
+
+        root = settings.MODULE_DIR
+        self.assertEqual(root, REPO_ROOT / "ML" / "deep_research" / "layer2")
+        self.assertEqual(settings.PROMPTS_DIR, root / "ML" / "prompts")
+        self.assertEqual(settings.DOMAIN_PLUGIN_PATH, root / "plugins" / "real_estate.md")
+        self.assertTrue(settings.DOMAIN_PLUGIN_PATH.is_file())
+        self.assertEqual({p.name for p in root.glob("*.py")}, {"__init__.py", "__main__.py"})
+        self.assertEqual({p.stem for p in settings.PROMPTS_DIR.glob("*.md")}, set(settings.STAGES))
+        self.assertIs(layer2.create_run, create_run)
+        self.assertIs(layer2.run_all, run_all)
+        active = list(root.rglob("*.py")) + list(settings.PROMPTS_DIR.glob("*.md"))
+        for path in active:
+            text = path.read_text(encoding="utf-8")
+            for name in AGENT_NAMES:
+                self.assertNotIn(name, text, str(path))
+        self.assertFalse(hasattr(settings, "AGENT_NAMES"))
+        self.assertFalse(hasattr(settings, "PLANNER_PATH"))
+        self.assertFalse((root / "prompts" / "chunk_router.md").exists())
+        self.assertFalse((root / "prompts" / "planner_prompt.md").exists())
+        template = (REPO_ROOT / "inputs" / "requirement.md").read_text(encoding="utf-8")
+        for heading in ("Objectives", "Priorities", "Exclusions", "Geography", "Time horizon"):
+            self.assertIn("## " + heading, template)
 
     def test_all_package_modules_import_without_model_calls(self):
         for package in (layer2, layer3, layer4):
@@ -102,11 +139,11 @@ class StructureTests(unittest.TestCase):
             for module in pkgutil.walk_packages(package.__path__, prefix):
                 importlib.import_module(module.name)
 
-    def test_layer2_production_functions_have_docstrings_and_less_code(self):
+    def test_layer2_production_functions_have_docstrings(self):
         root = REPO_ROOT / "ML" / "deep_research" / "layer2"
         missing = []
         total_lines = 0
-        for path in sorted(root.glob("*.py")):
+        for path in sorted(root.rglob("*.py")):
             source = path.read_text(encoding="utf-8-sig")
             total_lines += len(source.splitlines())
             tree = ast.parse(source, filename=str(path))
@@ -115,7 +152,7 @@ class StructureTests(unittest.TestCase):
                     if ast.get_docstring(node) is None:
                         missing.append(f"{path.name}:{node.lineno}:{node.name}")
         self.assertEqual(missing, [])
-        self.assertLess(total_lines, 1305)
+        self.assertGreater(total_lines, 0)  # schema 4 adds approved stages, not a line-count target
 
     def test_retired_layer3_phase_controller_is_gone(self):
         root = REPO_ROOT / "ML" / "deep_research" / "layer3"

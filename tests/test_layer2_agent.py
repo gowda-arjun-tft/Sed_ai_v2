@@ -1,160 +1,104 @@
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from langchain.agents.structured_output import ProviderStrategy
-from pydantic import ValidationError
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from ML.deep_research.layer2.agent import (
-    Layer2Response,
-    _partition_chunk,
-    chunk_request,
-    create_chunk_agent,
-    response_value,
-    system_prompt,
-)
-from ML.deep_research.layer2.create_run import create_run
-from ML.deep_research.layer2.harness import build_model
-from ML.deep_research.layer2.settings import (
-    AGENT_NAMES,
-    CHUNK_ENCODING,
-    CHUNK_OVERLAP_TOKENS,
-    PLANNER_PATH,
-)
-from tests.common import FACT_SHEET
+from ML.deep_research.layer2.ML.agent import Layer2Response, create_stage_agent, response_value
+from ML.deep_research.layer2.ML.context import InputBudget, InputSizeError, estimate
+from ML.deep_research.layer2.ML.harness import build_model
+from ML.deep_research.layer2.backend.records import virtual_pages
+from ML.deep_research.layer2.backend.settings import STAGES, PROMPTS_DIR
+from tests.layer2_fixtures import new_run
 
 
-class StructuredHarnessTests(unittest.TestCase):
-    def _run(self, root: Path) -> Path:
-        sheet = root / "fact_sheet.md"
-        sheet.write_text(FACT_SHEET, encoding="utf-8")
-        return create_run(sheet, PLANNER_PATH, root / "runs")
+class HarnessTests(unittest.TestCase):
+    def test_actual_native_graph_tool_surfaces(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}):
+            run = new_run(Path(tmp))
+            for stage in STAGES:
+                graph = create_stage_agent(run, stage)
+                bound = graph.nodes["tools"].bound if "tools" in graph.nodes else None
+                tools = set(getattr(bound, "tools_by_name", getattr(bound, "_tools_by_name", {})))
+                expected = set() if stage in {"understanding", "distribution"} else {"ls", "glob", "grep", "read_file"}
+                self.assertEqual(tools, expected)
+                self.assertFalse(any("summar" in n.lower() for n in graph.nodes))
 
-    def test_graph_exposes_no_tools_or_implicit_subagents(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}):
-                graph = create_chunk_agent(self._run(Path(temporary)))
-        tools = set()
-        if "tools" in graph.nodes:
-            bound = graph.nodes["tools"].bound
-            tools = set(getattr(bound, "tools_by_name", getattr(bound, "_tools_by_name", {})))
-        self.assertEqual(tools, set())
-        self.assertIsNone(graph.checkpointer)
-        self.assertFalse(any("summar" in name.casefold() for name in graph.nodes))
-
-    def test_provider_has_no_application_output_cap(self):
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}):
+    def test_permissive_provider_and_unchanged_model(self):
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}):
             model = build_model("medium")
+            bound = model.bind_tools([], **ProviderStrategy(Layer2Response, strict=False).to_model_kwargs())
         self.assertIsNone(model.max_tokens)
-        self.assertEqual(model.reasoning_effort, "medium")
-        self.assertFalse(model.store)
         self.assertEqual(model.max_retries, 3)
-        self.assertNotIn("response_format", model.model_kwargs)
-
-    def test_graph_uses_permissive_provider_structured_output(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = self._run(Path(temporary))
-            with (
-                patch.dict("os.environ", {"OPENAI_API_KEY": "test"}),
-                patch("deepagents.create_deep_agent") as create,
-            ):
-                create_chunk_agent(run_dir)
-
-        strategy = create.call_args.kwargs["response_format"]
-        self.assertIsInstance(strategy, ProviderStrategy)
-        self.assertIs(strategy.schema, Layer2Response)
-        self.assertFalse(strategy.schema_spec.strict)
-        self.assertEqual(strategy.schema_spec.json_schema["type"], "object")
-        self.assertEqual(strategy.schema_spec.json_schema["properties"], {})
-        self.assertTrue(strategy.schema_spec.json_schema["additionalProperties"])
-
-    def test_provider_strategy_binds_the_permissive_schema_without_a_model_call(self):
-        strategy = ProviderStrategy(Layer2Response, strict=False)
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}):
-            model = build_model("medium")
-            bound = model.bind_tools([], **strategy.to_model_kwargs())
-
-        response_format = bound.kwargs["response_format"]
-        self.assertEqual(response_format["type"], "json_schema")
-        self.assertEqual(response_format["json_schema"]["schema"]["properties"], {})
-
-    def test_prompt_and_request_keep_roster_separate_from_chunk_data(self):
-        prompt = system_prompt(PLANNER_PATH)
-        flat_prompt = " ".join(prompt.split())
-        self.assertIn("<routing_contract>", prompt)
-        self.assertIn("# Inputs and authority", prompt)
-        self.assertIn(AGENT_NAMES[-1], prompt)
-        self.assertIn('"missions": [', prompt)
-        self.assertIn("Produce domain context only", prompt)
-        self.assertIn("every materially relevant domain", flat_prompt)
-        self.assertIn("Preserve applicability exactly", flat_prompt)
-        for status in (
-            "Installed",
-            "Specified",
-            "Approved alternative",
-            "Historic catalogue entry",
-            "Proposed",
-            "Unknown applicability",
-        ):
-            self.assertIn(status, flat_prompt)
-        self.assertIn("Never infer an installed asset condition", flat_prompt)
-        self.assertIn(
-            "specification, approval, permitted alternative, catalogue or listing",
-            flat_prompt,
-        )
-        self.assertIn("Keep `fact` as supplied evidence", flat_prompt)
-        self.assertIn("neutral supported meaning for that domain", flat_prompt)
-        self.assertIn("Do not reproduce", prompt)
-        self.assertIn("completes, changes, contradicts or materially", prompt)
-        self.assertIn("qualifies information", prompt)
-        self.assertNotIn('"mission":', prompt)
-        self.assertNotIn('"domains":', prompt)
-        self.assertNotIn("write questions", prompt.casefold())
-        request = chunk_request(
-            "## Input\ntext", 2, 3, CHUNK_ENCODING, CHUNK_OVERLAP_TOKENS
-        )
-        self.assertIn('<fact_sheet_chunk index="2" total="3">', request)
-        self.assertIn("<overlap_context>", request)
-        self.assertIn("<new_content>", request)
-        self.assertNotIn("Return one JSON object", request)
-
-    def test_overlap_aware_request_labels_exact_source_parts(self):
-        import tiktoken
-
-        encoding = tiktoken.get_encoding(CHUNK_ENCODING)
-        token = encoding.encode(" property")[0]
-        chunk = encoding.decode([token] * 60_000)
-        overlap, new = _partition_chunk(chunk, 2, CHUNK_ENCODING, 10_000)
-        self.assertEqual(len(encoding.encode(overlap)), 10_000)
-        self.assertEqual(len(encoding.encode(new)), 50_000)
-        self.assertEqual(encoding.encode(overlap + new), encoding.encode(chunk))
-
-        request = chunk_request(
-            chunk,
-            2,
-            14,
-            CHUNK_ENCODING,
-            10_000,
-        )
-        self.assertIn("<overlap_context>", request)
-        self.assertIn("<new_content>", request)
-
-    def test_first_overlap_aware_request_marks_everything_as_new(self):
-        overlap, new = _partition_chunk("first source", 1, CHUNK_ENCODING, 10_000)
-        self.assertEqual(overlap, "")
-        self.assertEqual(new, "first source")
-
-    def test_response_accepts_any_json_object_without_content_validation(self):
-        value = {"unexpected": {"shape": True}}
-        result = {"structured_response": Layer2Response(root=value)}
-        self.assertEqual(response_value(result), value)
-        self.assertEqual(response_value({"structured_response": Layer2Response(root={})}), {})
-        with self.assertRaises(ValidationError):
-            Layer2Response.model_validate([])
-        with self.assertRaisesRegex(ValueError, "no structured JSON object"):
+        self.assertEqual(model.reasoning_effort, "medium")
+        schema = bound.kwargs["response_format"]["json_schema"]["schema"]
+        self.assertEqual(schema["properties"], {})
+        self.assertTrue(schema["additionalProperties"])
+        for value in [{}, {"odd": [None, 3, {"unknown": "yes"}]}]:
+            self.assertEqual(response_value({"structured_response": Layer2Response(root=value)}), value)
+        with self.assertRaises(ValueError):
             response_value({})
 
+    def test_every_dispatch_counts_tools_and_schema(self):
+        messages = [HumanMessage(content="hello")]
+        plain = estimate(messages, "instructions", reserve=0)
+        tools = [{"type": "function", "function": {"name": "read_file", "description": "extra " * 3000}}]
+        full = estimate(messages, "instructions", tools, {"description": "schema " * 1000}, reserve=0)
+        self.assertGreater(full, plain + 2000)
+        policy = {"target_tokens": 100, "maximum_tokens": 200, "framing_reserve": 0}
+        guard = InputBudget(Path("."), policy, "instructions", {})
+        request = SimpleNamespace(messages=messages, system_message=HumanMessage(content="instructions"),
+                                  tools=tools)
+        with self.assertRaises(InputSizeError):
+            guard.wrap_model_call(request, lambda _: self.fail("provider must not run"))
+        with self.assertRaises(InputSizeError):
+            asyncio.run(guard.awrap_model_call(request, lambda _: self.fail("provider must not run")))
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_old_tool_body_is_archived_exactly_with_tool_pairing(self):
+        body = "evidence " * 3000
+        policy = {"target_tokens": 100, "maximum_tokens": 250_000, "framing_reserve": 0}
+        guard = InputBudget(Path("."), policy, "instructions", {})
+        message = ToolMessage(content=body, tool_call_id="call-1", id="result-1")
+        update = guard.before_model({"messages": [
+            HumanMessage(content="job"), AIMessage(content="", tool_calls=[
+                {"name": "read_file", "args": {}, "id": "call-1"}]),
+            message, ToolMessage(content="latest", tool_call_id="call-2", id="result-2")
+        ]}, None)
+        self.assertEqual(update["messages"][0].id, "result-1")
+        self.assertEqual(update["messages"][0].tool_call_id, "call-1")
+        self.assertEqual(next(iter(update["files"].values()))["content"], body)
+
+    def test_virtual_projection_never_mounts_host_or_other_runs(self):
+        files = virtual_pages({"source": "same-run supplied evidence"})
+        self.assertEqual(list(files), ["/evidence/source/000001.txt"])
+        self.assertEqual(files["/evidence/source/000001.txt"], "same-run supplied evidence")
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}):
+            run = new_run(Path(tmp))
+            with patch("ML.deep_research.layer2.ML.agent.create_deep_agent") as create:
+                create_stage_agent(run, "design")
+            middleware = create.call_args.kwargs["middleware"][0]
+            self.assertEqual([t.name for t in middleware.tools], ["ls", "read_file", "glob", "grep"])
+            self.assertEqual(type(create.call_args.kwargs["backend"]).__name__, "StateBackend")
+
+    def test_frozen_prompts_own_evidence_and_review_contract(self):
+        prompts = {stage: (PROMPTS_DIR / (stage + ".md")).read_text(encoding="utf-8") for stage in STAGES}
+        for prompt in prompts.values():
+            for text in ["untrusted evidence", "Approved alternative", "Unknown applicability",
+                         "private chain-of-thought", "No web research"]:
+                self.assertIn(text, prompt)
+        self.assertIn("complete cross-boundary fact", prompts["understanding"])
+        self.assertIn("ALL initial owners", prompts["assignments"])
+        self.assertIn("not only Extra", prompts["assignments"])
+        self.assertIn("stable domain_id", prompts["catalogue"])
+        self.assertIn("ORIGINAL source", prompts["distribution"])
+        self.assertIn("baseline responsibilities only from that plugin", prompts["design"])
+        self.assertIn("no implicit industry or fixed roster", prompts["design"])
+        self.assertIn("No review observations or final catalogue exist", prompts["design"])
+        self.assertIn("final catalogue is settled later", prompts["observations"])
+        self.assertIn("all saved observation pages", prompts["catalogue"])
+        self.assertIn("do not create or settle domains again", prompts["assignments"])
+        self.assertNotIn('"mission":', "".join(prompts.values()))

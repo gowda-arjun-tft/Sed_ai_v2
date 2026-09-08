@@ -75,7 +75,7 @@ class Layer3HarnessSurfaceTests(unittest.TestCase):
 
     def test_implicit_summarization_and_tool_call_repair_are_disabled(self):
         from deepagents.profiles.harness.harness_profiles import _get_harness_profile
-        from ML.deep_research.layer2.harness import configure_harness
+        from ML.deep_research.layer2.ML.harness import configure_harness
         from ML.deep_research.layer3.settings import MODEL_SPEC
 
         configure_harness()

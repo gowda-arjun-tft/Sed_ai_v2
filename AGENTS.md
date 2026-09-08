@@ -2,17 +2,21 @@
 
 ## Project Structure & Module Organization
 
-`ML/deep_research/layer2/` splits Markdown fact sheets, runs chunks through the graph's native batch
-interface, and merges available JSON responses into eight routed-context files. Its CLI is only an adapter;
-operational events go to each run's `run.log`. `ML/deep_research/layer3/` runs eight direct domain researchers
+`ML/deep_research/layer2/` designs plugin-driven domains, reads and distributes original source
+facts, then performs one paged reviewer stage. Its CLI is only an adapter;
+operations live in `layer2/backend/`, and AI code plus six generic prompts in `layer2/ML/`.
+Use package-level `create_run` and `run_all` as public Python entrypoints; the notebook is the UI.
+See `layer2/README.md` for the workflow. Industry definitions belong in the selected plugin,
+not generic prompts or Python. `inputs/requirement.md` is a user-editable placeholder template.
+Operational events go to each run's `run.log`. `ML/deep_research/layer3/` runs eight direct domain researchers
 sequentially, then one property synthesis. `ML/deep_research/layer4/` segregates each domain report
 through two tool-free calls, reuses the direct researcher for external influences, then synthesizes
 the available external reports. Prompts sit below each layer; design notes are in
 `ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
 Group new runs as `runs/<parent>-<markdown-name>-<short-path-id>/L2_*` and place the derived `L3_*`
-beside its Layer 2 source. Existing schema-2 Layer 2 artifacts are read-only; start a schema-3 run
-for new routing or resume work.
+beside its historical Layer 2 source. Layer 2 schema-2/3 artifacts are read-only. New Layer 2 runs
+use schema 4, not yet integrated with Layers 3/4; do not produce a legacy missions handoff.
 
 ## Build, Test, and Development Commands
 
@@ -25,7 +29,7 @@ Use the `compute` interpreter:
 & 'C:\src\anaconda3\envs\compute\python.exe' -m pip check
 ```
 
-Run Layer 2 with `.\run.ps1 -FactSheet <fact_sheet.md>` and Layer 3 with
+Run Layer 2 with `.\run.ps1 -FactSheet <facts.md> -DomainPlugin <plugin.md> -Requirements <requirements.md>` and Layer 3 with
 `.\run.ps1 -Research <L2-run> -Online -PublicInputConfirmed`. Resume with `-Resume` or `-ResumeL3`.
 
 ## Coding Style & Testing
@@ -46,19 +50,29 @@ reasoning and low web-search context and verbosity; new runs may select supporte
 freeze those controls in `run.json`. Do not
 restate model, search, token, source, or report limits in prompts.
 
-Layer 2 uses fixed 60K-token chunks, 10K overlap, a 50K stride, concurrency five, and no tools,
-subagents, memory, checkpointer, summarizer, semantic response schema, or content-repair retry.
-The runner reads concurrency from frozen run metadata and uses `abatch_as_completed`; do not add a
-second semaphore or task scheduler.
-The prompt treats overlap as continuity context and allocates output from new source content; Python
-does not deduplicate model output. Use LangChain
-`ProviderStrategy` only to require one top-level JSON object and three provider retries for transient
-transport failures. Accept any keys and nested values, save the object atomically, and merge
-available results in order without semantic verification, deduplication, all-or-nothing publication,
-or automatic completion checks.
-Layer 2 schema 3 routes facts and supported meaning through one `missions` wire envelope without an
-inner `mission` field. It supports only the frozen fixed-window and overlap-partitioned contract;
-schema-2 runs are not resumed or checked by the Layer 2 CLI.
+Layer 2 schema 4 freezes factsheet, ordinary Markdown plugin, user requirements and prompts.
+The engine has no fixed domain count or real-estate-specific routing logic. Historical roster and
+input helpers live in Layer 3 settings and `legacy_input.py`; the old planner is a test fixture.
+Do not reintroduce them into Layer 2. Preserve shared model and operational helper behavior.
+Nominal source windows remain 60K tokens, 10K original-source overlap and 50K stride; record actual
+Unicode-safe boundaries without losing source characters. Source understanding and distribution
+are tool-free, using native abatch_as_completed with frozen concurrency five by default.
+Do not add a second semaphore/task scheduler. Review phases/pages run sequentially once.
+
+Designer/reviewer tools are only native ls/glob/grep/read_file on explicitly seeded run-owned
+StateBackend evidence. No host mount, shell, web, subagents, cross-run memory or model-writable host
+files. SQLite checkpoints and source pointers preserve retrieval state without automatic summarization.
+Assembled input targets 200K estimated tokens with logged exceptional tolerance through 250K.
+Count instructions, messages, evidence, tools and response metadata on all turns. Page/offload first;
+never silently truncate. Unfit mandatory/indivisible inputs fail operationally, not on output quality.
+
+Use ProviderStrategy only for a permissive top-level JSON object and three transient transport
+retries. Save all returned objects without semantic grading, deduplication, repair or content retry.
+Store immutable fact bodies separately from ownership. Review all recorded facts, not only Extra;
+retain unknown/unusable references in the audit. Execution status and assignment coverage are separate.
+Coverage does not prove exhaustive source extraction. Input fingerprints preserve historical response
+versions/publications when recovery changes downstream input. Schema-2/3 resume/check is rejected
+without mutation. Layer 2 must not create a misleading eight-domain handoff to Layers 3/4.
 
 ## Model-Output Freedom
 

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ML.deep_research.layer2.fs import (
+from ML.deep_research.layer2.backend.fs import (
     atomic_write_text,
     load_json,
     now_iso,
@@ -16,7 +16,7 @@ from ML.deep_research.layer2.fs import (
     slug,
     write_json,
 )
-from ML.deep_research.layer2.settings import REASONING_EFFORTS
+from ML.deep_research.layer2.backend.settings import REASONING_EFFORTS
 from ML.deep_research.layer3.pipeline.progress import stage_record
 from ML.deep_research.layer3.settings import WEB_SEARCH_LEVELS
 from ML.deep_research.layer3.usage import summarize_usage

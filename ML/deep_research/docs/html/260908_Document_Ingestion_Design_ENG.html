@@ -1,0 +1,185 @@
+<title>Document Ingestion Design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>/* Design plan
+   Subject: a read-only architecture audit of a research pipeline (run ids, sha256, jsonl, Markdown contracts).
+   Palette (light): paper #F3F5F7 (cool grey-blue ground), ink #1B2430, teal #0F6E77 (verified / accent),
+                    ochre #9A6A16 (inference), rust #A34A2A (loss, missing), slate #5B6B7A (labels), rule #D3D9DF.
+   Palette (dark):  ground #10161C, ink #E6EAEE, teal #4FB3BC, ochre #D9A441, rust #E07A55, slate #93A1AE, rule #2A3440.
+   Type: headings Bitter (slab serif, document authority); body Source Sans 3; data/labels IBM Plex Mono.
+   Layout: one reading column (72ch) with a sticky section index on wide screens; tables scroll in their own box;
+           the five evidence labels are rendered as a small tag system so the reader can scan what is confirmed vs inferred. */
+:root {
+  --paper: #F3F5F7; --ink: #1B2430; --ink-2: #3A4552; --slate: #5B6B7A; --rule: #D3D9DF; --panel: #FFFFFF;
+  --teal: #0F6E77; --teal-soft: #DCEFF0; --ochre: #9A6A16; --ochre-soft: #F5EBD4; --rust: #A34A2A; --rust-soft: #F6E1D9;
+  --code-bg: #E9EDF1; --shadow: 0 1px 2px rgba(27,36,48,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10161C; --ink: #E6EAEE; --ink-2: #C3CBD3; --slate: #93A1AE; --rule: #2A3440; --panel: #171E26;
+    --teal: #4FB3BC; --teal-soft: #14333A; --ochre: #D9A441; --ochre-soft: #33290F; --rust: #E07A55; --rust-soft: #3A2019;
+    --code-bg: #1D2630; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10161C; --ink: #E6EAEE; --ink-2: #C3CBD3; --slate: #93A1AE; --rule: #2A3440; --panel: #171E26;
+  --teal: #4FB3BC; --teal-soft: #14333A; --ochre: #D9A441; --ochre-soft: #33290F; --rust: #E07A55; --rust-soft: #3A2019;
+  --code-bg: #1D2630; --shadow: none;
+}
+html { color-scheme: light dark; }
+body { background: var(--paper); color: var(--ink); font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif; font-size: 17px; line-height: 1.55; margin: 0; }
+.wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 48px; max-width: 1180px; margin: 0 auto; padding: 32px 20px 96px; }
+@media (min-width: 1080px) { .wrap { grid-template-columns: 240px minmax(0, 1fr); } .toc { display: block; } }
+.toc { display: none; position: sticky; top: 24px; align-self: start; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; border-right: 1px solid var(--rule); padding-right: 16px; max-height: calc(100vh - 48px); overflow: auto; }
+.toc a { color: var(--slate); text-decoration: none; display: block; padding: 3px 0; }
+.toc a:hover, .toc a:focus-visible { color: var(--teal); outline: none; }
+.toc .num { color: var(--teal); display: inline-block; width: 2.2em; }
+main { min-width: 0; }
+header.doc { border-bottom: 1px solid var(--rule); padding-bottom: 20px; margin-bottom: 28px; }
+.eyebrow { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--slate); }
+h1, h2, h3, h4 { font-family: "Bitter", Georgia, "Times New Roman", serif; text-wrap: balance; line-height: 1.2; margin: 0; color: var(--ink); }
+h1 { font-size: 34px; font-weight: 600; margin: 8px 0 12px; }
+h2 { font-size: 24px; font-weight: 600; margin: 48px 0 14px; padding-top: 12px; border-top: 1px solid var(--rule); }
+h3 { font-size: 18.5px; font-weight: 600; margin: 28px 0 8px; }
+h4 { font-size: 16px; font-weight: 600; margin: 20px 0 6px; color: var(--ink-2); }
+p, li { max-width: 72ch; }
+p { margin: 0 0 12px; }
+ul, ol { margin: 0 0 14px; padding-left: 1.3em; }
+li { margin: 0 0 5px; }
+a { color: var(--teal); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+code, kbd { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; line-height: 1.45; background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin: 10px 0 18px; }
+pre code { background: none; padding: 0; font-size: inherit; }
+.tbl { overflow-x: auto; margin: 12px 0 20px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+th { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--slate); font-weight: 500; background: var(--paper); }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; }
+.tag { display: inline-block; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; margin-right: 6px; vertical-align: middle; border: 1px solid transparent; }
+.tag.repo { color: var(--teal); background: var(--teal-soft); }
+.tag.run { color: var(--teal); background: var(--teal-soft); border-color: var(--teal); }
+.tag.doc { color: var(--ink-2); background: var(--code-bg); }
+.tag.inf { color: var(--ochre); background: var(--ochre-soft); }
+.tag.rec { color: var(--paper); background: var(--teal); }
+.tag.loss { color: var(--rust); background: var(--rust-soft); }
+.decision { background: var(--panel); border-left: 3px solid var(--teal); padding: 16px 20px; margin: 18px 0 22px; box-shadow: var(--shadow); }
+.decision p:last-child { margin-bottom: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 14px; color: var(--slate); margin: 10px 0 0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 14px 0 6px; }
+.kpi { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; }
+.kpi .v { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 12.5px; color: var(--slate); margin-top: 2px; }
+.note { font-size: 14.5px; color: var(--ink-2); border-top: 1px dashed var(--rule); padding-top: 8px; margin-top: 8px; }
+blockquote { margin: 10px 0 14px; padding: 8px 16px; border-left: 3px solid var(--rule); color: var(--ink-2); background: var(--panel); }
+blockquote p { margin: 0 0 6px; }
+.prompt { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 16px; margin: 10px 0 18px; font-size: 15.5px; }
+.prompt .del { color: var(--rust); text-decoration: line-through; }
+.prompt .ins { color: var(--teal); }
+.prompt .lbl { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--slate); display: block; margin-bottom: 6px; }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+<div class="wrap">
+<nav class="toc" aria-label="Contents"><div class="eyebrow" style="margin-bottom:8px">Contents</div><a href="#1-the-problem"><span class="num">1</span>The problem</a><a href="#2-measured-evidence"><span class="num">2</span>Measured evidence</a><a href="#3-recommendation-a-tiered-extractor-behind-one-interface"><span class="num">3</span>Recommendation: a tiered extractor behind one interface</a><a href="#4-the-read-source-contract"><span class="num">4</span>The read_source contract</a><a href="#5-persistent-artifacts"><span class="num">5</span>Persistent artifacts</a><a href="#6-limits-separated"><span class="num">6</span>Limits, separated</a><a href="#7-failure-handling"><span class="num">7</span>Failure handling</a><a href="#8-security-privacy-and-dependencies"><span class="num">8</span>Security, privacy and dependencies</a><a href="#9-staged-plan"><span class="num">9</span>Staged plan</a><a href="#10-decisions-required-from-the-owner"><span class="num">10</span>Decisions required from the owner</a><a href="#11-verification"><span class="num">11</span>Verification</a><a href="#12-what-changes-and-what-does-not"><span class="num">12</span>What changes, and what does not</a><a href="#13-sources"><span class="num">13</span>Sources</a><div class="eyebrow" style="margin:18px 0 8px">Other documents</div><a href="260908_Deep_Research_Target_Architecture_ENG.html">Deep Research Target Architecture</a><a href="260908_Layer2_Domain_Design_And_Fact_Memory_ENG.html">Layer 2 Domain Design and Fact Memory</a><a href="260908_Layer3_Cost_And_Context_Baseline_ENG.html">Layer 3 Cost and Context Baseline</a><a href="260908_Layer3_Layer4_World_Model_Redesign_ENG.html">Layer 3 and Layer 4 World Model Redesign</a></nav>
+<main>
+<header class="doc"><div class="eyebrow">Deep Research documentation · ENG</div>
+<h1>Document Ingestion Design</h1>
+<p>Status: <strong>recommended, not implemented</strong> on the main branch · Consolidated 08 September 2026 from the document-extraction brief, its second-opinion response and the plain-language companion of 25 August 2026, with measurements re-confirmed against the runs of 02 September 2026.</p></header>
+<p>How Python turns a downloaded document into quotable evidence beneath the existing <code>read_source</code> tool. This is deterministic evidence preparation, not a research agent and not a model-visible service.</p>
+<h2 id="1-the-problem">1 · The problem</h2>
+<p>The research agents work like a library. Every document found on the web is downloaded, hashed and stored in the vault (<code>sources/raw/</code>). A readable copy is then placed on the reading-room shelf (<code>sources/text/</code>), because agents may only read the copy, never the original bytes.</p>
+<p>For web pages the copier works. <strong>For PDFs it does not exist.</strong> The document enters the vault and the shelf receives a note instead:</p>
+<pre><code>Stored &lt;sha&gt; (application/pdf, 2481920 bytes). No canonical text is available
+for verification; use a readable source or disclose this limitation.</code></pre>
+<p>The exact code path:</p>
+<pre><code>search_web finds an official PDF
+  → read_source downloads it
+  → bytes stored at sources/raw/&lt;aa&gt;/&lt;sha&gt;.bin
+  → canonical_text() receives content type application/pdf
+  → canonical_text() returns None
+  → no sources/text/&lt;sha&gt;.txt is written
+  → the agent cannot read, quote or verify the document</code></pre>
+<p>German official records — development plans, budgets, gazettes, parliamentary papers, market reports — are almost all PDFs. So the agents write "record unavailable" for precisely the documents that hold the answers. No prompt can fix a document the agent never saw.</p>
+<p>The missing component belongs inside the <code>read_source</code> evidence-preparation path. It is not a new research agent, a Layer 2 stage, a risk-classification stage or a synthesis stage.</p>
+<h2 id="2-measured-evidence">2 · Measured evidence</h2>
+<p><strong>August 2026 corpus (154 distinct PDFs from one Layer 3 run), opened read-only with PyMuPDF:</strong></p>
+<div class="tbl"><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody><tr><td>Parsed / failed / password-protected</td><td>154 / 0 / 0 (14 carry <code>/Encrypt</code> with an empty user password and open fine)</td></tr><tr><td>Wall time, all 154</td><td>20.5 s → <strong>482 pages/s</strong>; slowest document 1.11 s for 601 pages</td></tr><tr><td>Pages</td><td>median 32 · p90 187 · max 601 · total 9,888</td></tr><tr><td>Estimated tokens per document</td><td>median <strong>15.2k</strong> · p90 103k · max <strong>343k</strong> · total 5.57M</td></tr><tr><td>Documents over 100 / 300 / 500 pages</td><td>24 / 6 / 3</td></tr><tr><td>Documents over 50k / 100k / 200k tokens</td><td>31 / 17 / 4</td></tr><tr><td>Text layer present (≤ 20% empty pages)</td><td><strong>149 of 154 (96.8%)</strong></td></tr><tr><td>Mixed (20–80% empty) / scanned (&gt; 80% empty)</td><td>2 / <strong>3</strong> (state gazettes from 1974, 1985, 1990)</td></tr><tr><td>Glyph-mapping failures (U+FFFD &gt; 0.2% of characters)</td><td>2 documents, 10 pages; sporadic elsewhere</td></tr><tr><td>Tables (<code>find_tables()</code> on 40 documents)</td><td>412 tables in 26 documents; <strong>11 pages/s with detection — 44× slower than text</strong></td></tr><tr><td>Size</td><td>median 780 KB · p90 5.8 MB · p99 9.2 MB · max 10.2 MB; 18 documents over 5 MiB; cap rejections observed</td></tr></tbody></table></div>
+<p><strong>September 2026 re-confirmation.</strong> In the run pair <code>L3_20260902_120424_e0de</code> / <code>L4_20260902_132142_bb9f</code>, every source stored without canonical text was an <code>application/pdf</code> record: 26 distinct files in Layer 3 and 25 in Layer 4. All begin with <code>%PDF-</code>, none is encrypted, and all but one carry an extractable text layer (1,414 to 654,568 characters). The single exception is one image-only 1985 gazette scan. The affected documents include the municipal property-market report, the transport planning decision, development plans and their justifications, parking and fee by-laws, the municipal participation report, the state justice budget chapter and the chamber-of-commerce market report — that is, the primary local records the research most needs.</p>
+<p>Two conclusions follow directly:</p>
+<ol><li><strong>About 97% of the problem needs no machine learning.</strong> A plain text reader solves it, and one is already installed. For comparison, Docling's own technical report gives 3.1 s/page on x86 CPU (1.27 s/page on an M3 Max, 0.49 s/page on an L4 GPU). For this corpus that is roughly 8.5 CPU-hours per run versus 20 seconds, to gain nothing on the documents that already carry text.</li><li><strong>The large-PDF fear is real but rare</strong> — 2% of documents. It needs a rule ("never hand over the whole book; give a map and let the agent ask for pages"), not a heavier engine.</li></ol>
+<h2 id="3-recommendation-a-tiered-extractor-behind-one-interface">3 · Recommendation: a tiered extractor behind one interface</h2>
+<p>Direct Python integration, but not Docling-first. One application-owned interface beneath <code>read_source</code>:</p>
+<div class="tbl"><table><thead><tr><th>Tier</th><th>Engine</th><th>Covers</th><th>When</th></tr></thead><tbody><tr><td>1</td><td><strong>PyMuPDF text layer</strong> (installed, 1.28.0) in a child process</td><td>149 / 154 = <strong>96.8%</strong> of withheld PDFs</td><td>Ship first</td></tr><tr><td>2</td><td>OCR on flagged pages only (RapidOCR via <code>docling[rapidocr]</code>, or Tesseract via PyMuPDF)</td><td>3 scanned + 2 mixed documents; 10 glyph-broken pages</td><td>After tier 1 is measured</td></tr><tr><td>3</td><td>Docling TableFormer or full Docling on <strong>requested pages only</strong></td><td>Table-dense pages where tier-1 Markdown is inadequate</td><td>Only if evidence demands</td></tr><tr><td>—</td><td>Docling MCP</td><td>—</td><td><strong>Not recommended</strong> here</td></tr><tr><td>—</td><td>docling-serve sidecar (async REST)</td><td>—</td><td>The correct form of a service <strong>if</strong> scale ever demands one; do not build a custom worker</td></tr></tbody></table></div>
+<p>One contract is mandatory regardless of engine: <strong>ingest once, return a document map, let the agent request pages or search.</strong></p>
+<h3 id="why-not-the-alternatives">Why not the alternatives</h3>
+<ul><li><strong>Docling as the first engine.</strong> Excellent but heavy: roughly 1.3 GB of install (PyTorch alone ~536 MB), ~500 MB of models fetched on first use, 3–4 GB RAM spikes, and about 3 s/page on CPU. The 601-page document takes ~1 second with the plain reader versus ~30 minutes with Docling. Paying that for the 97% that need no OCR is the wrong trade. Docling earns its place later, for the scanned remainder and for difficult tables, as a tier behind the same door rather than the door itself.</li><li><strong>Docling MCP.</strong> Its tool surface is agent-facing whole-document conversion with no documented page selection — the exact anti-pattern for a 343k-token file. It answers "how does a model call a converter", while the question here is "how does Python prepare evidence beneath <code>read_source</code>". Making it model-visible would also break the two-tool contract that the tests and the design pin.</li><li><strong>A hand-built worker or service.</strong> docling-serve already is that worker, with async convert endpoints and <code>page_range</code>, <code>document_timeout</code>, <code>abort_on_error</code>, <code>do_ocr</code>, <code>force_ocr</code>, <code>ocr_lang</code>, <code>table_mode</code>, <code>pdf_backend</code> and multiple output formats. If a service is ever justified, adopt it; do not build one.</li><li><strong>When a service would become preferable.</strong> Any of: more than one worker host or another application needs extraction; OCR volume makes CPU contention with the research worker measurable; a GPU host exists that the research host is not. None applies to one host, sequential domains, ~150 PDFs per run and 3% OCR.</li></ul>
+<h2 id="4-the-read-source-contract">4 · The <code>read_source</code> contract</h2>
+<p>The tool keeps its name and its evidence role, and gains two optional arguments:</p>
+<pre><code>@tool("read_source", parse_docstring=True)
+async def read_source(url: str, pages: str | None = None,
+                      find: str | None = None, runtime=...) -&gt; str:
+    """Open one public URL and return retained canonical text with its source ID.
+
+    Args:
+        url: The HTTP or HTTPS source address.
+        pages: Optional page selection for long documents, e.g. "3" or "12-15,40".
+        find: Optional case-insensitive search term; returns matching pages with snippets.
+    """</code></pre>
+<p>The phrase "canonical text" stays in the description because a harness test pins it. Tool names are pinned in three test files and do not change.</p>
+<p><strong>Response forms</strong></p>
+<ul><li><strong>A · Whole document</strong> when estimated tokens ≤ the response budget: header (<code>SOURCE</code>, <code>URL</code>, page counts, text-layer and scanned counts) followed by <code>[p.N]</code>-marked page text.</li><li><strong>B · Document map</strong> for a large document with no <code>pages</code>/<code>find</code>: title, page count, text-layer and scanned page numbers, estimated tokens, an outline (PDF bookmarks where present, otherwise the first heading-like line per page, capped and grouped into ranges beyond the cap), the pages where tables were detected, and a closing line naming the next call.</li><li><strong>C · Requested pages</strong>: bounded page text for <code>pages="12-15,40"</code>, with the same page markers.</li><li><strong>D · Find</strong>: matching pages with snippets, capped at a hit limit, with diacritic-folded matching.</li></ul>
+<p>Findings then cite <code>SOURCE &lt;id&gt; p.12</code>, and a reviewer can re-read the same page to check the quote.</p>
+<h2 id="5-persistent-artifacts">5 · Persistent artifacts</h2>
+<pre><code>sources/
+├── raw/&lt;aa&gt;/&lt;sha&gt;.bin            unchanged — authoritative bytes
+├── text/&lt;sha&gt;.txt                page-marked full text ("[p.N]\n…"), so
+│                                 canonical_text_available and text_sha256 stay meaningful
+├── documents/&lt;sha&gt;/
+│   ├── manifest.json
+│   └── pages.jsonl               one line per page
+└── index.jsonl                   record += "extraction": { …manifest summary… }</code></pre>
+<p><code>manifest.json</code> (schema 1):</p>
+<pre><code>{
+  "source_sha256": "…", "schema": 1,
+  "extractor": "pymupdf", "extractor_version": "1.28.0",
+  "status": "success | partial | failed | needs_password | unsupported",
+  "pages": 601, "text_layer_pages": 598, "scanned_pages": [4, 5, 9],
+  "replacement_char_pages": [212, 213],
+  "est_tokens": 343000,
+  "title": "…", "outline": [[1, "Vorwort", 1], [1, "Inhaltsverzeichnis", 3]],
+  "errors": [{"page": 77, "error": "…"}],
+  "limits_applied": {"max_pages": 2000, "timeout_seconds": 60},
+  "extracted_at": "2026-08-25T…Z"
+}</code></pre>
+<p>A <code>pages.jsonl</code> line: <code>{"page": 13, "chars": 2140, "source": "text_layer | ocr | none", "replacement_ratio": 0.0, "text": "…"}</code>.</p>
+<p><strong>Why this and not Docling JSON.</strong> The provenance needed for citation is page plus text; a reviewer quotes words, not bounding boxes. Docling JSON (bbox, charspan) is justified only if tier 3 is added, and then it is stored alongside for the requested pages, never as the canonical form.</p>
+<p><strong>Cache key = <code>sha256 + extractor + extractor_version</code>.</strong> On a version change, re-extract lazily on the next read; never rewrite artifacts in completed runs, since stores are per run. Deduplication is by hash, not URL: 19 of 173 records in the measured run were the same file under different URLs, and the store already keys by hash.</p>
+<h3 id="store-integration">Store integration</h3>
+<ul><li><code>canonical_text()</code> keeps its signature. <code>SourceStore.store()</code> gains one branch: for <code>application/pdf</code>, call the extractor and write the page-marked text to <code>text/&lt;sha&gt;.txt</code>, so every existing downstream path keeps working unchanged.</li><li><code>_source_result(store, record, pages, find)</code> implements forms A–D from <code>pages.jsonl</code>.</li><li>The <code>record_for_url</code> hit path already exists; reuse is free.</li></ul>
+<h3 id="tables">Tables</h3>
+<p>Tier-1 text extraction already renders table cells in reading order. <code>find_tables()</code> is 44× slower and must not run at ingest. Run it lazily inside form C for the requested pages, cache the Markdown per page in <code>pages.jsonl</code>, and escalate to Docling only on evidence.</p>
+<h2 id="6-limits-separated">6 · Limits, separated</h2>
+<div class="tbl"><table><thead><tr><th>Limit</th><th>Setting</th><th>Proposed</th><th>Rationale</th></tr></thead><tbody><tr><td>Download bytes, PDF</td><td><code>PDF_MAX_BYTES</code></td><td><strong>50 MiB</strong></td><td>p99 stored = 9.2 MB; rejections observed at 10 MiB; stream to disk, not memory</td></tr><tr><td>Download bytes, other</td><td><code>MAX_SOURCE_BYTES</code></td><td>10 MiB (unchanged)</td><td>HTML never approaches it</td></tr><tr><td>Pages extracted</td><td><code>PDF_MAX_PAGES</code></td><td>2,000</td><td>beyond → <code>partial</code>, first 2,000 kept</td></tr><tr><td>Extraction wall time</td><td><code>PDF_EXTRACT_TIMEOUT_SECONDS</code></td><td>60 (tier 1)</td><td>601 pages took 1.1 s; the budget is for hostile files</td></tr><tr><td>OCR pages per document (tier 2)</td><td><code>OCR_MAX_PAGES</code></td><td>60</td><td>flagged pages only</td></tr><tr><td>One response</td><td><code>READ_RESPONSE_TOKENS</code></td><td>16,000</td><td>≈ the median document; ~10% of the eviction trigger</td></tr><tr><td>Pages per call</td><td><code>READ_MAX_PAGES_PER_CALL</code></td><td>30</td><td></td></tr><tr><td>Find hits</td><td><code>FIND_MAX_HITS</code></td><td>40</td><td></td></tr><tr><td>Stored artifacts</td><td>none</td><td>—</td><td>disk is cheap; provenance is not</td></tr></tbody></table></div>
+<p>Record all of them in <code>run.json</code> as a <code>document_extraction</code> block, a sibling of <code>limits</code>, mirroring the <code>context_management</code> precedent.</p>
+<p><strong>Why the response budget is structural, not optional.</strong> Layer 3 replaces the framework filesystem middleware, so Deep Agents' own 20k-token tool-result offloading is inactive. One oversized tool result inside the eviction keep-window cannot be evicted. The tool must therefore bound its own output.</p>
+<h2 id="7-failure-handling">7 · Failure handling</h2>
+<div class="tbl"><table><thead><tr><th>Case</th><th>Behaviour</th><th>Visible as</th></tr></thead><tbody><tr><td>Parser crash or hang</td><td>Child process with a timeout; kill on expiry</td><td>manifest <code>status: failed</code>, <code>errors[]</code>; the tool returns the reason and never raises</td></tr><tr><td>Page-level exception</td><td>Continue; record <code>{"page": n, "error": …}</code></td><td><code>status: partial</code>; page line <code>"source": "none"</code></td></tr><tr><td>Scanned page (no text)</td><td>Flag as a tier-2 target</td><td><code>scanned_pages</code>; map line names the pages</td></tr><tr><td>Glyph-map failure (U+FFFD)</td><td>Flag by ratio per page; <code>force_ocr</code> target</td><td><code>replacement_char_pages</code></td></tr><tr><td>Password-protected</td><td>Do not attempt to bypass</td><td><code>status: needs_password</code>; the message names it</td></tr><tr><td>Over <code>PDF_MAX_PAGES</code></td><td>Extract the first N</td><td><code>status: partial</code>, <code>limits_applied</code></td></tr><tr><td>Over <code>PDF_MAX_BYTES</code></td><td>Refuse before the download completes (<code>Content-Length</code>, then streamed count)</td><td>today's message with the new cap</td></tr><tr><td>OCR tier not installed</td><td>Tier-1 result stands</td><td><code>source: none</code> on those pages — never silent</td></tr><tr><td>Extractor version bump</td><td>Lazy re-extract on next read</td><td>manifest <code>extractor_version</code></td></tr></tbody></table></div>
+<p>Nothing here grades, rewrites or repairs model output; all of it describes the evidence.</p>
+<h2 id="8-security-privacy-and-dependencies">8 · Security, privacy and dependencies</h2>
+<ul><li><strong>Untrusted input.</strong> MuPDF and pdfium have historical parser CVEs; pypdf has 2026 denial-of-service CVEs (unbounded FlateDecode/XMP allocation) — do not use pypdf for untrusted parsing. PyMuPDF CVE-2026-3029 affects only the CLI <code>embed-extract</code> path (1.26.5, fixed 1.26.6), not opening or parsing; the installed 1.28.0 is clear.</li><li><strong>Isolation.</strong> One child process per document, with a timeout, no network, and no filesystem access beyond <code>raw/&lt;sha&gt;.bin</code> in and <code>documents/&lt;sha&gt;/</code> out. Windows has no RLIMIT or seccomp: rely on the timeout plus the page cap; a Job Object memory cap is a later hardening step.</li><li><strong>Privacy.</strong> Everything local. No external conversion services, so raw documents never leave the host. If docling-serve is ever adopted, run it on the same host or LAN with an API key and pass a local path over a shared volume — never re-upload bytes.</li><li><strong>Dependencies.</strong> <code>pymupdf</code> is installed but not pinned in <code>requirements.txt</code>; pin it.</li><li><strong>Tier-2 facts to encode rather than guess.</strong> <code>docling</code> 2.121.0 is a metapackage over <code>docling-slim[standard]</code>, and <code>standard</code> already includes torch, torchvision, docling-parse, docling-ibm-models, pypdfium2 and rapidocr (EasyOCR and Tesseract are extras). The default <code>ocr_options</code> is <code>OcrAutoOptions()</code>, and <strong>RapidOCR's default language is Chinese</strong> — set the expected languages explicitly. <code>document_timeout</code> yields <code>PARTIAL_SUCCESS</code> with partial results. <code>page_range</code> is 1-indexed inclusive. Threads come from <code>DOCLING_NUM_THREADS</code> before <code>OMP_NUM_THREADS</code>, default 4; models cache under <code>~/.cache/docling</code>, overridable, and should be prefetched for offline hosts. Table mode defaults to the slower accurate model. Tesseract is not on this machine's PATH.</li></ul>
+<h2 id="9-staged-plan">9 · Staged plan</h2>
+<ol><li><strong>Text layer, map, pages, find — ship first.</strong> A pure extraction module (<code>raw_path, out_dir → manifest</code>) plus a child-process entry point; the <code>SourceStore</code> PDF branch; page-marked <code>text/&lt;sha&gt;.txt</code>; <code>read_source(url, pages, find)</code> with forms A–D; settings and the <code>run.json</code> block; pin <code>pymupdf</code>. Tests generate small PDFs in-process (text, empty page, multi-page) rather than committing fixtures, and assert the map, pages and find forms, idempotent reuse, and timeout → <code>failed</code>, while existing tests stay untouched.</li><li><strong>OCR on flagged pages only.</strong> Choose the engine, set languages explicitly, cap OCR pages, and mark page <code>source: "ocr"</code>. Trigger on scanned pages plus glyph-failure pages. Measure on the five known documents first.</li><li><strong>Tables on demand.</strong> Lazy per-page table detection cached as Markdown; evaluate a layout-aware PyMuPDF variant or Docling TableFormer for those pages only.</li><li><strong>More formats.</strong> DOCX and PPTX behind the same interface; spreadsheets handled separately, since multi-sheet Markdown export is lossy. Explicitly unsupported for now: images (until tier 2), archives, legacy <code>.doc</code>, and password-protected files.</li><li><strong>A service, only on evidence.</strong> docling-serve if the conditions in section 3 appear.</li></ol>
+<h2 id="10-decisions-required-from-the-owner">10 · Decisions required from the owner</h2>
+<ol><li><strong>Licence.</strong> PyMuPDF is dual-licensed AGPL-3.0 or commercial (Artifex). For an internal tool this is usually acceptable; for a product sold or offered as a service it is a legal decision. Docling is MIT. If AGPL is unacceptable, tier 1 uses <code>pypdfium2</code> (Apache/BSD, ships with Docling) instead — slightly weaker on tables, same page-map design.</li><li><strong>PDF download cap.</strong> 50 MiB is proposed; the largest stored file measured 10.2 MB and p99 was 9.2 MB.</li><li><strong>When to add OCR.</strong> 3% of documents need it today. Recommended: ship tier 1, measure, then decide.</li></ol>
+<h2 id="11-verification">11 · Verification</h2>
+<ul><li><strong>Unit.</strong> Generated PDFs (text, empty, multi-page, over-page-cap) → manifest statuses, response forms A–D, idempotent reuse, timeout → <code>failed</code>, and diacritic-folded <code>find</code> matching.</li><li><strong>Existing suite unchanged.</strong> Tool names, the "canonical text" phrase, and the source-byte-cap patch point.</li><li><strong>Offline replay.</strong> Run the extractor over the stored <code>sources/raw/*.bin</code> of an archived run and assert the expected success, scanned and mixed counts with zero failures, within the time budget. This costs nothing and is the correct first gate.</li><li><strong>Live acceptance</strong> (costs money, owner's call). One domain; count <code>read_source</code> responses of each form; confirm page-cited findings appear and that "record unavailable" language falls.</li></ul>
+<h2 id="12-what-changes-and-what-does-not">12 · What changes, and what does not</h2>
+<p><strong>Changes</strong></p>
+<ul><li>PDFs become readable. Expect fewer "record unavailable" findings and more page-cited facts from official documents — on the evidence above, the single largest remaining quality lever, larger than any prompt change.</li><li>Findings cite source id plus page number.</li><li>The download cap rises for PDFs, since useful files were rejected by the 10 MiB limit.</li></ul>
+<p><strong>Unchanged</strong></p>
+<ul><li>The agents still have only <code>search_web</code> and <code>read_source</code>. The map, pages and find behaviour lives inside <code>read_source</code> as optional arguments.</li><li>Original bytes remain the authoritative artifact.</li><li>Nothing grades, rewrites or repairs what the model writes.</li><li>Completed run folders are untouched.</li></ul>
+<blockquote><p>Store every page once, hand the agent a map, let it ask for pages. Everything else is a tier.</p></blockquote>
+<h2 id="13-sources">13 · Sources</h2>
+<p>Repository measurements: <code>research_tools.py</code>, <code>sources.py</code>, <code>text_extraction.py</code>, <code>settings.py</code>, <code>requirements.txt</code>; the archived run store of 21 August 2026 (154 PDFs, PyMuPDF 1.28.0); the run pair of 02 September 2026 (51 distinct unreadable PDFs, re-measured 03 September 2026).</p>
+<ul><li>Docling <code>DocumentConverter.convert</code> reference — https://docling-project.github.io/docling/reference/document_converter/</li><li>Docling pipeline options (<code>OcrAutoOptions</code> default, <code>document_timeout</code>, OCR language defaults) — https://raw.githubusercontent.com/docling-project/docling/main/docling/datamodel/pipeline_options.py</li><li>Docling settings (<code>PageRange</code> validator, <code>DocumentLimits</code>) — https://raw.githubusercontent.com/docling-project/docling/main/docling/datamodel/settings.py</li><li>Docling accelerator options — https://raw.githubusercontent.com/docling-project/docling/main/docling/datamodel/accelerator_options.py</li><li>Docling OCR engines — https://docling-project.github.io/docling/concepts/OCR/</li><li>Docling installation and extras — https://docling-project.github.io/docling/getting_started/installation/</li><li>Docling advanced options (threads, limits, artifacts path, table mode) — https://docling-project.github.io/docling/usage/advanced_options/</li><li>Docling page-specific export — https://github.com/docling-project/docling/discussions/2744</li><li>Docling <code>page_range</code> last-page issue (closed 2025-08-25) — https://github.com/docling-project/docling/issues/1469</li><li>Docling technical report (3.1 s/page CPU, 0.49 s/page L4) — https://arxiv.org/html/2408.09869v4</li><li>Docling resource discussions (RAM spikes, threads) — https://github.com/docling-project/docling/issues/2877 · https://github.com/docling-project/docling/discussions/306</li><li>docling and docling-slim on PyPI (2.121.0, MIT, <code>standard</code> includes rapidocr) — https://pypi.org/pypi/docling/json · https://pypi.org/pypi/docling-slim/json</li><li>docling-mcp (tools, transports, remote mode) — https://github.com/docling-project/docling-mcp</li><li>docling-serve REST API — https://docling-project.github.io/docling/usage/api_server/rest_api/</li><li>PyMuPDF on PyPI (AGPL/commercial) — https://pypi.org/pypi/pymupdf/json</li><li>PyMuPDF4LLM API (<code>pages</code>, <code>page_chunks</code>, OCR parameters) — https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/api.html</li><li>CVE-2026-3029 (PyMuPDF <code>embed-extract</code> only) — https://www.sentinelone.com/vulnerability-database/cve-2026-3029/</li><li>pypdf 2026 denial-of-service CVEs — https://www.sentinelone.com/vulnerability-database/cve-2026-33123/ · https://www.sentinelone.com/vulnerability-database/cve-2026-41314/</li></ul></main></div>

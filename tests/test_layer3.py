@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ML.deep_research.layer2.fs import load_json, write_json
+from ML.deep_research.layer2.backend.fs import load_json, write_json
 from ML.deep_research.layer3.contracts import RESEARCHER_NAME, ResearchContext, SearchHit
 from ML.deep_research.layer3.mission import load_research_input
 from ML.deep_research.layer3.pipeline.create_run import create_run

@@ -1,0 +1,334 @@
+<title>Deep Research Target Architecture</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>/* Design plan
+   Subject: a read-only architecture audit of a research pipeline (run ids, sha256, jsonl, Markdown contracts).
+   Palette (light): paper #F3F5F7 (cool grey-blue ground), ink #1B2430, teal #0F6E77 (verified / accent),
+                    ochre #9A6A16 (inference), rust #A34A2A (loss, missing), slate #5B6B7A (labels), rule #D3D9DF.
+   Palette (dark):  ground #10161C, ink #E6EAEE, teal #4FB3BC, ochre #D9A441, rust #E07A55, slate #93A1AE, rule #2A3440.
+   Type: headings Bitter (slab serif, document authority); body Source Sans 3; data/labels IBM Plex Mono.
+   Layout: one reading column (72ch) with a sticky section index on wide screens; tables scroll in their own box;
+           the five evidence labels are rendered as a small tag system so the reader can scan what is confirmed vs inferred. */
+:root {
+  --paper: #F3F5F7; --ink: #1B2430; --ink-2: #3A4552; --slate: #5B6B7A; --rule: #D3D9DF; --panel: #FFFFFF;
+  --teal: #0F6E77; --teal-soft: #DCEFF0; --ochre: #9A6A16; --ochre-soft: #F5EBD4; --rust: #A34A2A; --rust-soft: #F6E1D9;
+  --code-bg: #E9EDF1; --shadow: 0 1px 2px rgba(27,36,48,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10161C; --ink: #E6EAEE; --ink-2: #C3CBD3; --slate: #93A1AE; --rule: #2A3440; --panel: #171E26;
+    --teal: #4FB3BC; --teal-soft: #14333A; --ochre: #D9A441; --ochre-soft: #33290F; --rust: #E07A55; --rust-soft: #3A2019;
+    --code-bg: #1D2630; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10161C; --ink: #E6EAEE; --ink-2: #C3CBD3; --slate: #93A1AE; --rule: #2A3440; --panel: #171E26;
+  --teal: #4FB3BC; --teal-soft: #14333A; --ochre: #D9A441; --ochre-soft: #33290F; --rust: #E07A55; --rust-soft: #3A2019;
+  --code-bg: #1D2630; --shadow: none;
+}
+html { color-scheme: light dark; }
+body { background: var(--paper); color: var(--ink); font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif; font-size: 17px; line-height: 1.55; margin: 0; }
+.wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 48px; max-width: 1180px; margin: 0 auto; padding: 32px 20px 96px; }
+@media (min-width: 1080px) { .wrap { grid-template-columns: 240px minmax(0, 1fr); } .toc { display: block; } }
+.toc { display: none; position: sticky; top: 24px; align-self: start; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; border-right: 1px solid var(--rule); padding-right: 16px; max-height: calc(100vh - 48px); overflow: auto; }
+.toc a { color: var(--slate); text-decoration: none; display: block; padding: 3px 0; }
+.toc a:hover, .toc a:focus-visible { color: var(--teal); outline: none; }
+.toc .num { color: var(--teal); display: inline-block; width: 2.2em; }
+main { min-width: 0; }
+header.doc { border-bottom: 1px solid var(--rule); padding-bottom: 20px; margin-bottom: 28px; }
+.eyebrow { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--slate); }
+h1, h2, h3, h4 { font-family: "Bitter", Georgia, "Times New Roman", serif; text-wrap: balance; line-height: 1.2; margin: 0; color: var(--ink); }
+h1 { font-size: 34px; font-weight: 600; margin: 8px 0 12px; }
+h2 { font-size: 24px; font-weight: 600; margin: 48px 0 14px; padding-top: 12px; border-top: 1px solid var(--rule); }
+h3 { font-size: 18.5px; font-weight: 600; margin: 28px 0 8px; }
+h4 { font-size: 16px; font-weight: 600; margin: 20px 0 6px; color: var(--ink-2); }
+p, li { max-width: 72ch; }
+p { margin: 0 0 12px; }
+ul, ol { margin: 0 0 14px; padding-left: 1.3em; }
+li { margin: 0 0 5px; }
+a { color: var(--teal); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+code, kbd { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; line-height: 1.45; background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin: 10px 0 18px; }
+pre code { background: none; padding: 0; font-size: inherit; }
+.tbl { overflow-x: auto; margin: 12px 0 20px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+th { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--slate); font-weight: 500; background: var(--paper); }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; }
+.tag { display: inline-block; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; margin-right: 6px; vertical-align: middle; border: 1px solid transparent; }
+.tag.repo { color: var(--teal); background: var(--teal-soft); }
+.tag.run { color: var(--teal); background: var(--teal-soft); border-color: var(--teal); }
+.tag.doc { color: var(--ink-2); background: var(--code-bg); }
+.tag.inf { color: var(--ochre); background: var(--ochre-soft); }
+.tag.rec { color: var(--paper); background: var(--teal); }
+.tag.loss { color: var(--rust); background: var(--rust-soft); }
+.decision { background: var(--panel); border-left: 3px solid var(--teal); padding: 16px 20px; margin: 18px 0 22px; box-shadow: var(--shadow); }
+.decision p:last-child { margin-bottom: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 14px; color: var(--slate); margin: 10px 0 0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 14px 0 6px; }
+.kpi { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; }
+.kpi .v { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 12.5px; color: var(--slate); margin-top: 2px; }
+.note { font-size: 14.5px; color: var(--ink-2); border-top: 1px dashed var(--rule); padding-top: 8px; margin-top: 8px; }
+blockquote { margin: 10px 0 14px; padding: 8px 16px; border-left: 3px solid var(--rule); color: var(--ink-2); background: var(--panel); }
+blockquote p { margin: 0 0 6px; }
+.prompt { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 16px; margin: 10px 0 18px; font-size: 15.5px; }
+.prompt .del { color: var(--rust); text-decoration: line-through; }
+.prompt .ins { color: var(--teal); }
+.prompt .lbl { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--slate); display: block; margin-bottom: 6px; }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+<div class="wrap">
+<nav class="toc" aria-label="Contents"><div class="eyebrow" style="margin-bottom:8px">Contents</div><a href="#1-the-architecture-at-a-glance"><span class="num">1</span>The architecture at a glance</a><a href="#2-three-inputs-three-purposes"><span class="num">2</span>Three inputs, three purposes</a><a href="#3-layer-2-understand-and-organize"><span class="num">3</span>Layer 2: understand and organize</a><a href="#4-layer-3-select-evidence-and-research-domains"><span class="num">4</span>Layer 3: select evidence and research domains</a><a href="#5-documents-become-usable-evidence"><span class="num">5</span>Documents become usable evidence</a><a href="#6-layer-4-independent-external-enhancement"><span class="num">6</span>Layer 4: independent external enhancement</a><a href="#7-agent-harness"><span class="num">7</span>Agent harness</a><a href="#8-memory-and-the-input-boundary"><span class="num">8</span>Memory and the input boundary</a><a href="#9-phase-handoffs"><span class="num">9</span>Phase handoffs</a><a href="#10-saved-artifact-layout"><span class="num">10</span>Saved artifact layout</a><a href="#11-worked-example-and-sample-artifacts"><span class="num">11</span>Worked example and sample artifacts</a><a href="#12-what-the-reader-receives"><span class="num">12</span>What the reader receives</a><div class="eyebrow" style="margin:18px 0 8px">Other documents</div><a href="260908_Document_Ingestion_Design_ENG.html">Document Ingestion Design</a><a href="260908_Layer2_Domain_Design_And_Fact_Memory_ENG.html">Layer 2 Domain Design and Fact Memory</a><a href="260908_Layer3_Cost_And_Context_Baseline_ENG.html">Layer 3 Cost and Context Baseline</a><a href="260908_Layer3_Layer4_World_Model_Redesign_ENG.html">Layer 3 and Layer 4 World Model Redesign</a></nav>
+<main>
+<header class="doc"><div class="eyebrow">Deep Research documentation · ENG</div>
+<h1>Deep Research Target Architecture</h1>
+<p>Status: <strong>proposed target design</strong>, not implemented · Consolidated 08 September 2026 · Supersedes the separate "Modular Deep Research" architecture and "Phase Inputs &amp; Outputs" documents of 07 September 2026 and the eight-domain architecture ticket write-up.</p></header>
+<p>An industry-neutral research engine that turns supplied facts into focused domain research, then investigates the outside forces that influence those findings. This document holds both the architecture and the phase-by-phase handoffs; there is no separate companion.</p>
+<h2 id="1-the-architecture-at-a-glance">1 · The architecture at a glance</h2>
+<p>Three layers carry different responsibilities. Layer 2 understands and organizes the subject. Layer 3 researches each domain using selected sources and processed documents. Layer 4 independently extends those findings into external dependencies and produces the cross-domain view.</p>
+<pre><code>INPUTS · Domain plugin + requirement.md + factsheet.md
+↓
+LAYER 2 · Understand the subject, define domains and distribute facts
+↓
+LAYER 3 · Select sources, ingest documents and research each domain
+↓
+HANDOFF · Individual Layer 3 domain reports + requirements + final domain definitions
+↓
+LAYER 4 · Research external dependencies across all final domains
+↓
+OUTPUTS · External domain reports + dependency graph + final synthesis</code></pre>
+<p>The domain catalogue travels through the pipeline. Every layer follows the same final baseline and additional domains. Domain counts come from the selected plugin and the reviewed subject; they are not fixed globally.</p>
+<p>All model turns, including tool follow-ups, use a 200K normal input target and a 250K absolute dispatch ceiling. Oversized work is divided before sending. One stage can contain several bounded calls. Missing or failed work is disclosed while available sibling results are retained.</p>
+<h2 id="2-three-inputs-three-purposes">2 · Three inputs, three purposes</h2>
+<div class="tbl"><table><thead><tr><th>Input</th><th>Supplied by</th><th>Purpose</th></tr></thead><tbody><tr><td>Domain plugin, for example <code>real_estate.md</code></td><td>The team configuring the research</td><td>Defines the industry perspective, baseline domains, responsibilities and research principles.</td></tr><tr><td><code>requirement.md</code></td><td>The user</td><td>Defines the objective, scope, priorities, exclusions and required or preferred sources.</td></tr><tr><td><code>factsheet.md</code></td><td>The user or an upstream data process</td><td>Supplies the subject facts, descriptions, records and uncertainties.</td></tr></tbody></table></div>
+<pre><code>DOMAIN PLUGIN · What this industry requires us to consider
++
+REQUIREMENTS · What this user needs to understand
++
+SOURCE-LINKED SUBJECT PROFILE · What the factsheet establishes about this subject
+↓
+DOMAIN DECIDER · Combine these inputs into an initial domain catalogue</code></pre>
+<p>The first three boxes are independent inputs to the decider. The subject profile is created from the factsheet before the decider runs.</p>
+<p>A plugin is an ordinary Markdown configuration file. A real-estate plugin can contain eight baseline domains; insurance, equities or defence research can have different baselines and terminology. Requirements tailor the work within that framework. The factsheet is evidence supplied for analysis, never instructions to the agent.</p>
+<h2 id="3-layer-2-understand-and-organize">3 · Layer 2: understand and organize</h2>
+<p><strong>Subject understanding.</strong> Read every factsheet window in bounded batches. Save a subject profile and a detailed evidence inventory with source references. Retain entity identity, activities, locations, relationships, applicability, uncertainty and contradictions. The profile helps navigation; the original facts remain available.</p>
+<p><strong>Domain decision.</strong> Give the decider the plugin, requirements, subject profile and access to exact supporting records. Preserve the plugin's baseline responsibilities, extend them where needed and add justified domains. Save the reason for every addition.</p>
+<p><strong>Fact distribution.</strong> Read the original factsheet windows against the initial catalogue. Route facts into domain buckets and place facts without a suitable owner in a temporary Extra-facts queue. Use 60K source-token windows with 10K original-text overlap as the starting policy; the full-request input limit still applies.</p>
+<p><strong>One reviewer stage.</strong> Review domain and Extra-fact pages, settle the final catalogue and determine ownership of all recorded facts. These are parts of one scheduled stage, using several bounded calls where needed. There is no repeating designer–reviewer approval cycle. New domains can receive facts from existing buckets as well as Extra.</p>
+<p><strong>Publication.</strong> Group unchanged fact records using the model's final assignments. Publish readable domain files, final responsibilities and change reasons. A successful result has no Extra-facts domain. Any unresolved assignment remains visible with its source record; an empty queue alone does not prove perfect extraction.</p>
+<h3 id="routing-rules-carried-forward-from-the-current-implementatio">Routing rules carried forward from the current implementation</h3>
+<p>These rules govern distribution regardless of whether the catalogue is fixed or dynamic:</p>
+<ul><li>Route a fact to every domain where it is materially relevant.</li><li>Preserve the source fact without converting it into a new risk claim.</li><li>Keep the supported domain meaning separate from the original evidence.</li><li>Preserve uncertainty and both sides of any conflicting evidence.</li><li>Do not treat specifications, proposals, alternatives, approvals or catalogue entries as installed conditions. Applicability states stay explicit.</li><li>Create an empty context bucket when the source contains no relevant facts for a domain.</li><li>Continue publishing available domain context when an individual window fails.</li><li>Do not perform web research, source discovery, risk scoring or synthesis in Layer 2.</li></ul>
+<h2 id="4-layer-3-select-evidence-and-research-domains">4 · Layer 3: select evidence and research domains</h2>
+<p>Each final domain receives its supplied facts, responsibilities and the user's requirements. Its source scout searches for relevant publishers and records, and opens candidate sources to assess relevance, scope, dates and authority. Search snippets are discovery leads, not evidence for material claims.</p>
+<p>The Source Selector combines the discovered sources with the user's required and preferred sources. It creates one source plan linking each source to the domains and information it can support. A source shared by several domains can be stored once and referenced by each. User selection establishes priority, not factual reliability.</p>
+<pre><code>DISCOVER · Domain source scouts + sources named in requirement.md
+↓
+SELECT · Consolidated source plan with domain assignments and reasons
+↓
+INGEST · Open webpages; download and process selected documents
+↓
+RESEARCH · Domain agents interpret accessible evidence and resolve findings
+↓
+PUBLISH · One evidence-backed Markdown report for each domain</code></pre>
+<p>The source plan stays open to new discoveries. A researcher can add a relevant source and record its provenance during research. A newly discovered document uses the same ingestion process before its contents support a finding.</p>
+<p>Layer 3's deliverables are the individual domain reports and their evidence records. The combined cross-domain synthesis belongs to Layer 4.</p>
+<h2 id="5-documents-become-usable-evidence">5 · Documents become usable evidence</h2>
+<pre><code>SELECTED DOCUMENT · PDF or another supported file type
+↓
+PRESERVE · Download original bytes, source URL and retrieval metadata
+↓
+EXTRACT · Parse text and tables; use OCR where appropriate
+↓
+REFERENCE · Save readable content with page, sheet or section pointers
+↓
+INTERPRET · Relevant domain researchers use the extracted evidence</code></pre>
+<p>Extraction is a processing service. It makes document contents readable; researchers decide what those contents mean for their domains. One document may support several domains without being downloaded and processed separately for each.</p>
+<p>If extraction is partial or unreliable, keep the original, record which parts are usable, try supported parsing or OCR, and seek an authoritative alternative. A researcher discloses the remaining limitation. A document title, snippet or failed extraction cannot establish its contents. Preserve table structure and document location where available; do not manufacture a page reference when the format has none.</p>
+<p>The extraction tiers, artifact schema, limits and failure handling are specified in the document-ingestion design.</p>
+<h2 id="6-layer-4-independent-external-enhancement">6 · Layer 4: independent external enhancement</h2>
+<p>Layer 4 receives each Layer 3 domain report, the requirements and final domain definitions. The original factsheet is not sent again. Layer 3 evidence pointers remain available for traceability, while external research opens its own supporting sources.</p>
+<p>An external-factor brief identifies plausible research directions. The external researcher may extend or reject those directions as evidence develops. It investigates baseline and added domains using the same source-reading and document-ingestion services.</p>
+<pre><code>EXTERNAL DRIVER · Policy, demand, finance, infrastructure, climate or another outside force
+↓
+TRANSMISSION · An authority, market, supplier, network or other intermediary
+↓
+SUBJECT DEPENDENCY · The specific relationship identified in Layer 3
+↓
+VULNERABILITY OR SAFEGUARD · What amplifies or reduces the exposure
+↓
+EFFECT + HORIZON · The supported operational, financial or strategic consequence</code></pre>
+<p>Research can explore wider conditions before a subject-level effect is proven. Reports distinguish established external dependencies, conditional pathways, dependencies without a proven adverse event, general context and unresolved evidence. They do not invent a geopolitical or macroeconomic explanation to fill a category.</p>
+<p>Layer 4 publishes three complementary results:</p>
+<div class="tbl"><table><thead><tr><th>Result</th><th>What it provides</th></tr></thead><tbody><tr><td>Individual external-dependency reports</td><td>Detailed findings for every final domain, with evidence and uncertainty.</td></tr><tr><td>Separate dependency graph</td><td>Traceable nodes and relationships showing shared drivers, different branches, converging dependencies and supported compound effects.</td></tr><tr><td>Final synthesis</td><td>A compact manager-facing explanation of the external-dependency landscape, linked back to the graph and domain reports.</td></tr></tbody></table></div>
+<p>Graph creation relates evidence already established by domain research. It merges only materially identical causes and pathways, and preserves conditional relationships as conditional. Final synthesis introduces no new evidence, causal steps or ratings. Both stages read large inputs in bounded portions when necessary; the final report does not require one oversized call.</p>
+<h2 id="7-agent-harness">7 · Agent harness</h2>
+<p>The harness is the working environment around an agent: its instructions, tools, permitted records and saved progress. The same Deep Agents foundation supports every role.</p>
+<h3 id="7-1-roles">7.1 Roles</h3>
+<div class="tbl"><table><thead><tr><th>Role</th><th>Receives</th><th>Produces</th></tr></thead><tbody><tr><td>Subject reader</td><td>Original factsheet windows</td><td>Source-linked profile and evidence inventory.</td></tr><tr><td>Domain Decider</td><td>Plugin, requirements and subject understanding</td><td>Initial domains, responsibilities and reasons.</td></tr><tr><td>Fact Distributor</td><td>Original facts and initial catalogue</td><td>Domain assignments and temporary Extra facts.</td></tr><tr><td>Domain Reviewer</td><td>All recorded facts in pages and the initial plan</td><td>Final catalogue and ownership decisions.</td></tr><tr><td>Source scout and Source Selector</td><td>Domain responsibilities and source preferences</td><td>Domain-linked source plan.</td></tr><tr><td>Domain researcher</td><td>Domain facts and accessible external evidence</td><td>Layer 3 domain report.</td></tr><tr><td>External-factor mapper and researcher</td><td>Layer 3 report, requirements and domain scope</td><td>Layer 4 external-dependency report.</td></tr><tr><td>Graph builder and synthesizer</td><td>External reports and their traceable findings</td><td>Separate dependency graph and final synthesis.</td></tr></tbody></table></div>
+<p>These are responsibilities, not a requirement to create a supervisor for every role. The orchestrator schedules the known stages, while domain definitions configure the relevant research workers. Document extraction and file publication are processing functions rather than additional reasoning agents.</p>
+<h3 id="7-2-harness-behaviour">7.2 Harness behaviour</h3>
+<div class="tbl"><table><thead><tr><th>Concern</th><th>Proposed harness behavior</th></tr></thead><tbody><tr><td>Foundation</td><td>Reuse Python Deep Agents and the existing model construction. Configure roles from the frozen plugin, requirements and domain catalogue.</td></tr><tr><td>Planning and routing</td><td>No web tools. Supply source windows directly; give planning roles bounded reference reads only where supporting records are needed.</td></tr><tr><td>Review</td><td>Read-only access to run-owned source, fact and decision records. Save progress between pages.</td></tr><tr><td>Source selection and research</td><td>Search and source-reading tools, with extracted document content returned through source access.</td></tr><tr><td>Graph and synthesis</td><td>No new web research. Supply reports directly or read bounded portions of saved research records.</td></tr><tr><td>Memory</td><td>Large inputs and responses in durable files; small active contexts contain relevant text and exact references.</td></tr><tr><td>Recovery</td><td>Persistent checkpoints for interrupted tool-using sessions; reuse successfully saved stages and retain separate invocation identities.</td></tr><tr><td>Coordination</td><td>Native batching for independent source windows; reconcile domain-definition changes in order and research domains in a recorded order.</td></tr><tr><td>Attribution</td><td>Record the responsible phase/domain, source references, elapsed activity, model calls and token usage.</td></tr><tr><td>Output freedom</td><td>Save completed model responses without semantic Python grading, repair prompts or content-driven retries. Operational handling covers serialization, safe source access, persistence and transport failures.</td></tr></tbody></table></div>
+<p>Downloaded material and factsheet text cannot expand tool permissions. The application controls access to run-owned files. Provider transport retries remain separate from model-authored conclusions. No shell, executable plugin or unrestricted host-file tool is required by this design.</p>
+<h2 id="8-memory-and-the-input-boundary">8 · Memory and the input boundary</h2>
+<pre><code>FULL ARCHIVE · Original sources, fact records and exact saved decisions
+↓
+REFERENCE READ · Fetch a specific passage within the remaining allowance
+↓
+ACTIVE CONTEXT · Current work page + relevant instructions and supporting records
+↓
+INPUT CHECK · Count the complete request before every model turn
+↓
+SAVE &amp; CONTINUE · Preserve the result, then load the next work page</code></pre>
+<div class="tbl"><table><thead><tr><th>Input size per model request</th><th>Handling</th></tr></thead><tbody><tr><td>Up to 200K tokens</td><td>Normal operating target. Smaller requests are used when sufficient.</td></tr><tr><td>Above 200K and up to 250K</td><td>Exceptional tolerance for a necessary bounded continuation; record the reason.</td></tr><tr><td>Above 250K</td><td>Divide or repack the input before dispatch. No silent truncation.</td></tr></tbody></table></div>
+<p>The count includes instructions, plugin content, requirements, source text, tool definitions, retrieved passages and retained history. Apply it again after tool reads, including the total returned by multiple tools. Cached input still occupies context. These limits govern individual requests, not the total run cost.</p>
+<p>Summaries can guide navigation but never replace authoritative source records. Exact storage preserves recorded bytes; page coverage and fact ownership make omissions observable. Neither proves that the model understood every fact correctly. The request-counting mechanism must be verified during implementation before claiming exact provider-side enforcement.</p>
+<p>The Layer 2 realisation of this boundary — paged review, the bounded reference reader, storage levels and call arithmetic — is specified in the Layer 2 domain design and fact memory document.</p>
+<h2 id="9-phase-handoffs">9 · Phase handoffs</h2>
+<p>Each phase states its owner, inputs, work, model-visible tools, invocation pattern, outputs, consumer and unresolved-state behavior. Artifact names are illustrative labels, not required response schemas. Completed model responses remain saved even when an expected field or assignment is absent. The 15 phases form one workflow; phases 5 and 6 belong to a single scheduled reviewer stage.</p>
+<pre><code>INPUTS · Plugin + requirements + factsheet
+↓
+LAYER 2 · Subject profile → initial catalogue → routed facts → reviewed catalogue and assignments
+↓
+LAYER 3 · Source candidates → source plan → readable documents → individual domain reports
+↓
+LAYER 4 · External briefs → external reports → dependency graph → final synthesis</code></pre>
+<h3 id="layer-2-phases">Layer 2 phases</h3>
+<p><strong>Phase 1 · Plugin and requirement intake</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Run orchestrator; no reasoning agent.</td></tr><tr><td>Input</td><td>Selected domain plugin, <code>requirement.md</code>, <code>factsheet.md</code>.</td></tr><tr><td>Work</td><td>Preserve input copies, identities and the source-reading schedule.</td></tr><tr><td>Tools visible to model</td><td>None.</td></tr><tr><td>Invocation</td><td>No model call.</td></tr><tr><td>Saved output</td><td>Immutable input snapshots and run metadata.</td></tr><tr><td>Consumer</td><td>Subject reader and Domain Decider.</td></tr><tr><td>Unresolved state</td><td>Report unreadable input as an operational error; never manufacture its contents.</td></tr></tbody></table></div>
+<p><strong>Phase 2 · Factsheet subject understanding</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Subject reader.</td></tr><tr><td>Input</td><td>Every original factsheet window; plugin context and relevant requirements.</td></tr><tr><td>Work</td><td>Identify entities, uses, relationships, applicability and contradictions, with source references.</td></tr><tr><td>Tools visible to model</td><td>No web tools; source windows supplied directly.</td></tr><tr><td>Invocation</td><td>One call per bounded source window; assemble the profile in bounded portions if needed.</td></tr><tr><td>Saved output</td><td><code>subject_profile.md</code>, detailed evidence inventory and source pointers.</td></tr><tr><td>Consumer</td><td>Domain Decider; later reviewer for supporting evidence.</td></tr><tr><td>Unresolved state</td><td>Preserve failed-window records and label profile limitations. The profile never replaces the original source.</td></tr></tbody></table></div>
+<p><strong>Phase 3 · Initial domain decision</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Domain Decider.</td></tr><tr><td>Input</td><td>Plugin baseline, requirements, subject profile and evidence inventory references.</td></tr><tr><td>Work</td><td>Preserve baseline responsibilities; extend or add domains with reasons.</td></tr><tr><td>Tools visible to model</td><td>Bounded read-only reference access; no web search.</td></tr><tr><td>Invocation</td><td>Normally one planning call, with supporting reads or paging when needed.</td></tr><tr><td>Saved output</td><td><code>domains_initial.md</code> and reasons for changes.</td></tr><tr><td>Consumer</td><td>Fact Distributor.</td></tr><tr><td>Unresolved state</td><td>Save the response and disclosed uncertainty. An unusable plan is exposed; no replacement roster is invented.</td></tr></tbody></table></div>
+<p><strong>Phase 4 · Fact distribution</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Fact Distributor.</td></tr><tr><td>Input</td><td>Original factsheet windows and initial domain catalogue.</td></tr><tr><td>Work</td><td>Route facts with supported meaning and provenance; preserve unassigned facts in temporary Extra.</td></tr><tr><td>Tools visible to model</td><td>None.</td></tr><tr><td>Invocation</td><td>One call per source window through native batching. Starting windows: 60K tokens, 10K original-text overlap.</td></tr><tr><td>Saved output</td><td>Fact records, initial assignments, domain buckets and temporary Extra queue.</td></tr><tr><td>Consumer</td><td>Domain Reviewer.</td></tr><tr><td>Unresolved state</td><td>Save available window results and source order; expose failures without suppressing sibling output.</td></tr></tbody></table></div>
+<p><strong>Phase 5 · Review domain and Extra facts</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Domain Reviewer, first part of its single scheduled stage.</td></tr><tr><td>Input</td><td>All recorded domain facts and Extra facts in pages; initial catalogue, requirements and source references.</td></tr><tr><td>Work</td><td>Propose ownership corrections, responsibility extensions and justified new domains.</td></tr><tr><td>Tools visible to model</td><td>Bounded read-only access to run-owned records.</td></tr><tr><td>Invocation</td><td>Bounded review calls across all scheduled pages; fresh context as needed.</td></tr><tr><td>Saved output</td><td>Per-page review decisions, proposed domains and assignment changes.</td></tr><tr><td>Consumer</td><td>Final catalogue and placement work within the same reviewer stage.</td></tr><tr><td>Unresolved state</td><td>Preserve unreviewed pages and missing decisions visibly; no automatic review-until-approved cycle.</td></tr></tbody></table></div>
+<p><strong>Phase 6 · Final catalogue and fact placement</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Domain Reviewer, final part of the same stage.</td></tr><tr><td>Input</td><td>Review decisions, proposed changes, complete fact inventory and source references.</td></tr><tr><td>Work</td><td>Settle the catalogue and assign facts to final domains, including moves from existing buckets.</td></tr><tr><td>Tools visible to model</td><td>Bounded read-only reference access.</td></tr><tr><td>Invocation</td><td>Bounded decision and placement calls, without restarting the designer.</td></tr><tr><td>Saved output</td><td><code>domains_final.md</code>, final assignments and change reasons.</td></tr><tr><td>Consumer</td><td>Layer 2 publisher; downstream domain workers use the final definitions.</td></tr><tr><td>Unresolved state</td><td>Retain unassigned IDs and their facts. Zero Extra is achieved only when every recorded extra fact has an owner.</td></tr></tbody></table></div>
+<p><strong>Phase 7 · Layer 2 publication</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Application publisher; no reasoning agent.</td></tr><tr><td>Input</td><td>Unchanged fact records and model-authored final assignments.</td></tr><tr><td>Work</td><td>Materialize readable domain files and the reviewed catalogue.</td></tr><tr><td>Tools visible to model</td><td>None.</td></tr><tr><td>Invocation</td><td>No model call.</td></tr><tr><td>Saved output</td><td>Final domain fact files, catalogue, assignment trace and visible unresolved records.</td></tr><tr><td>Consumer</td><td>Layer 3 source scouts and domain researchers.</td></tr><tr><td>Unresolved state</td><td>Publish available material. Keep historical Extra records for traceability without presenting an Extra domain as a completed outcome.</td></tr></tbody></table></div>
+<h3 id="layer-3-phases">Layer 3 phases</h3>
+<p><strong>Phase 8 · Per-domain source discovery</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Source scout for each final domain.</td></tr><tr><td>Input</td><td>Domain facts and definitions; requirements including source preferences.</td></tr><tr><td>Work</td><td>Find and open relevant candidate sources; record what they can support and their limitations.</td></tr><tr><td>Tools visible to model</td><td>Web search and source reading.</td></tr><tr><td>Invocation</td><td>One bounded discovery session per domain, with tool follow-up turns.</td></tr><tr><td>Saved output</td><td>Domain source candidates with URLs, purpose, source type and assessed relevance.</td></tr><tr><td>Consumer</td><td>Source Selector.</td></tr><tr><td>Unresolved state</td><td>Mark unavailable or uncertain candidates; snippets do not establish document contents.</td></tr></tbody></table></div>
+<p><strong>Phase 9 · Source consolidation</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Source Selector.</td></tr><tr><td>Input</td><td>Domain source candidates and sources named in <code>requirement.md</code>.</td></tr><tr><td>Work</td><td>Consolidate shared sources and map them to domain needs, priorities and selection reasons.</td></tr><tr><td>Tools visible to model</td><td>Source reading and bounded access to scout records.</td></tr><tr><td>Invocation</td><td>Bounded consolidation calls; avoid one unlimited all-source input.</td></tr><tr><td>Saved output</td><td><code>source_plan.md</code> with domain-linked sources and unresolved access notes.</td></tr><tr><td>Consumer</td><td>Document ingestion and Layer 3 researchers.</td></tr><tr><td>Unresolved state</td><td>Preserve selection uncertainty. The plan guides research; researchers can add and verify other relevant sources.</td></tr></tbody></table></div>
+<p><strong>Phase 10 · Document download and ingestion</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Shared document-processing service.</td></tr><tr><td>Input</td><td>Selected document URLs, including documents discovered during research.</td></tr><tr><td>Work</td><td>Preserve original files; extract text, tables and metadata with supported parsing or OCR.</td></tr><tr><td>Tools visible to model</td><td>No separate agent tool required; readable results are available through source access.</td></tr><tr><td>Invocation</td><td>Processing per document; no standalone reasoning-agent call is implied.</td></tr><tr><td>Saved output</td><td>Original file, canonical readable content, location references and extraction status.</td></tr><tr><td>Consumer</td><td>Applicable Layer 3 researchers; the same service supports new Layer 4 documents.</td></tr><tr><td>Unresolved state</td><td>Preserve unreadable or partial files, seek authoritative alternatives and disclose limits. Never claim failed pages were read.</td></tr></tbody></table></div>
+<p><strong>Phase 11 · Layer 3 domain research</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Direct domain researcher.</td></tr><tr><td>Input</td><td>Layer 2 domain facts, final definition, requirements, source plan and processed evidence.</td></tr><tr><td>Work</td><td>Research the subject, interpret documents, distinguish facts from inference and self-review material claims.</td></tr><tr><td>Tools visible to model</td><td>Web search and source reading, including canonical document content.</td></tr><tr><td>Invocation</td><td>An iterative bounded research session per domain, saved independently.</td></tr><tr><td>Saved output</td><td>Individual domain Markdown report and its evidence references.</td></tr><tr><td>Consumer</td><td>Layer 4 external-factor preparation and research.</td></tr><tr><td>Unresolved state</td><td>Preserve available reports and unresolved evidence. There is no Layer 3 cross-domain synthesis.</td></tr></tbody></table></div>
+<h3 id="layer-4-phases">Layer 4 phases</h3>
+<p><strong>Phase 12 · External-factor preparation</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>External-factor mapper.</td></tr><tr><td>Input</td><td>Individual Layer 3 report, requirements and final domain definition.</td></tr><tr><td>Work</td><td>Identify plausible outside drivers and the subject dependencies that make them worth investigating.</td></tr><tr><td>Tools visible to model</td><td>No web search; bounded reads of supplied research records if needed.</td></tr><tr><td>Invocation</td><td>Normally one brief per domain, paged where necessary.</td></tr><tr><td>Saved output</td><td><code>external_brief.md</code> with provisional factors and traceable Layer 3 anchors.</td></tr><tr><td>Consumer</td><td>External researcher.</td></tr><tr><td>Unresolved state</td><td>Label uncertainty; absence of a brief does not prevent research using the available Layer 3 report and scope.</td></tr></tbody></table></div>
+<p><strong>Phase 13 · External-dependency research</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>External researcher for each final domain.</td></tr><tr><td>Input</td><td>Layer 3 report, provisional brief, requirements and final domain definition; no original factsheet.</td></tr><tr><td>Work</td><td>Establish outside drivers, intermediaries, subject dependencies, effects and horizons. Extend discovery when evidence warrants it.</td></tr><tr><td>Tools visible to model</td><td>Web search and source reading; reuse the document-ingestion service.</td></tr><tr><td>Invocation</td><td>Iterative bounded research sessions across all final domains.</td></tr><tr><td>Saved output</td><td>Individual <code>external_research.md</code> reports, source records and uncertainty.</td></tr><tr><td>Consumer</td><td>Dependency-graph creation and final synthesis.</td></tr><tr><td>Unresolved state</td><td>Distinguish established dependencies, conditional pathways, no-event dependencies, context and evidence gaps. Preserve available sibling reports.</td></tr></tbody></table></div>
+<p><strong>Phase 14 · Dependency-graph creation</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Dependency-graph builder.</td></tr><tr><td>Input</td><td>Available Layer 4 domain findings, their identifiers, evidence links and classifications.</td></tr><tr><td>Work</td><td>Relate shared drivers, separate branches, convergence and supported compound effects; merge only equivalent causes and pathways.</td></tr><tr><td>Tools visible to model</td><td>Bounded reads of saved reports; no new web research.</td></tr><tr><td>Invocation</td><td>Bounded graph-building work; exact finding references connect batches.</td></tr><tr><td>Saved output</td><td>Separate <code>dependency_graph.md</code> containing traceable nodes, relationships and their uncertainty.</td></tr><tr><td>Consumer</td><td>Final synthesizer and reviewers inspecting the dependency network.</td></tr><tr><td>Unresolved state</td><td>Preserve conditional edges and missing-domain notes. Do not invent relationships to connect every node.</td></tr></tbody></table></div>
+<p><strong>Phase 15 · Final external-dependency synthesis</strong></p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>Description</th></tr></thead><tbody><tr><td>Owner</td><td>Final synthesizer.</td></tr><tr><td>Input</td><td>Dependency graph, available external reports, requirements and domain definitions.</td></tr><tr><td>Work</td><td>Explain the external-dependency landscape compactly while preserving evidence, scope and uncertainty.</td></tr><tr><td>Tools visible to model</td><td>Bounded access to saved research; no new web research.</td></tr><tr><td>Invocation</td><td>One finalization stage; multiple bounded reads or calls when needed to respect the input ceiling.</td></tr><tr><td>Saved output</td><td>Final <code>research/final.md</code> alongside the separate graph and individual domain reports.</td></tr><tr><td>Consumer</td><td>Manager or research stakeholder.</td></tr><tr><td>Unresolved state</td><td>Disclose unavailable domains and unresolved pathways; add no new facts, causal steps or ratings.</td></tr></tbody></table></div>
+<h2 id="10-saved-artifact-layout">10 · Saved artifact layout</h2>
+<p>The names below show the proposed responsibilities of saved artifacts. They do not prescribe a migration of existing storage or a new executable schema. Final domain files follow the reviewed catalogue, including added domains.</p>
+<pre><code>research_run/
+  inputs/
+    domain_plugin.md
+    requirement.md
+    factsheet.md
+  layer2/
+    subject_profile.md
+    evidence_inventory/
+    domains_initial.md
+    domains_final.md
+    facts/
+    review/                 # page decisions and historical Extra queue
+    assignments/            # initial and final ownership records
+    domains/&lt;domain&gt;/facts.md
+  sources/
+    source_plan.md
+    raw/                    # downloaded originals
+    readable/               # canonical text, tables and location references
+    records/                # source identity and extraction status
+  layer3/
+    domains/&lt;domain&gt;/report.md
+  layer4/
+    domains/&lt;domain&gt;/external_brief.md
+    domains/&lt;domain&gt;/external_research.md
+    dependency_graph.md
+    research/final.md
+  operations/
+    run.json
+    run.log
+    usage.jsonl
+    checkpoints.sqlite3</code></pre>
+<h2 id="11-worked-example-and-sample-artifacts">11 · Worked example and sample artifacts</h2>
+<p><strong>Fictional throughout.</strong> Alder Hospital Property is an invented subject used only to explain the architecture. Names, passages, dates, identifiers, URLs and relationships below illustrate the proposed outputs; none is a researched finding. The <code>.example</code> URLs are placeholders. Sample fields are explanatory, not mandatory schemas or output validators.</p>
+<p>The real-estate plugin provides eight baseline research domains. The user asks to understand a potential hospital-property acquisition and prefers official local, regulatory and utility records. The factsheet describes an operating rehabilitation hospital with a named operator and a reliance on purchased heat.</p>
+<p>Source understanding distinguishes current operation from proposed use. The Domain Decider can extend the location domain to cover the relevant service catchment and can propose a separate healthcare-operations domain if the baseline cannot express its responsibilities clearly. The reviewer confirms the final boundaries after reading all recorded facts, including Extra.</p>
+<p>Layer 3 investigates the stated operations, contracts and technical dependencies. Layer 4 explores outside forces that could affect those dependencies. A hypothetical heat-network service change remains conditional unless opened evidence supports both the change and the connection to this subject. Demographic information is investigated in relation to the stated service; age or population alone does not establish a positive business outcome.</p>
+<p><strong>Requirement with source preferences</strong></p>
+<pre><code># Research requirement — fictional
+Subject: Alder Hospital Property.
+Objective: understand dependencies relevant to a potential acquisition.
+Focus: service continuity, operator relationships and local conditions.
+Preferred sources: official authorities, operator records and utilities.
+Required source to attempt: https://authority.example/alder/service-plan
+Exclusion: do not turn the report into a buy/sell recommendation.</code></pre>
+<p><strong>Domain definitions, initial and final</strong></p>
+<pre><code>Initial domain D-LOC: Location and access.
+Responsibility: assess access, catchment and local infrastructure.
+Reason: baseline real-estate plugin, tailored to the hospital requirement.
+
+Final domain D-LOC: retain the initial responsibility.
+Added domain D-OPS: Healthcare operations and continuity.
+Responsibility: investigate service continuity and operator dependencies.
+Reason: reviewer found a distinct operational subject in F-021 and F-088.</code></pre>
+<p><strong>Routed fact with provenance, and an Extra-fact reassignment</strong></p>
+<pre><code>Fact ID: F-042.
+Fact: the supplied schedule lists a purchased-heat connection.
+Applicability: specified; current connection status is unconfirmed.
+Source: factsheet.md, window W04, supplied schedule row 12.
+Initial owner: D-SYS — Systems and operations.
+Supporting meaning: the schedule describes an external utility interface.
+
+Fact ID: F-088.
+Original fact: "The operator maintains an emergency service rota."
+Initial destination: Extra facts.
+Final owner: D-OPS — Healthcare operations and continuity.
+Reason: the reviewed mandate now covers operational staffing dependencies.
+Fact body: retained unchanged; historical assignment remains in the audit.</code></pre>
+<p><strong>Selected source and extracted document passage</strong></p>
+<pre><code>Source ID: S-014.
+URL: https://utility.example/alder/heat-service-plan.pdf
+Origin: domain scout; utility records are preferred by the user.
+Domains: D-SYS and D-OPS.
+Type: PDF. Next step: download, extract and inspect the relevant passages.
+Limitation: source selection alone does not prove this property's connection.
+
+Document: DOC-014; original PDF retained under sources/raw/.
+Location: page 7, section "Planned service changes".
+Extracted text: "Service zone Z is scheduled for network works."
+Status: text extracted from page 7; other pages have separate status records.
+Domain use: check whether the subject is served by zone Z before claiming an effect.</code></pre>
+<p><strong>Layer 4 finding and the corresponding graph edge</strong></p>
+<pre><code>Finding: EXT-SYS-01 — Heat-service continuity.
+Classification: Conditional external pathway.
+External evidence: DOC-014, page 7, describes planned works in zone Z.
+Layer 3 anchor: F-042 specifies purchased heat; current connection is unknown.
+Pathway: planned works → heat supply → possible service-continuity exposure.
+Unresolved link: whether this subject is connected to zone Z and has backup heat.
+Effect and horizon: not established for the subject until those links are resolved.
+
+Graph edge: EDGE-01.
+From: utility works in zone Z.   To: subject heat-service continuity.
+Intermediary: heat network.
+Basis: EXT-SYS-01; DOC-014, page 7; Layer 3 anchor F-042.
+Status: conditional; actual connection and backup provision remain unknown.
+Other domains may reference this driver without merging different consequences.</code></pre>
+<p>The final synthesis explains this conditional relationship as conditional. It does not convert the scenario into a confirmed disruption or a quantified financial loss.</p>
+<h2 id="12-what-the-reader-receives">12 · What the reader receives</h2>
+<ul><li>A final domain catalogue explaining responsibilities and why additions were made.</li><li>Supplied facts organized into readable domain files, with source references and visible unresolved items.</li><li>Individual Layer 3 domain reports supported by accessible webpages and processed documents.</li><li>Individual Layer 4 external-dependency reports.</li><li>A separate dependency graph and a compact final synthesis.</li><li>Source and execution records that make the results traceable.</li></ul>
+<p>Start with the Layer 4 final synthesis, then open the separate dependency graph to follow relationships. Use individual external reports for the underlying reasoning and Layer 3 domain reports for the subject-level findings. Source records lead to the exact webpage or document location used.</p>
+<p>Factsheet limitations, extraction failures and unresolved assignments stay visible in their relevant records. The original files and saved model responses remain available. This gives reviewers a path from the manager-facing conclusion back to the supplied and opened evidence.</p>
+<p>Proposed artifact names describe responsibilities and are not executable interface contracts.</p></main></div>

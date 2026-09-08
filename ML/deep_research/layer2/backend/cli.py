@@ -6,11 +6,11 @@ import argparse
 import os
 from pathlib import Path
 
-from .create_run import create_run
+from .create_run import create_run, require_current
 from .fs import load_json, read_text
 from .report import run_checks
 from .runner import run_all
-from .settings import LAYER2_SCHEMA_VERSION, PLANNER_PATH, REPO_ROOT, RUNS_DIR
+from .settings import REPO_ROOT, RUNS_DIR
 
 
 def load_dotenv_key(project_dir: Path = REPO_ROOT) -> None:
@@ -28,44 +28,33 @@ def load_dotenv_key(project_dir: Path = REPO_ROOT) -> None:
 
 
 def _require_current_run(parser: argparse.ArgumentParser, run_dir: Path) -> None:
-    """Input a CLI parser and run; stop CLI execution unless the run is schema 3."""
+    """Input a CLI parser and run; stop CLI execution unless the run is schema 4."""
     try:
-        record = load_json(run_dir / "run.json")
-    except (OSError, ValueError):
-        parser.error("the run folder has no readable run.json")
-    if record.get("schema_version") != LAYER2_SCHEMA_VERSION:
-        parser.error("Layer 2 schema 3 is required; start a fresh fact-sheet run")
+        require_current(run_dir)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
 
 
 def _print_summary(run_dir: Path) -> None:
     """Input a completed run; print its compact operator summary and resume hint."""
     record = load_json(run_dir / "run.json")
-    chunks = record.get("chunking", {}).get("chunks", [])
-    summary = record.get("chunking", {}).get("summary", {})
-    failed = [item for item in chunks if item.get("status") == "failed"]
-    print(
-        f"Run {run_dir.name}: {int(summary.get('completed', 0) or 0)}/"
-        f"{len(chunks)} chunks returned JSON"
-    )
+    failed = [key for key, item in record["jobs"].items() if item["status"] == "failed"]
+    print(f"Layer 2: {record['status']} — {len(failed)} failed jobs")
     if failed:
-        print("WARNING: Layer 2 published partial domain context with failed chunks.")
-        for item in failed:
-            print(
-                f"  Chunk {item.get('index')} attempt {item.get('attempt', 0)}: "
-                f"{item.get('error_type') or 'Error'}: {item.get('error') or 'unknown error'}"
-            )
         print(f'.\\run.ps1 -Resume "{run_dir}"')
-    print(f"Domain context: {run_dir / 'missions'}")
+    print(f"Run: {run_dir}\nLog: {run_dir / 'run.log'}")
 
 
 def main(argv: list[str] | None = None) -> int:
     """Input optional CLI arguments; create, resume or inspect one Layer 2 run."""
     parser = argparse.ArgumentParser(
-        description="Route one CDI fact sheet into eight domain-context files."
+        description="Design plugin-driven domains and route original evidence (Layer 2 schema 4)."
     )
     parser.add_argument("fact_sheet", nargs="?", type=Path)
-    parser.add_argument("--resume", type=Path, help="resume a schema-3 Layer 2 run")
-    parser.add_argument("--check-only", type=Path, help="inspect a schema-3 Layer 2 run")
+    parser.add_argument("--domain-plugin", type=Path)
+    parser.add_argument("--requirements", type=Path)
+    parser.add_argument("--resume", type=Path, help="resume a schema-4 Layer 2 run")
+    parser.add_argument("--check-only", type=Path, help="inspect a schema-4 Layer 2 run")
     args = parser.parse_args(argv)
     load_dotenv_key()
     if args.check_only:
@@ -79,9 +68,9 @@ def main(argv: list[str] | None = None) -> int:
         run_dir = args.resume.resolve()
         _require_current_run(parser, run_dir)
     else:
-        if not args.fact_sheet:
-            parser.error("provide a fact_sheet.md path or --resume")
-        run_dir = create_run(args.fact_sheet, PLANNER_PATH, RUNS_DIR)
+        if not (args.fact_sheet and args.domain_plugin and args.requirements):
+            parser.error("provide fact_sheet.md, --domain-plugin and --requirements, or --resume")
+        run_dir = create_run(args.fact_sheet, args.domain_plugin, args.requirements, RUNS_DIR)
         print(f"Created {run_dir}", flush=True)
     run_all(run_dir)
     _print_summary(run_dir)

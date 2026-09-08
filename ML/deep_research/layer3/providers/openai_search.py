@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from openai import AsyncOpenAI
 
-from ML.deep_research.layer2.fs import now_iso
+from ML.deep_research.layer2.backend.fs import now_iso
 
 from ..contracts import Document, SearchHit
 from ..retrieval import hit_id, validate_public_url

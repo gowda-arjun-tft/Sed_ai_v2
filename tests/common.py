@@ -3,16 +3,17 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from ML.deep_research.layer2.fs import (
+from ML.deep_research.layer2.backend.fs import (
     atomic_write_text,
     load_json,
     now_iso,
     slug,
     write_json,
 )
-from ML.deep_research.layer2.create_run import create_run
-from ML.deep_research.layer2.mission_markdown import write_mission_markdown
-from ML.deep_research.layer2.settings import AGENT_NAMES, PLANNER_PATH
+from ML.deep_research.layer3.legacy_input import write_mission_markdown
+from ML.deep_research.layer3.settings import AGENT_NAMES
+
+PLANNER_PATH = Path(__file__).parent / "fixtures" / "legacy_l2_planner_prompt.md"
 
 
 class NativeBatchGraph:
@@ -86,7 +87,16 @@ def create_complete_run(root: Path) -> Path:
     """Build a complete context-only Layer 2 fixture without a model call."""
     fact_sheet = root / "fact_sheet.md"
     fact_sheet.write_text(FACT_SHEET, encoding="utf-8")
-    run_dir = create_run(fact_sheet, PLANNER_PATH, root / "runs")
+    # Historical source fixture for unchanged L3/L4; never execute schema 4 here.
+    from ML.deep_research.layer2.backend.fs import sha256
+    run_dir = root / "runs" / "fixture-group" / "L2_fixture"
+    atomic_write_text(run_dir / "inputs" / "fact_sheet.md", FACT_SHEET)
+    atomic_write_text(run_dir / "inputs" / "planner_prompt.md", PLANNER_PATH.read_text(encoding="utf-8"))
+    write_json(run_dir / "run.json", {
+        "schema_version": 3, "run_id": run_dir.name, "status": "complete",
+        "fact_sheet": {"sha256": sha256(fact_sheet), "name": fact_sheet.name},
+        "planner_prompt": {"sha256": sha256(PLANNER_PATH)}, "chunking": {},
+    })
 
     write_json(run_dir / "chunks" / "chunk_0001.json", {"fixture": True})
     record = load_json(run_dir / "run.json")

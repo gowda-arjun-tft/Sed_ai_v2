@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from ML.deep_research.layer2.fs import atomic_write_text, read_text, text_hash
+from ML.deep_research.layer2.backend.fs import atomic_write_text, read_text, text_hash
 
 from .contracts import Document
 from .retrieval import normalize_url

@@ -5,8 +5,8 @@ import asyncio
 import os
 from pathlib import Path
 
-from ML.deep_research.layer2.cli import load_dotenv_key
-from ML.deep_research.layer2.fs import load_json
+from ML.deep_research.layer2.backend.cli import load_dotenv_key
+from ML.deep_research.layer2.backend.fs import load_json
 
 from .create_run import create_run
 from .runner import run_external_research
@@ -93,4 +93,3 @@ def main(argv: list[str] | None = None) -> int:
 
 
 __all__ = ["main", "run_all"]
-

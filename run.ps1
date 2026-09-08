@@ -1,5 +1,7 @@
 param(
     [string]$FactSheet,
+    [string]$DomainPlugin,
+    [string]$Requirements,
     [string]$Resume,
     [string]$Research,
     [string]$ExternalResearch,
@@ -45,6 +47,9 @@ if ($RetryFailed -and -not ($ResumeL3 -or $ResumeL4)) {
 if (@($FactSheet, $Resume, $Research, $ResumeL3, $ExternalResearch, $ResumeL4).Where({ $_ }).Count -gt 1) {
     throw 'Choose only one run action.'
 }
+if (($DomainPlugin -or $Requirements) -and ($Resume -or $Research -or $ResumeL3 -or $ExternalResearch -or $ResumeL4)) {
+    throw '-DomainPlugin and -Requirements apply only to new Layer 2 runs.'
+}
 
 if ($Research) {
     $Layer3Args = @('--research', $Research)
@@ -76,7 +81,10 @@ if ($Research) {
     if (-not $FactSheet) {
         $FactSheet = Read-Host 'Full path to fact_sheet.md'
     }
-    & $Python -m ML.deep_research.layer2 $FactSheet
+    if (-not $DomainPlugin -or -not $Requirements) {
+        throw 'A new Layer 2 run requires -DomainPlugin and -Requirements.'
+    }
+    & $Python -m ML.deep_research.layer2 $FactSheet --domain-plugin $DomainPlugin --requirements $Requirements
 }
 
 exit $LASTEXITCODE

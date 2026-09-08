@@ -6,15 +6,15 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ML.deep_research.layer2.fs import (
+from ML.deep_research.layer2.backend.fs import (
     load_json,
     now_iso,
     run_group_name,
     sha256,
     write_json,
 )
-from ML.deep_research.layer2.settings import REASONING_EFFORTS
-from ML.deep_research.layer2.mission_markdown import write_mission_markdown
+from ML.deep_research.layer2.backend.settings import REASONING_EFFORTS
+from ML.deep_research.layer3.legacy_input import write_mission_markdown
 
 from ..mission import stage_thread_id
 from ..settings import (

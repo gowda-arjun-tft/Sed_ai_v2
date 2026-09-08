@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import cache
 from typing import Any
 
-from .settings import (
+from ..backend.settings import (
     MODEL_SPEC,
     PROVIDER_MAX_RETRIES,
     REASONING_EFFORT,

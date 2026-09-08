@@ -2,8 +2,7 @@
 
 from pathlib import Path
 
-from ML.deep_research.layer2.settings import (
-    AGENT_NAMES,
+from ML.deep_research.layer2.backend.settings import (
     DEEPAGENTS_VERSION,
     MODEL_NAME,
     MODEL_INPUT_TOKEN_LIMIT,
@@ -43,6 +42,15 @@ SUMMARY_TRIGGER_TOKENS = 170_000
 SUMMARY_KEEP_TOKENS = 70_000
 SUMMARY_TRIM_TOKENS = None
 
-# Layer 2 owns the ordered domain roster. Layer 3 consumes those mission files
-# one-for-one so the two layers cannot silently disagree about responsibility.
+# Historical Layer 2/3 roster; schema-4 Layer 2 domains come from its plugin.
+AGENT_NAMES = [
+    "Asset Integrity, Systems & Operational Resilience",
+    "Occupier, Lease, Income & Counterparty Economics",
+    "Rights, Public Law & Ownership Governance",
+    "Ground, Physical Climate & Insurability",
+    "Energy, Carbon & Transition",
+    "Location, Demand, Market, Valuation & Exit",
+    "Finance, Debt & Macro Transmission",
+    "External Dependencies, Geopolitics, Trade & Supply Chains",
+]
 DOMAIN_NAMES = tuple(AGENT_NAMES)

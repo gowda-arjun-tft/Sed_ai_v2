@@ -104,7 +104,7 @@ class FrameworkAssumptionTests(unittest.TestCase):
         from deepagents.backends import StateBackend
         from deepagents.middleware import SummarizationMiddleware
         from deepagents.profiles.harness.harness_profiles import _get_harness_profile
-        from ML.deep_research.layer2.harness import configure_harness
+        from ML.deep_research.layer2.ML.harness import configure_harness
 
         configure_harness()
         profile = _get_harness_profile(MODEL_SPEC)

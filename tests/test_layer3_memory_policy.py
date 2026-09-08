@@ -10,7 +10,7 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.messages.utils import count_tokens_approximately
 
-from ML.deep_research.layer2.fs import load_json, write_json
+from ML.deep_research.layer2.backend.fs import load_json, write_json
 from ML.deep_research.layer3.contracts import Document, ResearchContext
 from deepagents.backends import StateBackend
 

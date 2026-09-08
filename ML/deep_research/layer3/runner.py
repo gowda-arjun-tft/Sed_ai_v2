@@ -7,7 +7,7 @@ from pathlib import Path
 from time import monotonic
 from typing import Any, AsyncIterator
 
-from ML.deep_research.layer2.fs import (
+from ML.deep_research.layer2.backend.fs import (
     atomic_write_text, load_json, now_iso, read_text, slug,
 )
 

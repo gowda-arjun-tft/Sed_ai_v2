@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ML.deep_research.layer2.planner import load_planner
-from ML.deep_research.layer2.settings import PLANNER_PATH
+from ML.deep_research.layer3.legacy_input import load_planner
+from tests.common import PLANNER_PATH
 from ML.deep_research.layer3.prompts import (
     domain_message,
     researcher_system_prompt,

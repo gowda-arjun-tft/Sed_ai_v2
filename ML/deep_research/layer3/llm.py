@@ -8,11 +8,11 @@ from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware
 
-from ML.deep_research.layer2.harness import (
+from ML.deep_research.layer2.ML.harness import (
     configure_harness,
     configure_provider,
 )
-from ML.deep_research.layer2.fs import load_json
+from ML.deep_research.layer2.backend.fs import load_json
 
 from .contracts import RESEARCHER_NAME, ResearchContext
 from .memory import context_policy, evidence_eviction, research_summarization

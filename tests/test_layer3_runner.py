@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from langchain_core.messages import AIMessage
 
-from ML.deep_research.layer2.fs import load_json, read_text, slug, write_json
+from ML.deep_research.layer2.backend.fs import load_json, read_text, slug, write_json
 from ML.deep_research.layer3.pipeline.create_run import create_run
 from ML.deep_research.layer3.runner import run_research
 from ML.deep_research.layer3.settings import DOMAIN_NAMES

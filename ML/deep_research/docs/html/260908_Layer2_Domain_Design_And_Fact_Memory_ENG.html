@@ -1,0 +1,211 @@
+<title>Layer 2 Domain Design and Fact Memory</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>/* Design plan
+   Subject: a read-only architecture audit of a research pipeline (run ids, sha256, jsonl, Markdown contracts).
+   Palette (light): paper #F3F5F7 (cool grey-blue ground), ink #1B2430, teal #0F6E77 (verified / accent),
+                    ochre #9A6A16 (inference), rust #A34A2A (loss, missing), slate #5B6B7A (labels), rule #D3D9DF.
+   Palette (dark):  ground #10161C, ink #E6EAEE, teal #4FB3BC, ochre #D9A441, rust #E07A55, slate #93A1AE, rule #2A3440.
+   Type: headings Bitter (slab serif, document authority); body Source Sans 3; data/labels IBM Plex Mono.
+   Layout: one reading column (72ch) with a sticky section index on wide screens; tables scroll in their own box;
+           the five evidence labels are rendered as a small tag system so the reader can scan what is confirmed vs inferred. */
+:root {
+  --paper: #F3F5F7; --ink: #1B2430; --ink-2: #3A4552; --slate: #5B6B7A; --rule: #D3D9DF; --panel: #FFFFFF;
+  --teal: #0F6E77; --teal-soft: #DCEFF0; --ochre: #9A6A16; --ochre-soft: #F5EBD4; --rust: #A34A2A; --rust-soft: #F6E1D9;
+  --code-bg: #E9EDF1; --shadow: 0 1px 2px rgba(27,36,48,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10161C; --ink: #E6EAEE; --ink-2: #C3CBD3; --slate: #93A1AE; --rule: #2A3440; --panel: #171E26;
+    --teal: #4FB3BC; --teal-soft: #14333A; --ochre: #D9A441; --ochre-soft: #33290F; --rust: #E07A55; --rust-soft: #3A2019;
+    --code-bg: #1D2630; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10161C; --ink: #E6EAEE; --ink-2: #C3CBD3; --slate: #93A1AE; --rule: #2A3440; --panel: #171E26;
+  --teal: #4FB3BC; --teal-soft: #14333A; --ochre: #D9A441; --ochre-soft: #33290F; --rust: #E07A55; --rust-soft: #3A2019;
+  --code-bg: #1D2630; --shadow: none;
+}
+html { color-scheme: light dark; }
+body { background: var(--paper); color: var(--ink); font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif; font-size: 17px; line-height: 1.55; margin: 0; }
+.wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 48px; max-width: 1180px; margin: 0 auto; padding: 32px 20px 96px; }
+@media (min-width: 1080px) { .wrap { grid-template-columns: 240px minmax(0, 1fr); } .toc { display: block; } }
+.toc { display: none; position: sticky; top: 24px; align-self: start; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; border-right: 1px solid var(--rule); padding-right: 16px; max-height: calc(100vh - 48px); overflow: auto; }
+.toc a { color: var(--slate); text-decoration: none; display: block; padding: 3px 0; }
+.toc a:hover, .toc a:focus-visible { color: var(--teal); outline: none; }
+.toc .num { color: var(--teal); display: inline-block; width: 2.2em; }
+main { min-width: 0; }
+header.doc { border-bottom: 1px solid var(--rule); padding-bottom: 20px; margin-bottom: 28px; }
+.eyebrow { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--slate); }
+h1, h2, h3, h4 { font-family: "Bitter", Georgia, "Times New Roman", serif; text-wrap: balance; line-height: 1.2; margin: 0; color: var(--ink); }
+h1 { font-size: 34px; font-weight: 600; margin: 8px 0 12px; }
+h2 { font-size: 24px; font-weight: 600; margin: 48px 0 14px; padding-top: 12px; border-top: 1px solid var(--rule); }
+h3 { font-size: 18.5px; font-weight: 600; margin: 28px 0 8px; }
+h4 { font-size: 16px; font-weight: 600; margin: 20px 0 6px; color: var(--ink-2); }
+p, li { max-width: 72ch; }
+p { margin: 0 0 12px; }
+ul, ol { margin: 0 0 14px; padding-left: 1.3em; }
+li { margin: 0 0 5px; }
+a { color: var(--teal); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+code, kbd { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; line-height: 1.45; background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin: 10px 0 18px; }
+pre code { background: none; padding: 0; font-size: inherit; }
+.tbl { overflow-x: auto; margin: 12px 0 20px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+th { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--slate); font-weight: 500; background: var(--paper); }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; }
+.tag { display: inline-block; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; margin-right: 6px; vertical-align: middle; border: 1px solid transparent; }
+.tag.repo { color: var(--teal); background: var(--teal-soft); }
+.tag.run { color: var(--teal); background: var(--teal-soft); border-color: var(--teal); }
+.tag.doc { color: var(--ink-2); background: var(--code-bg); }
+.tag.inf { color: var(--ochre); background: var(--ochre-soft); }
+.tag.rec { color: var(--paper); background: var(--teal); }
+.tag.loss { color: var(--rust); background: var(--rust-soft); }
+.decision { background: var(--panel); border-left: 3px solid var(--teal); padding: 16px 20px; margin: 18px 0 22px; box-shadow: var(--shadow); }
+.decision p:last-child { margin-bottom: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 14px; color: var(--slate); margin: 10px 0 0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 14px 0 6px; }
+.kpi { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; }
+.kpi .v { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 12.5px; color: var(--slate); margin-top: 2px; }
+.note { font-size: 14.5px; color: var(--ink-2); border-top: 1px dashed var(--rule); padding-top: 8px; margin-top: 8px; }
+blockquote { margin: 10px 0 14px; padding: 8px 16px; border-left: 3px solid var(--rule); color: var(--ink-2); background: var(--panel); }
+blockquote p { margin: 0 0 6px; }
+.prompt { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 16px; margin: 10px 0 18px; font-size: 15.5px; }
+.prompt .del { color: var(--rust); text-decoration: line-through; }
+.prompt .ins { color: var(--teal); }
+.prompt .lbl { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--slate); display: block; margin-bottom: 6px; }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+<div class="wrap">
+<nav class="toc" aria-label="Contents"><div class="eyebrow" style="margin-bottom:8px">Contents</div><a href="#1-a-small-working-desk-with-the-full-archive-beside-it"><span class="num">1</span>A small working desk, with the full archive beside it</a><a href="#2-the-workflow-stage-by-stage"><span class="num">2</span>The workflow, stage by stage</a><a href="#3-what-the-reviewer-actually-sees"><span class="num">3</span>What the reviewer actually sees</a><a href="#4-memory-methods-considered"><span class="num">4</span>Memory methods considered</a><a href="#5-the-input-boundary"><span class="num">5</span>The input boundary</a><a href="#6-the-extra-facts-requirement"><span class="num">6</span>The Extra-facts requirement</a><a href="#7-tools-roles-and-orchestration"><span class="num">7</span>Tools, roles and orchestration</a><a href="#8-proposed-run-layout"><span class="num">8</span>Proposed run layout</a><a href="#9-call-count-and-trade-offs"><span class="num">9</span>Call count and trade-offs</a><a href="#10-implementation-and-evaluation-plan"><span class="num">10</span>Implementation and evaluation plan</a><a href="#11-primary-sources"><span class="num">11</span>Primary sources</a><div class="eyebrow" style="margin:18px 0 8px">Other documents</div><a href="260908_Deep_Research_Target_Architecture_ENG.html">Deep Research Target Architecture</a><a href="260908_Document_Ingestion_Design_ENG.html">Document Ingestion Design</a><a href="260908_Layer3_Cost_And_Context_Baseline_ENG.html">Layer 3 Cost and Context Baseline</a><a href="260908_Layer3_Layer4_World_Model_Redesign_ENG.html">Layer 3 and Layer 4 World Model Redesign</a></nav>
+<main>
+<header class="doc"><div class="eyebrow">Deep Research documentation · ENG</div>
+<h1>Layer 2 Domain Design and Fact Memory</h1>
+<p>Status: <strong>proposed design</strong>, not implemented · Layer 2 only · Consolidated 08 September 2026 from the Layer 2 dynamic-domains research report of 07 September 2026 and the Layer 2 routing ticket write-up.</p></header>
+<p>Decide the initial domains, route the facts, then review the subject in manageable batches. Every extra fact must find an existing or new domain. The reviewer never needs all domain contents in one call.</p>
+<div class="tbl"><table><thead><tr><th>Figure</th><th>Meaning</th></tr></thead><tbody><tr><td>200K</td><td>Normal maximum input target per model request, including all messages, instructions and tools.</td></tr><tr><td>250K</td><td>Absolute dispatch ceiling. The extra 50K is tolerance, not routine capacity.</td></tr><tr><td>0</td><td>Extra facts in the intended final deliverable. All assigned; original audit records retained.</td></tr></tbody></table></div>
+<h2 id="1-a-small-working-desk-with-the-full-archive-beside-it">1 · A small working desk, with the full archive beside it</h2>
+<p>Keep original facts and model responses in durable run files. Put only the current work, the applicable domain definitions and exact references on the model's desk. When more context is needed, fetch the referenced passage. After a batch, save the decisions and begin the next batch with fresh context.</p>
+<p><strong>Chosen approach:</strong> exact external storage + mandatory paged review + pointer-based reads + isolated review sessions + a shared input-size check. Summaries may help navigation, but never replace the source facts and never become the only memory.</p>
+<p><strong>What "no loss" can mean.</strong> Storage can preserve the exact source and every saved response. A coverage ledger can show which pages were processed and which recorded facts have owners. Neither proves that a language model extracted or understood every fact correctly. This design improves coverage and makes omissions visible; it does not promise perfect semantic recall.</p>
+<h2 id="2-the-workflow-stage-by-stage">2 · The workflow, stage by stage</h2>
+<p>Part A decides the domains. Part B distributes the facts and reviews them against the subject. A numbered stage can contain several small model calls.</p>
+<pre><code>Research requirements + baseline domains
+↓
+1 · DOMAIN DESIGNER — create the initial domain plan
+     keep the baseline; add responsibilities or domains with reasons
+↓  (initial plan + original factsheet windows)
+2 · FACT DISTRIBUTOR — route each source window
+     60K source tokens, 10K overlap after the first window
+     save fact records and source references
+↓  two temporary destinations
+     • domain fact files — facts assigned to the initial domains
+     • Extra facts queue — facts with no suitable owner yet
+↓  (review the saved facts in pages)
+3 · DOMAIN PAGES — review every domain, page by page
+     propose better ownership, expanded responsibilities or new subjects
+↓
+4 · EXTRA PAGES — find an owner for each Extra fact
+     existing domain → expanded domain → specific new domain
+↓  (saved proposals + exact supporting references)
+5 · SETTLE THE PLAN — freeze the final domain catalogue
+     reconcile proposals in batches; do not load every domain's facts
+↓  (final catalogue + all recorded facts, paged)
+6 · FINAL PLACEMENT — assign fact IDs to final domains
+     review the whole recorded inventory, not just Extra
+     change ownership; keep fact bodies unchanged
+↓  (model-authored assignments)
+7 · PUBLISHER — no model call
+     application code groups the unchanged facts and follows the assignments
+↓
+Baseline domains + any added domains
+     readable facts, provenance, final responsibilities and change reasons
+     no Extra bucket in the successful final deliverable</code></pre>
+<p>Unresolved assignments or failed work remain visible; they are never deleted to make the queue appear empty.</p>
+<h3 id="stage-detail">Stage detail</h3>
+<ol><li><strong>Design a provisional domain plan.</strong> Input: the research requirement and the baseline definitions. Keep the baseline responsibilities, propose additions and new domains, and explain each change. The designer does not pretend to know the whole subject yet. Output: initial domain plan and reasons.</li></ol>
+<ol><li><strong>Read the original factsheet in source windows.</strong> Use the planned domains to distribute supplied facts. Keep 60K source-token windows and 10K original-text overlap as the starting policy; the full-request budget still applies. Facts with no owner enter a temporary Extra-facts queue. Output: immutable fact records, source pointers and initial assignments.</li></ol>
+<ol><li><strong>Review every domain, one page at a time.</strong> The Domain Reviewer reads each domain's exact fact pages, its mandate and the compact domain catalogue. It returns suggested responsibility changes, misplaced-fact IDs, cross-domain references and proposed new subjects. Every scheduled page is processed; search is not a substitute for this sweep. Output: separate review decisions for each page.</li></ol>
+<ol><li><strong>Resolve every Extra fact.</strong> Read the Extra-facts queue in exact-text pages. Assign each fact to an existing domain, extend a domain, or propose a specific new domain. Unknown applicability is retained as uncertainty inside its subject domain; it is not a reason to leave the fact unassigned. Output: proposed owners and any new domain definitions.</li></ol>
+<ol><li><strong>Settle the final domain plan.</strong> The same reviewer role reconciles proposed definitions and boundaries in small batches, reading the existing catalogue plus each proposal and its supporting references. It relates duplicate proposals and preserves the original baseline responsibilities. No all-domain fact dump is sent. Output: final catalogue, change reasons and exact decision references.</li></ol>
+<ol><li><strong>Confirm placement against the final plan.</strong> Review the complete recorded-fact inventory in bounded batches against the frozen final catalogue. This lets a new domain receive facts that were initially inside another domain, not only facts from Extra. Return assignments by fact ID; do not rewrite the fact bodies. Output: final assignments; original fact text unchanged.</li></ol>
+<ol><li><strong>Publish the domain files.</strong> Application code groups unchanged fact records according to model-authored assignments. Final files contain the actual facts and their provenance, not just pointers. Publish available domain material even after sibling failures; show operational failures and unresolved assignment IDs separately. Output: domain facts, final plan and change record; no Extra domain in a successful result.</li></ol>
+<p>These are stages of one Layer 2 workflow. "Domain Reviewer" is one role used across multiple invocations, not a second reviewer supervising another reviewer. Initial distribution remains one call per source window, routing to all planned domains.</p>
+<h2 id="3-what-the-reviewer-actually-sees">3 · What the reviewer actually sees</h2>
+<p>The reviewer does not review all domain contents in one call.</p>
+<p><strong>Inside a single review session</strong></p>
+<ul><li>Relevant requirements and fixed review rules.</li><li>The current domain mandate and a compact catalogue of domain responsibilities.</li><li>One page of exact facts and their source pointers.</li><li>Relevant prior decisions, preserved exactly.</li><li>Read access to the original passages and other referenced facts.</li></ul>
+<p><strong>Outside this session</strong></p>
+<ul><li>All other fact bodies remain in durable files.</li><li>Earlier conversations stay in the audit and checkpoint store.</li><li>The page manifest holds the remaining work.</li><li>Other domain reviewers do not share a growing message history.</li><li>Every fact page is scheduled explicitly; similarity search cannot silently skip a page.</li></ul>
+<pre><code>Technical domain / page 1 → save decisions → fresh session
+Technical domain / page 2 → save decisions → fresh session
+Lease domain / page 1     → save decisions → fresh session
+…every domain page…
+Extra facts / page 1      → save proposed owners
+Extra facts / page 2      → save proposed owners
+Proposal reconciliation   → freeze final domain plan
+Final placement pages     → assign facts under the final plan</code></pre>
+<p>Prior review decisions are not a substitute for source evidence. When a decision requires comparison across pages, the next session loads the relevant exact records using pointers. A catalogue or decision collection that outgrows the budget is itself paged; no hidden truncation or summary-only merge is allowed.</p>
+<p><strong>Illustration.</strong> At a 60K fact-page size, a 430K-token domain file takes eight review pages. Each call adds instructions, catalogue data and necessary reads. The other domains are not loaded alongside it. The number of calls follows actual input sizes; eight is an example, not a configured domain limit.</p>
+<h2 id="4-memory-methods-considered">4 · Memory methods considered</h2>
+<div class="tbl"><table><thead><tr><th>Method</th><th>What it does</th><th>Decision</th></tr></thead><tbody><tr><td>One large context</td><td>Loads many documents together; avoids retrieval but consumes context and can impair use of distant information.</td><td>Do not use as the review architecture. Long-context research found position-dependent failures; that is not a benchmark of the model in use.</td></tr><tr><td>Rolling summaries</td><td>Replace older material with compressed text. Some detail can be omitted.</td><td>Not the authoritative memory. Optional navigation notes must link to exact records. Automatic summarization stays disabled for this fact-preservation workflow.</td></tr><tr><td>External files + pointers</td><td>Store the full material outside messages and load a referenced piece when needed.</td><td><strong>Primary memory.</strong> Preserve original files, fact records and review decisions. Pointer retrieval is not proof of exhaustive reading.</td></tr><tr><td>Mandatory paged processing</td><td>Visits every page in a manifest rather than relying on what search retrieves.</td><td><strong>Primary coverage method.</strong> Combine with pointers for cross-page comparisons. A design recommendation, not a library guarantee of semantic completeness.</td></tr><tr><td>Vector retrieval / RAG</td><td>Selects passages relevant to a query.</td><td>Useful for lookup, but a top-k result is not an exhaustive inventory. Omit an embedding database in version one; IDs and paged reads suffice.</td></tr><tr><td>Isolated agents / subagents</td><td>Keep individual work in separate message contexts.</td><td>Use isolated sessions for review pages. Save detailed decisions outside the parent context, not only a short final summary.</td></tr><tr><td>Checkpoints</td><td>Save thread state so an interrupted agent can resume.</td><td>Use for tool-using review sessions. They preserve execution state; they do not shrink prompts or make facts understood.</td></tr><tr><td>MemGPT / recursive-LM approaches</td><td>Move data between memory tiers, or examine long input in an external environment using recursive calls.</td><td>Adopt external storage and bounded inspection as ideas. Do not add another framework, interpreter or recursive call tree. Neither approach guarantees lossless understanding.</td></tr></tbody></table></div>
+<h3 id="the-three-storage-levels">The three storage levels</h3>
+<ol><li><strong>Source archive.</strong> Original <code>factsheet.md</code>, requirement and baseline roster snapshots. Stable references include source identity, exact offsets and hash. The source is never replaced by extracted text.</li><li><strong>Working records.</strong> Every model response, fact record, assignment, proposal and reviewer decision. Immutable records get application-issued IDs. Changed ownership creates a new mapping, not an edited fact.</li><li><strong>Active context.</strong> Only the instructions, active work page and relevant exact references needed now. A saved pointer occupies little space; reading its content consumes input tokens again.</li></ol>
+<p>Preserve exact source offsets across window overlap; repeated windows can point to the same source ranges. Byte and character boundaries must be round-trip safe, including non-ASCII text. Mechanical page boundaries are not claims about where a semantic fact starts or ends.</p>
+<h2 id="5-the-input-boundary">5 · The input boundary</h2>
+<p>The limit applies to <strong>every individual model request</strong>: designer, distributor, domain reviewer, Extra reviewer, plan reconciliation, placement, and every follow-up after a tool result. It is not the total run usage, and cached input still occupies context.</p>
+<div class="tbl"><table><thead><tr><th>Counted input</th><th>Example allowance, not a quota</th></tr></thead><tbody><tr><td>System instructions, requirements, domain catalogue, tool and response-format definitions</td><td>20K</td></tr><tr><td>Current exact fact page</td><td>60K</td></tr><tr><td>Supporting source passages and comparison facts</td><td>60K</td></tr><tr><td>Relevant prior decisions, valid recent tool exchange and protocol overhead</td><td>30K</td></tr><tr><td>Illustrative assembled request</td><td>170K, leaving 30K below the normal target</td></tr></tbody></table></div>
+<ul><li><strong>Measure before sending.</strong> Count the assembled request after middleware, with model tokenization and all provider-visible fields. The OpenAI Responses input-token-count interface is documented and present in the installed SDK; use it to verify the serialized request on the intended model before claiming exact enforcement. It is a separate network operation, not a generation call; access, billing and behavior still need validation. No such call was made to produce this document.</li><li><strong>At the normal target, stop adding material.</strong> Reduce the current page, postpone additional reads, or replace already-saved historical payloads with references. Keep instructions and unresolved comparisons needed for the current task.</li><li><strong>Use 200K–250K only</strong> for a necessary bounded continuation or reference comparison that cannot reasonably fit the normal working page. The 50K is input tolerance, not reserved output tokens. Log why it was used.</li><li><strong>Before any request above 250K,</strong> save available state and repack or divide the work before dispatch. Never send the oversized request and hope summarization happens afterward. If an essential request cannot be safely bounded or counted, surface an operational error; other work may continue.</li><li><strong>After tool reads, count again.</strong> Bound the total of parallel tool returns, not each return independently. Tool results must provide continuation references for unread content. Never silently discard the remainder.</li></ul>
+<p>A text-token estimate alone is not an exact provider guarantee. Use conservative local packing and verify provider-facing counting. Do not count only the factsheet or rely on the model's advertised context window. Provider automatic truncation must remain disabled. There is no new output-token ceiling; generated responses are saved fully, then paged if used as future input.</p>
+<p>Start a fresh review session for each work page. If a session needs context rollover, archive the exact messages and tool results first. Carry exact pending decisions and references, and preserve a valid tool-call/result sequence. This is input scheduling and storage, not grading a completed response or asking for a content repair.</p>
+<h2 id="6-the-extra-facts-requirement">6 · The Extra-facts requirement</h2>
+<p>The intended final deliverable has no Extra-facts bucket. Every recorded extra fact must be assigned to one or more real domains. The reviewer can extend responsibilities or create a specific domain where necessary. It must not rename the queue to "Other" and call the task done.</p>
+<ul><li><strong>Existing owner.</strong> A supplied equipment-service record initially has no assignment. The reviewer assigns it to the technical domain, extends the maintenance responsibility if needed, and cites the original fact ID. Unknown installation status stays unknown.</li><li><strong>New owner.</strong> Several supplied facts establish a distinct operational subject outside the planned mandates. The reviewer proposes a specifically named domain, explains its scope, and assigns those fact IDs after reconciliation.</li></ul>
+<p>These examples are illustrative, not facts about a real subject. Historical Extra records remain in the audit archive. They are not a published domain and are not deleted to create the appearance of completion. Where a run fails or leaves an assignment unresolved, preserve that item and report it plainly; do not invent an owner or conceal it.</p>
+<h3 id="two-different-checks-two-different-promises">Two different checks, two different promises</h3>
+<div class="tbl"><table><thead><tr><th>Observation</th><th>What it can establish</th><th>What it cannot establish</th></tr></thead><tbody><tr><td>Every source page has a processing record</td><td>All scheduled source ranges reached processing, with failures visible</td><td>That the model extracted every meaning inside them</td></tr><tr><td>Every saved fact ID has a final domain assignment</td><td>No recorded fact is left in the Extra queue</td><td>That the assignment is semantically correct, or that an unextracted fact never existed</td></tr><tr><td>Exact source and response hashes match</td><td>The saved bytes were preserved</td><td>That the model reasoned accurately about them</td></tr></tbody></table></div>
+<p>Keep this observational. ID accounting may report missing or unresolvable references, but must not grade prose, trigger content retries, discard responses or block available domain publication. Unreadable serialization and unsafe file access remain operational errors. Repeated unattended "retry until Extra is empty" is not part of this design. If the model leaves facts unassigned, surface the remaining IDs for an explicit follow-up.</p>
+<p>A source-review evaluation must separately check that extraction did not overlook facts. An empty Extra queue alone cannot prove that the entire factsheet was used. Preserve full source access alongside domain outputs for that reason.</p>
+<h2 id="7-tools-roles-and-orchestration">7 · Tools, roles and orchestration</h2>
+<div class="tbl"><table><thead><tr><th>Role</th><th>Model-visible tools</th><th>Memory and execution</th></tr></thead><tbody><tr><td>Initial Domain Designer</td><td>None for ordinary supplied requirements; a bounded reference read only if the requirement material itself needs paging.</td><td>One small call normally; page unusually large requirements under the same budget policy. Save plan and reasons.</td></tr><tr><td>Fact Distributor</td><td>None; the source window is supplied directly.</td><td>Fresh context per window; all planned domains plus temporary Extra. Native batch concurrency five.</td></tr><tr><td>Domain / Extra Reviewer</td><td><code>read_reference(ref, cursor)</code></td><td>Fresh, checkpointed session per fact page; exact reference reads for source and cross-page comparison.</td></tr><tr><td>Plan reconciliation</td><td>The same <code>read_reference</code></td><td>Sequential proposal pages and current catalogue. One writer owns catalogue updates and records changes.</td></tr><tr><td>Final placement reviewer</td><td>The same <code>read_reference</code></td><td>Frozen final catalogue plus exact fact page. Returns ownership decisions without rewriting facts.</td></tr><tr><td>Publisher</td><td>Not a model agent</td><td>Groups immutable fact records by returned assignments; saves readable domain files and audit links.</td></tr></tbody></table></div>
+<p><code>read_reference</code> is a proposed small, read-only adapter: resolve a run-owned reference, return exact text within the remaining request budget, and expose the next cursor. The application supplies the work manifest, so a separate search or listing tool is unnecessary initially. The adapter validates IDs, cursors and path scope, not the meaning of the text.</p>
+<p>Native <code>read_file</code> supports bounded reads and Deep Agents has filesystem tool allowlists. However, line limits are not token limits, and arbitrary file reads can exceed the remaining request allowance. Use the smallest token-aware adapter for this requirement; do not expose unrestricted read, write or shell tools in parallel.</p>
+<h3 id="deep-agents-implementation-outline">Deep Agents implementation outline</h3>
+<ul><li>Keep the installed Deep Agents 0.7.7, LangChain 1.3.15 and LangGraph 1.2.11. Installed interfaces remain the implementation authority over documentation.</li><li>Build reusable Deep Agent graphs for the roles above. Supply each domain's frozen responsibilities with its work page. Dynamic domains do not require model-authored scheduling code.</li><li>Expose only the bounded reference tool to reviewers. Keep the established empty-filesystem replacement for these graphs; no general-purpose subagent or default task tool.</li><li>Use <code>StateBackend()</code> for small session state and a SQLite checkpointer for reviewer tool loops. Store the complete source and fact archive in application-owned run files; do not copy the entire corpus into every checkpoint.</li><li>Application storage provides shared, read-only reference access across review threads. A thread-local <code>StateBackend</code> alone does not make files available to unrelated threads. No cross-subject <code>StoreBackend</code> or vector store is required.</li><li>Use native <code>abatch_as_completed</code> for independent distribution work, maximum concurrency five. Review catalogue changes sequentially; final-placement batches can use the same native concurrency after the catalogue freezes.</li><li>Use provider-native permissive JSON-object results for plans and assignments. No custom semantic schema, content validator, Markdown grading or repair retry. Save all completed responses.</li><li>Implement one shared pre-dispatch input-sizing policy and the bounded reader. These are justified by the explicit input ceiling; they must apply to every model turn, not just the initial invocation.</li><li>Disable automatic summarization and tool-call repair. Keep provider transport retries separate. Checkpoint or session restart must not re-run successfully saved work.</li></ul>
+<p>If literal nested subagents are later chosen, register the frozen domain definitions as compiled specialists and apply the same budget and tool restrictions to every child. Their final replies also count toward the parent's input. Do not add a supervisor merely to replay a known work queue. Deep Agents' interpreter-based dynamic dispatch is beta and unnecessary here.</p>
+<h2 id="8-proposed-run-layout">8 · Proposed run layout</h2>
+<pre><code>L2_&lt;run&gt;/
+  inputs/        original factsheet, requirements, baseline definitions
+  planning/      initial and final domain plans, change reasons
+  facts/         exact saved model records, stable IDs, source references
+  review/        per-domain and Extra review decisions; historical queue
+  assignments/   initial and final ownership records
+  domains/       final domain fact files, with readable facts and links
+  checkpoints.sqlite3   review-session recovery
+  run.json       work manifest, settings, hashes and operational progress
+  run.log        one operational timeline
+  usage.jsonl    model calls, token usage and attribution</code></pre>
+<p>This is a proposed logical layout, not a migration instruction. Reuse existing storage names and helpers where compatible during implementation. A new run schema needs an explicit implementation decision; this document does not change one.</p>
+<h2 id="9-call-count-and-trade-offs">9 · Call count and trade-offs</h2>
+<p>Bounded context usually means more, smaller calls. The 200K target is not a total token budget. Exact re-reads can increase total input and latency. Avoiding giant calls protects context size; it does not automatically make the run cheaper or the model more accurate.</p>
+<pre><code>Approximate minimum invocations = P + C + R + G + A
+
+P = initial planning calls (normally 1)
+C = source distribution windows
+R = all domain-review pages + all Extra-review pages
+G = proposal reconciliation calls
+A = final fact-placement pages</code></pre>
+<p>Add tool-follow-up turns and transport attempts separately. <strong>Illustrative only:</strong> if P=1, C=14, R=12, G=2 and A=12, the workflow starts at 41 model invocations. These counts are invented to show the arithmetic, not measurements of a real factsheet. Real counts depend on generated fact volume, domain count, cross-references and review behavior.</p>
+<p>Keep distribution as one call per source window across all planned domains. Sending every window to every domain worker would multiply source reads. The explicit review and final-placement passes provide narrower domain attention without paying that multiplication at initial extraction.</p>
+<h2 id="10-implementation-and-evaluation-plan">10 · Implementation and evaluation plan</h2>
+<p>Build the memory boundary before claiming complete coverage.</p>
+<ol><li><strong>Preserve and identify.</strong> Immutable inputs, raw responses, stable IDs, exact source-range references and a complete page manifest. Test round-trip reconstruction, overlap, Unicode and file hashes.</li><li><strong>Bound access.</strong> Implement the shared request-size guard and paged reference reader. Test 200K handling, the 250K boundary, oversized single records, multiple tool returns, huge catalogues and valid tool-message pairs. No silent provider truncation.</li><li><strong>Run the stages.</strong> Provisional designer, distributor, domain and Extra review, catalogue reconciliation and final placement. Keep responsibilities additive and all raw outputs accessible.</li><li><strong>Publish and expose accounting.</strong> Domain facts, plan revisions, assignment reasons and any unresolved IDs. Preserve sibling outputs after failures. Test that no successful zero-Extra example publishes an Extra domain, and that failure never hides unassigned records.</li><li><strong>Verify recovery.</strong> Restart an interrupted review session, reuse completed work, keep catalogue versions consistent and prevent concurrent publication from overwriting another task's records.</li><li><strong>Evaluate with authorized model calls.</strong> Compare source-fact retention, correct applicability, routing quality, unresolved Extra facts, unnecessary domains, cross-page contradictions, peak input, total tokens, calls and runtime. Include important facts at page boundaries and in the middle of long text.</li></ol>
+<p>Acceptance has two dimensions. Offline tests can verify storage integrity, scheduling, reference accounting and the token-boundary implementation. Human source-based review must assess extraction and routing quality. Do not turn those quality observations into an automatic output rejection or repair loop.</p>
+<h2 id="11-primary-sources">11 · Primary sources</h2>
+<p>Official documentation and research papers checked on 07 September 2026. The design above is a recommendation derived from these sources and the stated constraints, not a claim that a framework guarantees perfect recall. Current documentation can differ from Deep Agents 0.7.7; installed interfaces remain the implementation authority.</p>
+<ul><li><em>Lost in the Middle: How Language Models Use Long Contexts</em> — information position can affect performance in the models and tasks studied. Motivates bounded review; does not establish a quality threshold for the model in use.</li><li>Deep Agents: Backends — <code>StateBackend</code>, durable storage, and shared versus thread-local artifact behavior.</li><li><em>Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks</em> — retrieval-based external knowledge. Conclusion drawn here: selective retrieval alone is insufficient for exhaustive coverage.</li><li>Deep Agents: Subagents — specialist configuration, isolated context and returned results.</li><li>LangGraph: Persistence — thread state, checkpointing and recovery.</li><li><em>MemGPT: Towards LLMs as Operating Systems</em> — hierarchical memory and movement between active and external context.</li><li><em>Recursive Language Models</em> — long prompts kept in an external environment and examined in parts. This design does not adopt its interpreter or recursive orchestration.</li><li>OpenAI: Count response input tokens — provider request counting. Runtime support on the selected model still needs validation.</li><li>OpenAI: Create a response — input handling and the distinction between disabled and automatic truncation.</li><li>Deep Agents: Tools and Permissions — bounded file access and capability restrictions. Custom tools need their own reference and path checks.</li><li>Deep Agents: Dynamic subagents — interpreter-based dispatch is a distinct beta feature.</li><li>Deep Agents: Context engineering — input context, offloading, summarization and isolation are separate mechanisms.</li></ul>
+<p>No research-model, embedding, token-count API or paid generation calls were made to produce this document. The proposed reviewer, memory tools, schemas and input limits still require implementation and verification.</p></main></div>

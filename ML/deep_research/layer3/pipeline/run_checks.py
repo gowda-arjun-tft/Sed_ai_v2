@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ML.deep_research.layer2.fs import atomic_write_text, load_json, slug
+from ML.deep_research.layer2.backend.fs import atomic_write_text, load_json, slug
 
 from ..settings import DOMAIN_NAMES, SCHEMA_VERSION
 

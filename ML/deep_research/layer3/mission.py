@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
-from ML.deep_research.layer2.fs import read_text, slug
-from ML.deep_research.layer2.planner import load_planner
+from ML.deep_research.layer2.backend.fs import read_text, slug
+from ML.deep_research.layer3.legacy_input import load_planner
 
 from .settings import AGENT_NAMES
 

@@ -39,7 +39,7 @@ from langchain.agents.middleware import (
 )
 from langchain_core.messages import HumanMessage, ToolMessage
 
-from ML.deep_research.layer2.fs import load_json
+from ML.deep_research.layer2.backend.fs import load_json
 
 from .settings import CONTEXT_POLICY_VERSION
 

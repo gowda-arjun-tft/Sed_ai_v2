@@ -2,164 +2,109 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ML.deep_research.layer2.agent import _partition_chunk
-from ML.deep_research.layer2.create_run import RUN_SUBDIRS, create_run
-from ML.deep_research.layer2.fs import load_json, write_json
-from ML.deep_research.layer2.runner import _split_run_fact_sheet, split_fact_sheet
-from ML.deep_research.layer2.settings import (
-    CHUNK_ENCODING,
-    CHUNK_INPUT_PARTITIONING,
-    CHUNK_OVERLAP_TOKENS,
-    CHUNK_SIZE_TOKENS,
-    CHUNK_STRATEGY,
-    LAYER2_SCHEMA_VERSION,
-    MAX_CHUNK_CONCURRENCY,
-    PLANNER_PATH,
-)
-from tests.common import FACT_SHEET
+from ML.deep_research.layer2.backend.create_run import create_run
+from ML.deep_research.layer2.ML.context import dump, estimate
+from ML.deep_research.layer2.backend.fs import load_json, sha256, write_json, read_text
+from ML.deep_research.layer2.ML.agent import Layer2Response
+from ML.deep_research.layer2.backend.runner import source_payloads, review_payloads
+from ML.deep_research.layer2.backend.settings import PROMPTS_DIR, STAGES
+from ML.deep_research.layer2.backend.windows import encoding, source_windows, text_pages, token_count
+from tests.layer2_fixtures import new_run
 
 
-class InputAndChunkingTests(unittest.TestCase):
-    def test_small_fact_sheet_is_one_chunk(self):
-        self.assertEqual(split_fact_sheet(FACT_SHEET), [FACT_SHEET])
+class InputTests(unittest.TestCase):
+    def test_source_windows_and_exact_overlap(self):
+        codec = encoding()
+        text = codec.decode([codec.encode(" property")[0]] * 701_133)
+        windows = source_windows(text)
+        self.assertEqual([w["tokens"] for w in windows], [60_000] * 13 + [51_133])
+        self.assertEqual(sum(w["tokens"] for w in windows), 831_133)
+        self.assertEqual("".join(w["new_content"] for w in windows), text)
+        for previous, current in zip(windows, windows[1:]):
+            self.assertEqual(codec.encode(current["overlap_context"]),
+                             codec.encode(previous["overlap_context"] + previous["new_content"])[-10_000:])
 
-    def test_one_hundred_thousand_tokens_make_two_fixed_chunks(self):
-        import tiktoken
+    def test_small_exact_end_and_headings(self):
+        for text in ["hello", " property" * 60_000, " property" * 100_000,
+                     "## first\n" + "alpha " * 30_000 + "\n## second\n" + "beta " * 30_000]:
+            windows = source_windows(text)
+            self.assertEqual("".join(w["new_content"] for w in windows), text)
+            self.assertEqual(windows[-1]["end_token"], token_count(text))
+        self.assertEqual(len(source_windows(" property" * 60_000)), 1)
+        self.assertEqual([w["tokens"] for w in source_windows(" property" * 100_000)],
+                         [60_000, 50_000])
 
-        encoding = tiktoken.get_encoding(CHUNK_ENCODING)
-        token = encoding.encode(" property")[0]
-        text = encoding.decode([token] * 100_000)
-        chunks = split_fact_sheet(text)
-        sizes = [len(encoding.encode(chunk)) for chunk in chunks]
-        encoded = [encoding.encode(chunk) for chunk in chunks]
-        self.assertEqual(sizes, [60_000, 50_000])
-        self.assertEqual(
-            encoded[0][-CHUNK_OVERLAP_TOKENS:],
-            encoded[1][:CHUNK_OVERLAP_TOKENS],
-        )
+    def test_unicode_and_original_byte_boundaries(self):
+        text = "😀漢字 café\r\n🏥𝄞 नमस्ते " * 400
+        windows = source_windows(text, 61, 11)
+        self.assertEqual("".join(w["new_content"] for w in windows), text)
+        for w in windows:
+            self.assertEqual(text.encode()[w["start_byte"]:w["end_byte"]].decode(),
+                             w["overlap_context"] + w["new_content"])
+            self.assertNotIn("\ufffd", w["new_content"])
+        pages = text_pages(text, 29)
+        self.assertEqual("".join(pages), text)
+        self.assertTrue(all(token_count(p) <= 29 for p in pages))
 
-    def test_markdown_headings_do_not_change_fixed_boundaries(self):
-        import tiktoken
+    def test_preflight_and_frozen_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = new_run(root, text="\ufeffLine 1\r\nLine 2")
+            meta = load_json(run / "run.json")
+            self.assertEqual(meta["schema_version"], 4)
+            self.assertFalse(meta["downstream_integrated"])
+            self.assertEqual(meta["context_policy"]["maximum_tokens"], 250_000)
+            self.assertEqual(meta["chunking"]["stride_tokens"], 50_000)
+            self.assertFalse((run / "missions").exists())
+            for name, info in meta["inputs"].items():
+                self.assertEqual(sha256(run / "inputs" / name), info["sha256"])
+                self.assertTrue(Path(info["source_path"]).is_file())
+            for stage in STAGES:
+                name = f"prompts/{stage}.md"
+                self.assertEqual(Path(meta["inputs"][name]["source_path"]), PROMPTS_DIR / f"{stage}.md")
+                self.assertEqual((run / "inputs" / name).read_bytes(),
+                                 (PROMPTS_DIR / f"{stage}.md").read_bytes())
+            self.assertEqual((root / "facts.md").read_bytes(), (run / "inputs/fact_sheet.md").read_bytes())
+            with self.assertRaises((OSError, ValueError)):
+                create_run(root / "missing", root / "plugin.md", root / "requirements.md", root / "bad")
+            self.assertFalse((root / "bad").exists())
+            (root / "requirements.md").write_text("")
+            with self.assertRaises(ValueError):
+                create_run(root / "facts.md", root / "plugin.md", root / "requirements.md", root / "empty")
+            self.assertFalse((root / "empty").exists())
 
-        encoding = tiktoken.get_encoding(CHUNK_ENCODING)
-        text = "## First\n" + "alpha " * 30_000 + "\n## Second\n" + "beta " * 30_000
-        chunks = split_fact_sheet(text)
-        self.assertEqual(len(chunks), 2)
-        expected = encoding.encode(text)
-        self.assertEqual(encoding.encode(chunks[0]), expected[:60_000])
-        self.assertEqual(encoding.encode(chunks[1]), expected[50_000:])
+    def test_plain_markdown_plugins_and_grouping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = new_run(root, plugin="An ordinary plugin, no embedded JSON required")
+            second = new_run(root)
+            self.assertEqual(first.parent, second.parent)
+            self.assertNotEqual(first, second)
 
-    def test_final_chunk_stops_without_a_redundant_tail(self):
-        import tiktoken
-
-        encoding = tiktoken.get_encoding(CHUNK_ENCODING)
-        token = encoding.encode(" property")[0]
-        text = encoding.decode([token] * 701_133)
-        chunks = split_fact_sheet(text)
-        encoded = [encoding.encode(chunk) for chunk in chunks]
-        sizes = [len(tokens) for tokens in encoded]
-        self.assertEqual(sizes, [60_000] * 13 + [51_133])
-        self.assertEqual(sum(sizes), 831_133)
-        for index, chunk in enumerate(chunks, start=1):
-            overlap, new = _partition_chunk(
-                chunk, index, CHUNK_ENCODING, CHUNK_OVERLAP_TOKENS
-            )
-            self.assertEqual(
-                encoding.encode(overlap + new), encoded[index - 1]
-            )
-            if index == 1:
-                self.assertEqual(overlap, "")
-            else:
-                self.assertEqual(
-                    encoding.encode(overlap), encoded[index - 2][-10_000:]
-                )
-
-    def test_run_folder_records_schema_and_chunk_policy_without_output_cap(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "fact_sheet.md"
-            source.write_text(FACT_SHEET, encoding="utf-8")
-            run_dir = create_run(source, PLANNER_PATH, root / "runs")
-            record = load_json(run_dir / "run.json")
-
-        self.assertEqual(
-            tuple(RUN_SUBDIRS), ("inputs", "chunks", "missions", "mission_md")
-        )
-        self.assertEqual(run_dir.parent.parent, root / "runs")
-        self.assertEqual(run_dir.parent.name, record["run_group"])
-        self.assertIn("fact-sheet", run_dir.parent.name)
-        self.assertRegex(run_dir.name, r"^L2_\d{8}_\d{6}_[0-9a-f]{4}$")
-        self.assertEqual(record["schema_version"], LAYER2_SCHEMA_VERSION)
-        self.assertNotIn("output_profile", record)
-        self.assertEqual(record["chunking"]["strategy"], CHUNK_STRATEGY)
-        self.assertEqual(
-            record["chunking"]["input_partitioning"], CHUNK_INPUT_PARTITIONING
-        )
-        self.assertEqual(record["chunking"]["size_tokens"], CHUNK_SIZE_TOKENS)
-        self.assertEqual(record["chunking"]["overlap_tokens"], CHUNK_OVERLAP_TOKENS)
-        self.assertEqual(record["chunking"]["stride_tokens"], 50_000)
-        self.assertEqual(record["chunking"]["max_concurrency"], MAX_CHUNK_CONCURRENCY)
-        self.assertNotIn("separators", record["chunking"])
-        self.assertEqual(record["limits"]["provider_max_retries"], 3)
-        self.assertNotIn("output_tokens_per_model_call", record["limits"])
-        self.assertNotIn("summarization_trigger_tokens", record["limits"])
-
-    def test_schema_two_run_is_rejected_without_modification(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "fact_sheet.md"
-            source.write_text(FACT_SHEET, encoding="utf-8")
-            run_dir = create_run(source, PLANNER_PATH, root / "runs")
-            record = load_json(run_dir / "run.json")
-            record["schema_version"] = 2
-            write_json(run_dir / "run.json", record)
-            before = (run_dir / "run.json").read_bytes()
-
-            with self.assertRaisesRegex(ValueError, "schema 3"):
-                _split_run_fact_sheet(run_dir)
-
-            self.assertEqual((run_dir / "run.json").read_bytes(), before)
-
-    def test_nonempty_markdown_does_not_require_a_heading(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "fact_sheet.md"
-            source.write_text("plain text", encoding="utf-8")
-            run_dir = create_run(source, PLANNER_PATH, root / "runs")
-            self.assertEqual(
-                (run_dir / "inputs" / "fact_sheet.md").read_text(), "plain text"
-            )
-
-    def test_invalid_planner_leaves_no_run_folder(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "fact_sheet.md"
-            planner = root / "planner.md"
-            source.write_text(FACT_SHEET, encoding="utf-8")
-            planner.write_text("missing roster", encoding="utf-8")
-
-            with self.assertRaisesRegex(ValueError, "AGENTS_JSON"):
-                create_run(source, planner, root / "runs")
-
-            self.assertFalse((root / "runs").exists())
-
-    def test_same_input_is_grouped_and_same_named_inputs_are_distinct(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            first = root / "property-a" / "fact_sheet.md"
-            second = root / "property-b" / "fact_sheet.md"
-            first.parent.mkdir()
-            second.parent.mkdir()
-            first.write_text(FACT_SHEET, encoding="utf-8")
-            second.write_text(FACT_SHEET, encoding="utf-8")
-            first_run = create_run(first, PLANNER_PATH, root / "runs")
-            repeated_run = create_run(first, PLANNER_PATH, root / "runs")
-            second_run = create_run(second, PLANNER_PATH, root / "runs")
-
-        self.assertEqual(first_run.parent, repeated_run.parent)
-        self.assertNotEqual(first_run, repeated_run)
-        self.assertNotEqual(first_run.parent, second_run.parent)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_repacking_preserves_source_and_fits_assembled_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = " property" * 60_000
+            run = new_run(Path(tmp), text=text)
+            record = load_json(run / "run.json")
+            record["context_policy"].update(target_tokens=35_000, maximum_tokens=50_000)
+            write_json(run / "run.json", record)
+            # A generated window cannot replace the authoritative frozen original.
+            (run / "source/s000001.json").write_text('{}')
+            payloads = source_payloads(run, {"requirements": " property" * 4_000}, "understanding")
+            self.assertGreater(len(payloads), 1)
+            self.assertEqual("".join(p["new_content"] for p in payloads), text)
+            prompt = read_text(run / "inputs/prompts/understanding.md")
+            for payload in payloads:
+                self.assertLessEqual(estimate([{"role": "user", "content": dump(payload)}], prompt,
+                                             response_schema=Layer2Response.model_json_schema()), 35_000)
+                source = payload["source"]
+                self.assertEqual(text.encode()[source["start_byte"]:source["end_byte"]].decode(),
+                                 payload["overlap_context"] + payload["new_content"])
+            facts = [{"fact_id": f"f{i}", "body": " property" * 5_000} for i in range(6)]
+            pages = review_payloads(run, "assignments", {"requirements": " property" * 12_000}, facts)
+            self.assertGreater(len(pages), 1)
+            self.assertEqual([f for p in pages for f in p["facts"]], facts)
+            prompt = read_text(run / "inputs/prompts/assignments.md")
+            for page in pages:
+                self.assertLessEqual(estimate([{"role": "user", "content": dump(page)}], prompt,
+                                             response_schema=Layer2Response.model_json_schema()), 35_000)

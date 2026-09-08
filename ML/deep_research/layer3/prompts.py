@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ML.deep_research.layer2.fs import read_text
+from ML.deep_research.layer2.backend.fs import read_text
 
 from .settings import DOMAIN_NAMES
 

@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ML.deep_research.layer2.fs import load_json, read_text, slug, write_json
+from ML.deep_research.layer2.backend.fs import load_json, read_text, slug, write_json
 from ML.deep_research.layer3.settings import DOMAIN_NAMES
 from ML.deep_research.layer4.create_run import create_run
 from ML.deep_research.layer4.cli import _parser, main
