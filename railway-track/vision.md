@@ -18,7 +18,7 @@ Generated runs, secrets, caches, sources, and checkpoints remain local. Model-ou
 
 ## Major Capabilities
 
-Layer 2 designs and reviews dynamic domains while preserving evidence and disclosing unresolved recorded facts. Layer 3 researches property risks, and Layer 4 researches external influences. Schema-4 downstream integration remains separate; current behavior is documented in [README.md](../README.md).
+Layer 2 designs and reviews dynamic domains while preserving evidence and disclosing unresolved recorded facts. Layer 3 researches property risks, and Layer 4 researches external influences. Dynamic Layer 2 downstream integration remains separate; current behavior is documented in [README.md](../README.md).
 
 ## Long-Term Direction
 

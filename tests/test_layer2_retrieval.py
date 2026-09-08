@@ -18,6 +18,7 @@ from ML.deep_research.layer2.ML.agent import Layer2Response, create_stage_agent,
 from ML.deep_research.layer2.backend.fs import load_json
 from ML.deep_research.layer2.backend.jobs import run_jobs
 from ML.deep_research.layer2.backend.run_log import operational_logger
+from ML.deep_research.layer2.backend.usage import summarize_usage
 from tests.layer2_fixtures import new_run
 
 
@@ -91,15 +92,16 @@ class NativeRetrievalTests(unittest.TestCase):
                 response = AIMessage(content="", tool_calls=[
                     {"name": "read_file", "args": {"file_path": "/evidence/profile/000001.txt"},
                      "id": "read-before-interruption"},
-                ])
+                ], usage_metadata={"input_tokens": 10, "output_tokens": 1, "total_tokens": 11})
             elif len(received) == 2:
                 raise ConnectionError("offline interrupted provider")
             else:
-                response = AIMessage(content='{"domains": []}')
+                response = AIMessage(content='{"domains": []}',
+                                     usage_metadata={"input_tokens": 12, "output_tokens": 2, "total_tokens": 14})
             return ChatResult(generations=[ChatGeneration(message=response)])
 
         async def scenario(run, logger):
-            async with aiosqlite.connect(str(run / "checkpoints.sqlite3")) as connection:
+            async with aiosqlite.connect(str(run / "_internal/trace/checkpoints.sqlite3")) as connection:
                 saver = AsyncSqliteSaver(connection, serde=JsonPlusSerializer(
                     allowed_msgpack_modules=[Layer2Response],
                 ))
@@ -123,6 +125,10 @@ class NativeRetrievalTests(unittest.TestCase):
                 httpx.AsyncClient, "send", side_effect=AssertionError("offline test attempted network"),
             ):
                 asyncio.run(asyncio.wait_for(scenario(run, logger), timeout=20))
+            usage = summarize_usage(run / "_internal/trace")
+            self.assertEqual(usage["model_calls"], 2)
+            self.assertEqual(usage["total_tokens"], 25)
+            self.assertFalse((run / "usage.jsonl").exists())
         self.assertEqual(len(received), 3)
         self.assertTrue(any("PRESERVED_EVIDENCE" in str(m.content)
                             for m in received[2] if isinstance(m, ToolMessage)))

@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableLambda
 
 from ML.deep_research.layer2.backend.fs import load_json, write_json
 from ML.deep_research.layer2.backend.jobs import run_jobs
-from ML.deep_research.layer2.backend.records import catalogue
+from ML.deep_research.layer2.backend.records import catalogue, read_ledger
 from ML.deep_research.layer2.backend.run_log import operational_logger
 from ML.deep_research.layer2.backend.windows import source_windows
 from tests.layer2_fixtures import FakeStages, new_run, published
@@ -31,19 +31,29 @@ class RunnerTests(unittest.TestCase):
                                  ["understanding", "design", "distribution", "observations", "catalogue", "assignments"])
                 self.assertEqual(load_json(run / "run.json")["status"], "complete")
                 expected = [line[3:] for line in plugin.splitlines() if line.startswith("## ")]
-                initial = load_json(run / "catalogues/initial.json")
+                initial = load_json(run / "_internal/domains.json")["initial"]
                 self.assertEqual([row["definition"]["name"] for row in initial], expected)
                 for _, payload, _ in fake.calls:
                     self.assertEqual(payload["domain_plugin"], plugin)
                     self.assertEqual(payload["requirements"], "Preserve all facts and ownership.")
-                final = load_json(run / "catalogues/final.json")
+                final = load_json(run / "_internal/domains.json")["final"]
                 self.assertEqual(len(final), count + 1)
-                facts = [load_json(run / "facts" / (i + ".json")) for i in load_json(run / "facts/index.json")]
-                assigned = load_json(published(run) / "domains" / final[-1]["domain_id"] / "facts.json")
-                self.assertEqual(facts, assigned["facts"])
+                facts = read_ledger(run / "_internal/facts.jsonl")
+                assignments = load_json(run / "_internal/assignments.json")["final"]
+                self.assertEqual([f["fact_id"] for f in facts], [a["fact_id"] for a in assignments])
+                self.assertTrue(all(a["domain_ids"] == [final[-1]["domain_id"]] for a in assignments))
+                report = (run / "domains/additional-use.md").read_text(encoding="utf-8")
+                self.assertIn("17.5 m²", report)
+                self.assertIn("Approved alternative", report)
+                self.assertFalse(list((run / "domains").glob("*.json")))
                 self.assertEqual(len(facts), 2)
                 self.assertEqual(load_json(run / "run.json")["coverage"]["unresolved_facts"], 0)
                 self.assertEqual(len(fake.calls[-3][1]["facts"]), 2)  # existing owner AND Extra
+                self.assertEqual(fake.calls[-3][1]["initial_catalogue"], initial)
+                self.assertEqual(fake.calls[-1][1]["final_catalogue"], final)
+                self.assertEqual([f["initial_assignment"]["domain_ids"] for f in fake.calls[-1][1]["facts"]],
+                                 [["d0001"], []])
+                self.assertEqual([f["body"] for f in fake.calls[-1][1]["facts"]], [f["body"] for f in facts])
                 self.assertEqual(fake.calls[0][1]["new_content"], fake.calls[2][1]["new_content"])
 
     def test_unusual_objects_are_saved_without_retry_or_status_gate(self):
@@ -54,7 +64,7 @@ class RunnerTests(unittest.TestCase):
             fake.run(run)
             self.assertEqual(load_json(run / "run.json")["status"], "complete")
             self.assertEqual(load_json(run / "run.json")["coverage"]["unresolved_facts"], 2)
-            self.assertIn("unusable_assignments", (published(run) / "unresolved_facts.md").read_text())
+            self.assertIn("unusable_assignments", (run / "unresolved.md").read_text())
             fake.calls.clear()
             fake.run(run)
             self.assertEqual(fake.calls, [])
@@ -91,7 +101,7 @@ class RunnerTests(unittest.TestCase):
             fake.delay = .01
             fake.fail.add(("distribution", "s000002"))
             fake.run(run)
-            manifest = load_json(run / "source/manifest.json")
+            manifest = load_json(run / "_internal/trace/source/manifest.json")
             for stage in ["understanding", "distribution"]:
                 self.assertEqual(sorted(d["source"]["source_id"] for s, d, _ in fake.calls if s == stage),
                                  [w["source_id"] for w in manifest])
@@ -140,7 +150,7 @@ class RunnerTests(unittest.TestCase):
             fake.calls.clear()
             fake.run(run)
             self.assertEqual([s for s, *_ in fake.calls], ["observations"])
-            (run / "inputs/requirements.md").write_text("changed input")
+            (run / "_internal/inputs/requirements.md").write_text("changed input")
             fake.calls.clear()
             with self.assertRaises(OSError):
                 fake.run(run)

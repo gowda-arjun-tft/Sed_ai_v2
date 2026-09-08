@@ -30,17 +30,22 @@ class EmptyFilesystemMiddleware(AgentMiddleware):
         return "FilesystemMiddleware"
 
 
+def read_only_filesystem(backend=None):
+    """Input optional StateBackend; return native read tools shared by graph and input estimates."""
+    return FilesystemMiddleware(
+        backend=backend, tools=["ls", "glob", "grep", "read_file"],
+        human_message_token_limit_before_evict=None,
+    )
+
+
 def create_stage_agent(run_dir: Path, stage: str, checkpointer=None):
     """Input run, stage and optional saver; return its frozen tool-free or read-only graph."""
     configure_harness()
     record = load_json(run_dir / "run.json")
-    prompt = read_text(run_dir / "inputs" / "prompts" / f"{stage}.md")
+    prompt = read_text(run_dir / "_internal" / "inputs" / "prompts" / f"{stage}.md")
     backend = StateBackend()
     retrieval = stage not in {"understanding", "distribution"}
-    middleware = FilesystemMiddleware(
-        backend=backend, tools=["ls", "glob", "grep", "read_file"],
-        human_message_token_limit_before_evict=None,
-    ) if retrieval else EmptyFilesystemMiddleware()
+    middleware = read_only_filesystem(backend) if retrieval else EmptyFilesystemMiddleware()
     # StateBackend contains only this job's supplied pages; no host filesystem is mounted.
     return create_deep_agent(
         model=build_model(record["reasoning_effort"]), system_prompt=prompt,

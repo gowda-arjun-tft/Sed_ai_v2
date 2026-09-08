@@ -15,8 +15,8 @@ the available external reports. Prompts sit below each layer; design notes are i
 `ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
 Group new runs as `runs/<parent>-<markdown-name>-<short-path-id>/L2_*` and place the derived `L3_*`
-beside its historical Layer 2 source. Layer 2 schema-2/3 artifacts are read-only. New Layer 2 runs
-use schema 4, not yet integrated with Layers 3/4; do not produce a legacy missions handoff.
+beside its historical Layer 2 source. Layer 2 schema-2/3/4 artifacts are read-only. New Layer 2 runs
+use schema 5, not yet integrated with Layers 3/4; do not produce a legacy missions handoff.
 
 ## Build, Test, and Development Commands
 
@@ -45,12 +45,12 @@ egress, citation, or publication behavior. Do not hardcode check counts.
 ## Agent and Security Boundaries
 
 Keep secrets only in `.env`. The model is fixed to `gpt-5.6-luna`, with no application output-token
-ceiling. Layer 2 uses maximum reasoning. Layer 3 defaults to low model and web-search proxy
+ceiling. Layer 2 freezes the selected reasoning. Layer 3 defaults to low model and web-search proxy
 reasoning and low web-search context and verbosity; new runs may select supported levels and
 freeze those controls in `run.json`. Do not
 restate model, search, token, source, or report limits in prompts.
 
-Layer 2 schema 4 freezes factsheet, ordinary Markdown plugin, user requirements and prompts.
+Layer 2 schema 5 freezes factsheet, ordinary Markdown plugin, user requirements and prompts.
 The engine has no fixed domain count or real-estate-specific routing logic. Historical roster and
 input helpers live in Layer 3 settings and `legacy_input.py`; the old planner is a test fixture.
 Do not reintroduce them into Layer 2. Preserve shared model and operational helper behavior.
@@ -71,8 +71,15 @@ retries. Save all returned objects without semantic grading, deduplication, repa
 Store immutable fact bodies separately from ownership. Review all recorded facts, not only Extra;
 retain unknown/unusable references in the audit. Execution status and assignment coverage are separate.
 Coverage does not prove exhaustive source extraction. Input fingerprints preserve historical response
-versions/publications when recovery changes downstream input. Schema-2/3 resume/check is rejected
+versions/publications when recovery changes downstream input. Schema-2/3/4 resume/check is rejected
 without mutation. Layer 2 must not create a misleading eight-domain handoff to Layers 3/4.
+
+Publish readable README/domain_plan/domain Markdown views plus unresolved.md when needed. Keep one
+immutable facts.jsonl ledger, domain/ownership JSON and snapshots under _internal/, with raw responses,
+publication history, usage and checkpoints under _internal/trace/. Retain replaced views before refresh.
+Expose unprocessed values without guessing field meanings or retrying completed objects. Prompts request
+change-only review observations and concise ownership rows; every supplied fact still receives review.
+Inline complete domain definitions only when accounted input fits; otherwise use existing file pages.
 
 ## Model-Output Freedom
 

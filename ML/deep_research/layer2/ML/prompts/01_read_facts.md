@@ -12,4 +12,6 @@ Use overlap_context only for continuity. Capture new_content; include a complete
 
 ## Output
 
+Keep profile compact: identify the subject, uses, scope and navigation to the detailed evidence. Put unique factual detail in evidence rather than repeating the inventory in profile. Preserve every material identifier, quantity, applicability distinction and contradiction in that detailed inventory; a shorter profile must not replace evidence extraction.
+
 {"profile": "Readable subject profile fragment, with uncertainty and applicability", "evidence": [{"fact": "Source information", "source": "Exact locator or supplied source ID", "applicability": "As supported", "relationships": [], "contradictions": []}]}

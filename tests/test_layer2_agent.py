@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,7 +13,7 @@ from ML.deep_research.layer2.ML.agent import Layer2Response, create_stage_agent,
 from ML.deep_research.layer2.ML.context import InputBudget, InputSizeError, estimate
 from ML.deep_research.layer2.ML.harness import build_model
 from ML.deep_research.layer2.backend.records import virtual_pages
-from ML.deep_research.layer2.backend.settings import STAGES, PROMPTS_DIR
+from ML.deep_research.layer2.backend.settings import STAGES, PROMPTS_DIR, PROMPT_FILES
 from tests.layer2_fixtures import new_run
 
 
@@ -85,7 +86,7 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(type(create.call_args.kwargs["backend"]).__name__, "StateBackend")
 
     def test_frozen_prompts_own_evidence_and_review_contract(self):
-        prompts = {stage: (PROMPTS_DIR / (stage + ".md")).read_text(encoding="utf-8") for stage in STAGES}
+        prompts = {stage: (PROMPTS_DIR / PROMPT_FILES[stage]).read_text(encoding="utf-8") for stage in STAGES}
         for prompt in prompts.values():
             for text in ["untrusted evidence", "Approved alternative", "Unknown applicability",
                          "private chain-of-thought", "No web research"]:
@@ -102,3 +103,46 @@ class HarnessTests(unittest.TestCase):
         self.assertIn("all saved observation pages", prompts["catalogue"])
         self.assertIn("do not create or settle domains again", prompts["assignments"])
         self.assertNotIn('"mission":', "".join(prompts.values()))
+        self.assertIn("Put unique factual detail in evidence", prompts["understanding"])
+        self.assertIn("not replace evidence extraction", prompts["understanding"])
+        self.assertIn('Return {"observations": []}', prompts["observations"])
+        self.assertIn("Inspect every supplied fact", prompts["observations"])
+        self.assertIn("Do not restate correct unchanged placements", prompts["observations"])
+        self.assertIn("one explicit entry for every supplied fact", prompts["assignments"])
+        self.assertIn("reason only for changed, disputed or unresolved", prompts["assignments"])
+        self.assertIn("initial_assignment for comparison", prompts["assignments"])
+        self.assertIn("Do not repeat fact bodies", prompts["assignments"])
+        for stage in ("observations", "assignments"):
+            self.assertIn("when supplied inline; otherwise read all", prompts[stage])
+        for text in ("concise factual wording", "every unique detail", "alternative figures",
+                     "not exclusively in source", "means only for additional supported interpretation",
+                     "return an empty string", "complete fact when new_content"):
+            self.assertIn(text, prompts["distribution"])
+        for stage in ("design", "catalogue"):
+            self.assertIn("concise research duties and boundaries", prompts[stage])
+            self.assertIn("Do not repeat asset inventories", prompts[stage])
+            self.assertIn("reason and evidence_refs", prompts[stage])
+
+    def test_prompt_changes_only_reach_new_snapshots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prompts = root / "prompts"
+            shutil.copytree(PROMPTS_DIR, prompts)
+            with patch("ML.deep_research.layer2.backend.create_run.PROMPTS_DIR", prompts):
+                old = new_run(root)
+                snapshots = {name: (old / "_internal/inputs/prompts" / (name + ".md")).read_bytes()
+                             for name in STAGES}
+                old_metadata = (old / "run.json").read_bytes()
+                for stage in ("design", "catalogue", "distribution"):
+                    path = prompts / PROMPT_FILES[stage]
+                    path.write_text(path.read_text(encoding="utf-8") + "\nNew test revision.\n", encoding="utf-8")
+                new = new_run(root)
+            self.assertEqual((old / "run.json").read_bytes(), old_metadata)
+            from ML.deep_research.layer2.backend.fs import load_json, sha256
+            metadata = load_json(new / "run.json")
+            for stage in STAGES:
+                name = "prompts/" + stage + ".md"
+                self.assertEqual((old / "_internal/inputs" / name).read_bytes(), snapshots[stage])
+                fresh = new / "_internal/inputs" / name
+                self.assertEqual(fresh.read_bytes(), (prompts / PROMPT_FILES[stage]).read_bytes())
+                self.assertEqual(metadata["inputs"][name]["sha256"], sha256(fresh))

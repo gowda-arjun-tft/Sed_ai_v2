@@ -43,7 +43,7 @@ async def run_jobs(run: Path, stage: str, payloads: list[dict], files: dict,
                    saver, logger) -> list[dict]:
     """Input bounded phase jobs; save arriving results and return usable responses in order."""
     record = load_json(run / "run.json")
-    prompt = read_text(run / "inputs" / "prompts" / f"{stage}.md")
+    prompt = read_text(run / "_internal" / "inputs" / "prompts" / f"{stage}.md")
     policy = record["context_policy"]
     retrieval = stage not in {"understanding", "distribution"}
     concurrency = 1 if retrieval else int(record["chunking"]["max_concurrency"])
@@ -54,11 +54,11 @@ async def run_jobs(run: Path, stage: str, payloads: list[dict], files: dict,
     for index, payload in enumerate(payloads):
         key = f"{stage}/{index + 1:06d}"
         fingerprint = text_hash(dump([prompt, frozen, payload, files if retrieval else {}]))
-        relative = f"responses/{key}/{fingerprint}/response.json"
+        relative = f"_internal/trace/responses/{key}/{fingerprint}/response.json"
         old = record["jobs"].get(key, {})
         changed = old.get("fingerprint") != fingerprint
         if changed and old:
-            write_json(run / "responses" / key / old["fingerprint"] / "job.json", old)
+            write_json(run / "_internal/trace/responses" / key / old["fingerprint"] / "job.json", old)
         entry = dict(old) if not changed else {
             "thread_id": str(uuid4()), "attempt": 0, "status": "pending",
         }
@@ -73,7 +73,7 @@ async def run_jobs(run: Path, stage: str, payloads: list[dict], files: dict,
         entry.update(status="running", attempt=entry["attempt"] + 1, error_type="",
                      updated_at=now_iso())
         config = {"configurable": {"thread_id": entry["thread_id"]},
-                  "callbacks": [UsageCallback(run, entry["thread_id"])]}
+                  "callbacks": [UsageCallback(run / "_internal/trace", entry["thread_id"])]}
         if not retrieval:
             config["max_concurrency"] = concurrency
         message = {"role": "user", "content": dump(payload)}
@@ -136,6 +136,6 @@ async def run_jobs(run: Path, stage: str, payloads: list[dict], files: dict,
     for key in list(record["jobs"]):
         if key.startswith(stage + "/") and key not in current_keys:
             old = record["jobs"].pop(key)
-            write_json(run / "responses" / key / old["fingerprint"] / "job.json", old)
+            write_json(run / "_internal/trace/responses" / key / old["fingerprint"] / "job.json", old)
     write_json(run / "run.json", record)
     return [results[i] for i in sorted(results)]

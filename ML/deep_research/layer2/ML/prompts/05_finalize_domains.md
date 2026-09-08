@@ -15,3 +15,5 @@ Use only ls, glob, grep and read_file on the provided virtual evidence files. Al
 {"domains": [{"domain_id": "Existing exact ID, or null for a new domain", "name": "Domain name", "responsibilities": [], "reason": "Brief decision rationale", "evidence_refs": []}]}
 
 The application allocates a separate ID for each addition; never repurpose an existing ID.
+
+Write responsibilities as concise research duties and boundaries. Preserve all distinct responsibilities, requirements and exclusions while removing redundant wording. Do not repeat asset inventories inside responsibilities. Keep change reasons and evidence references in reason and evidence_refs, not repeated in the duties.

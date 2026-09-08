@@ -1,4 +1,4 @@
-"""Offline schema-4 fixtures; no provider calls."""
+"""Offline schema-5 fixtures; no provider calls."""
 
 import json
 from pathlib import Path
@@ -88,4 +88,4 @@ class FakeStages:
 
 
 def published(run):
-    return run / load_json(run / "publication.json")["path"]
+    return run / load_json(run / "_internal/trace/publication.json")["path"]

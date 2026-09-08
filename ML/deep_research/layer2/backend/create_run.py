@@ -1,4 +1,4 @@
-"""Create schema-4 runs only after all independent inputs pass operational preflight."""
+"""Create schema-5 runs only after all independent inputs pass operational preflight."""
 
 import hashlib
 import secrets
@@ -10,19 +10,19 @@ from .settings import (
     CHUNK_ENCODING, CHUNK_INPUT_PARTITIONING, CHUNK_OVERLAP_TOKENS,
     CHUNK_SIZE_TOKENS, CHUNK_STRATEGY, CONTEXT_MAXIMUM, CONTEXT_RESERVE,
     CONTEXT_TARGET, DEEPAGENTS_VERSION, LAYER2_SCHEMA_VERSION,
-    MAX_CHUNK_CONCURRENCY, MODEL_NAME, PROMPTS_DIR, PROVIDER_MAX_RETRIES,
+    MAX_CHUNK_CONCURRENCY, MODEL_NAME, PROMPTS_DIR, PROMPT_FILES, PROVIDER_MAX_RETRIES,
     REASONING_EFFORT, REASONING_EFFORTS, STAGES,
 )
 from .windows import source_windows
 
 
 def require_current(run_dir: Path) -> dict:
-    """Input a run path; return schema-4 metadata or reject historical execution unchanged."""
+    """Input a run path; return schema-5 metadata or reject historical execution unchanged."""
     from .fs import load_json
 
     record = load_json(run_dir / "run.json")
     if not isinstance(record, dict) or record.get("schema_version") != LAYER2_SCHEMA_VERSION:
-        raise ValueError("Layer 2 schema 4 is required; schema 2/3 runs are read-only history")
+        raise ValueError("Layer 2 schema 5 is required; schema 2/3/4 runs are read-only history")
     return record
 
 
@@ -30,12 +30,12 @@ def create_run(
     fact_sheet: Path, domain_plugin: Path, requirements: Path, runs_dir: Path,
     *, reasoning_effort: str = REASONING_EFFORT,
 ) -> Path:
-    """Input three user paths and root; return a frozen schema-4 run without model calls."""
+    """Input three user paths and root; return a frozen schema-5 run without model calls."""
     if reasoning_effort not in REASONING_EFFORTS:
         raise ValueError(f"unsupported reasoning effort: {reasoning_effort}")
     paths = {"fact_sheet.md": fact_sheet, "domain_plugin.md": domain_plugin,
              "requirements.md": requirements}
-    paths.update({f"prompts/{stage}.md": PROMPTS_DIR / f"{stage}.md" for stage in STAGES})
+    paths.update({f"prompts/{stage}.md": PROMPTS_DIR / PROMPT_FILES[stage] for stage in STAGES})
     snapshots, metadata = {}, {}
     for name, path in paths.items():
         path = Path(path).resolve()
@@ -57,7 +57,7 @@ def create_run(
         except FileExistsError:
             continue
     for name, raw in snapshots.items():
-        target = run / "inputs" / name
+        target = run / "_internal" / "inputs" / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
         if sha256(target) != metadata[name]["sha256"]:
@@ -65,8 +65,7 @@ def create_run(
     bom_bytes = 3 if snapshots["fact_sheet.md"].startswith(b"\xef\xbb\xbf") else 0
     for window in windows:
         window["input_bom_bytes"] = bom_bytes
-        write_json(run / "source" / f"{window['source_id']}.json", window)
-    write_json(run / "source" / "manifest.json", [
+    write_json(run / "_internal" / "trace" / "source" / "manifest.json", [
         {k: v for k, v in window.items() if k not in {"overlap_context", "new_content"}}
         for window in windows
     ])
@@ -74,7 +73,7 @@ def create_run(
         "schema_version": LAYER2_SCHEMA_VERSION, "run_id": run.name,
         "run_group": group.name, "status": "started", "started_at": now_iso(),
         "inputs": metadata, "model": MODEL_NAME, "reasoning_effort": reasoning_effort,
-        "source_manifest_sha256": sha256(run / "source" / "manifest.json"),
+        "source_manifest_sha256": sha256(run / "_internal" / "trace" / "source" / "manifest.json"),
         "deepagents_version": DEEPAGENTS_VERSION, "provider_max_retries": PROVIDER_MAX_RETRIES,
         "chunking": {"strategy": CHUNK_STRATEGY, "input_partitioning": CHUNK_INPUT_PARTITIONING,
                      "encoding": CHUNK_ENCODING, "size_tokens": CHUNK_SIZE_TOKENS,
@@ -87,5 +86,5 @@ def create_run(
         "jobs": {}, "downstream_integrated": False,
     })
     atomic_write_text(run / "README.md",
-                      "# Layer 2 schema 4\n\nNot yet integrated with Layers 3/4.\n")
+                      "# Layer 2 schema 5\n\nStatus: started.\n\nNot yet integrated with Layers 3/4.\n")
     return run

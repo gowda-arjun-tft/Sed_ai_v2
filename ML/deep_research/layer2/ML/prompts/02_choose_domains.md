@@ -15,3 +15,5 @@ Use only ls, glob, grep and read_file on the provided virtual evidence files. Al
 {"domains": [{"name": "Domain name", "responsibilities": ["Concrete duties"], "reason": "Brief baseline/extension/addition reason", "evidence_refs": ["Provided source or evidence ID"]}]}
 
 Application-owned domain_id values are assigned after this initial catalogue. Domains are saved worker definitions, never executable code.
+
+Write responsibilities as concise research duties and boundaries, retaining every distinct baseline responsibility and requirement. Do not repeat asset inventories inside responsibilities. Keep change reasons and evidence references in reason and evidence_refs, not repeated in the duties. Remove redundant wording, not substantive scope or exclusions.

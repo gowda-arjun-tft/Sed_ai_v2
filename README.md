@@ -39,7 +39,7 @@ Set only the API key in `.env`:
 OPENAI_API_KEY=your-key
 ```
 
-The model is fixed in code to `gpt-5.6-luna`. Layer 2 uses maximum reasoning. Layer 3 currently uses
+The model is fixed in code to `gpt-5.6-luna`. Layer 2 freezes the selected reasoning. Layer 3 currently uses
 low reasoning for domain research, synthesis, and web-search proxy calls while live behavior is
 measured; this is configuration, not a separate test command. Neither layer sets an application
 output-token ceiling; provider limits still apply. Layer 3 uses Deep Agents 0.7.7 with stable SQLite
@@ -48,7 +48,7 @@ researcher threads and thread-scoped `StateBackend` scratch. Each researcher rec
 `run_python`, model-writable host folders, and cross-property memory remain disabled. Web-search
 context remains low.
 
-## Layer 2 — schema 4
+## Layer 2 — schema 5
 
 Supply three independent UTF-8 Markdown inputs: factsheet, domain plugin and your own requirements.
 The application never invents requirements. The supplied real-estate plugin preserves the current
@@ -96,24 +96,29 @@ start fresh dependent jobs when recovered inputs change, preserving prior respon
 
 Run layout:
 
-- inputs/: exact three input copies and prompts; source/manifest.json and source/s*.json: windows.
-- responses/phase/page/fingerprint/response.json: saved completed model objects.
-- understanding/: readable profile fragments and source-linked evidence inventory.
-- catalogues/initial.json, final.json and final.md: domain definitions and change reasons.
-- facts/fact-id.json: immutable bodies/source references; facts/index.json: currently active IDs.
-- initial_assignments.json and review/: independent ownership and review records.
-- publication.json: pointer to the current publication under publications/id/.
-  It contains domains/domain-id/facts.json and facts.md, plus JSON and Markdown assignment audits.
-- run.json, run.log, usage.jsonl and checkpoints.sqlite3: execution, safe operational events,
-  provider token usage and retrieval recovery.
+- README.md and domain_plan.md: status, navigation, subject overview, definitions and change reasons.
+- domains/<readable-name>.md: domain responsibilities and preserved facts, not routine JSON dumps.
+- unresolved.md: complete unassigned/unprocessed material and response links, when present.
+- run.json and run.log: frozen metadata, execution status and safe operational events.
+- _internal/: input snapshots, one facts.jsonl ledger, domains.json and assignments.json.
+- _internal/trace/: raw responses, source manifest, detailed evidence, review observations,
+  retained publication revisions, usage.jsonl and checkpoints.sqlite3.
+
+The normal files are rebuildable views of preserved records; prior versions and replaced Markdown
+bytes are retained internally. No per-fact JSON files or per-domain JSON body copies are generated.
+Unknown fields/references are exposed without guessing their meaning, grading or content repair.
+Prompts ask for detailed evidence but a compact navigational profile, change-only review observations,
+and explicit ownership rows with reasons only for changed/disputed/unresolved assignments. Complete
+domain definitions are inlined when the fully counted review input fits; paged access remains available.
+Storage consolidation itself does not reduce model tokens; prompt quality/cost needs a later live comparison.
 
 Execution status is separate from assignment coverage: a complete run may still have unresolved
 facts. “No Extra” means every RECORDED fact has an owner, not proof of complete source extraction.
 CLI --check-only is observational and makes no writes. The notebook prints only start/final status,
 run path and log path.
 
-**Schema 4 is not yet integrated with Layers 3/4.** No misleading legacy missions/ handoff is
-generated. Historical schema-2/3 Layer 2 artifacts remain untouched but cannot execute or run checks
+**Schema 5 is not yet integrated with Layers 3/4.** No misleading legacy missions/ handoff is
+generated. Historical schema-2/3/4 Layer 2 artifacts remain untouched but cannot execute or run checks
 through the new Layer 2 CLI. Layers 3/4 and their historical input workflow remain unchanged.
 Offline tests prove orchestration, not model quality or extraction completeness.
 

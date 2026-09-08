@@ -1,9 +1,10 @@
 """Wire-format projections and domain publication; never grade or rewrite model facts."""
 
+import json
 from pathlib import Path
 
 from ..ML.context import dump
-from .fs import atomic_write_text, load_json, text_hash, write_json
+from .fs import atomic_write_text
 from .windows import text_pages, token_count
 
 
@@ -62,6 +63,9 @@ def catalogue(value: dict, previous: list | None = None) -> tuple[list, list]:
 def extract_records(run: Path, responses: list[dict]) -> tuple[list, list, list]:
     """Input source-ordered distribution responses; store immutable bodies and separate owners."""
     facts, owners, audit = [], [], []
+    path = run / "_internal/facts.jsonl"
+    ledger = read_ledger(path)
+    by_id = {row["fact_id"]: row for row in ledger}
     for response in responses:
         rows = response["value"].get("facts")
         if not isinstance(rows, list):
@@ -73,22 +77,29 @@ def extract_records(run: Path, responses: list[dict]) -> tuple[list, list, list]
             body = row.get("body", row) if isinstance(row, dict) else row
             source = response["payload"]["source"]
             fact = {"fact_id": fact_id, "body": body, "source": source,
-                    "response_path": f"responses/{response['job']}/{response['fingerprint']}/response.json"}
-            path = run / "facts" / f"{fact_id}.json"
-            if path.exists():
-                if load_json(path) != fact:
+                    "response_path": response_path(response)}
+            if fact_id in by_id:
+                if by_id[fact_id] != fact:
                     raise OSError("immutable fact ID collision or changed stored fact")
             else:
-                write_json(path, fact)
+                ledger.append(fact)
+                by_id[fact_id] = fact
             facts.append(fact)
             owners.append({"fact_id": fact_id,
                            "domain_ids": row.get("domain_ids", []) if isinstance(row, dict) else []})
+            if isinstance(row, dict) and "body" in row:
+                extra = {k: v for k, v in row.items() if k not in {"body", "domain_ids"}}
+                if extra:
+                    audit.append({"kind": "unprocessed_fact_fields", "fact_id": fact_id,
+                                  "value": extra, "response_path": response_path(response)})
+    # One atomic replacement, retaining prior generations and never editing a fact body.
+    atomic_write_text(path, "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in ledger))
     return facts, owners, audit
 
 
-def publish(run: Path, definitions: list, facts: list, responses: list,
-            audit: list) -> dict:
-    """Input final ownership and immutable records; publish usable links and disclose all others."""
+def resolve_assignments(definitions: list, facts: list, responses: list,
+                        audit: list) -> tuple[dict, list]:
+    """Input final ownership and records; resolve references only, auditing unusable values."""
     domain_ids = {row["domain_id"] for row in definitions}
     by_id = {row["fact_id"]: row for row in facts}
     ownership = {key: set() for key in by_id}
@@ -102,39 +113,58 @@ def publish(run: Path, definitions: list, facts: list, responses: list,
         decisions.extend(rows)
         for row in rows:
             if not isinstance(row, dict) or not isinstance(row.get("fact_id"), str):
-                audit.append({"kind": "unusable_assignment", "value": row})
+                audit.append({"kind": "unusable_assignment", "value": row,
+                              "response_path": response_path(response)})
                 continue
+            extra = {k: v for k, v in row.items() if k not in {"fact_id", "domain_ids", "reason"}}
+            if extra:
+                audit.append({"kind": "unprocessed_assignment_fields", "fact_id": row["fact_id"],
+                              "value": extra, "response_path": response_path(response)})
             identity, domains = row["fact_id"], row.get("domain_ids")
             if identity not in by_id or not isinstance(domains, list):
-                audit.append({"kind": "unknown_fact_or_owners", "value": row})
+                audit.append({"kind": "unknown_fact_or_owners", "value": row,
+                              "response_path": response_path(response)})
                 continue
             for domain in domains:
                 if isinstance(domain, str) and domain in domain_ids:
                     ownership[identity].add(domain)
                 else:
-                    audit.append({"kind": "unknown_domain", "fact_id": identity, "domain": domain})
+                    audit.append({"kind": "unknown_domain", "value": row,
+                                  "response_path": response_path(response)})
     unresolved = [row for key, row in by_id.items() if not ownership[key]]
-    audit.extend({"kind": "unassigned_fact", "fact": row} for row in unresolved)
-    write_json(run / "review" / "final_assignments.json", decisions)
-    # Version publications: changed upstream inputs never destroy the prior domain files.
-    publication_id = text_hash(dump([definitions, facts, decisions, audit]))[:20]
-    root = run / "publications" / publication_id
-    for domain in definitions:
-        identity = domain["domain_id"]
-        assigned = [row for row in facts if identity in ownership[row["fact_id"]]]
-        value = {"domain": domain, "facts": assigned}
-        write_json(root / "domains" / identity / "facts.json", value)
-        title = domain["definition"].get("name", identity)
-        text = f"# {title}\n\n" + "\n\n".join(
-            f"## {row['fact_id']}\n\n{dump(row['body'])}\n\nSource:\n{dump(row['source'])}"
-            for row in assigned
-        )
-        atomic_write_text(root / "domains" / identity / "facts.md", text + "\n")
-    write_json(root / "unresolved_facts.json", audit)
-    atomic_write_text(root / "unresolved_facts.md",
-                      "# Assignment audit\n\n" + dump(audit) +
-                      "\n\nCoverage concerns recorded facts only, not extraction completeness.\n")
-    write_json(run / "publication.json", {"path": root.relative_to(run).as_posix()})
-    return {"recorded_facts": len(facts), "owned_facts": len(facts) - len(unresolved),
-            "unresolved_facts": len(unresolved), "audit_items": len(audit),
-            "domain_count": len(definitions), "path": root.relative_to(run).as_posix()}
+    audit.extend({"kind": "unassigned_fact", "fact": row, "response_path": row["response_path"],
+                  "decisions": [d for d in decisions if isinstance(d, dict)
+                                and d.get("fact_id") == row["fact_id"]]} for row in unresolved)
+    return ownership, decisions
+
+
+def read_ledger(path: Path) -> list:
+    """Input the canonical ledger path; return exact records or expose unreadable persistence."""
+    if not path.exists():
+        return []
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    seen = set()
+    for row in rows:
+        identity = row["fact_id"]
+        if identity in seen:
+            raise OSError("duplicate immutable fact ID in ledger")
+        seen.add(identity)
+    return rows
+
+
+def response_path(response: dict) -> str:
+    """Input a saved job result; return its run-relative raw response link."""
+    return f"_internal/trace/responses/{response['job']}/{response['fingerprint']}/response.json"
+
+
+def unprocessed(responses: list, fields: dict[str, type]) -> list:
+    """Input responses and projected field types; expose unrepresented values without rejection."""
+    audit = []
+    for response in responses:
+        value = response["value"]
+        extra = {k: v for k, v in value.items()
+                 if k not in fields or not isinstance(v, fields[k])}
+        if extra or not value:
+            audit.append({"kind": "unprocessed_response_fields", "job": response["job"],
+                          "value": extra, "response_path": response_path(response)})
+    return audit

@@ -12,6 +12,8 @@ Use overlap_context only to understand continuity. Do not reproduce overlap-only
 
 ## Output
 
-{"facts": [{"body": {"section": "Source heading", "fact": "Source fact", "means": "Neutral supported meaning", "source": "Source ID and exact supplied locator", "applicability": "As supported"}, "domain_ids": ["d0001"]}]}
+{"facts": [{"body": {"section": "Useful topic label", "fact": "Source fact", "means": "Additional neutral supported meaning, or empty string", "source": "Source ID and exact supplied locator", "applicability": "As supported"}, "domain_ids": ["d0001"]}]}
+
+Use concise factual wording, not polished narrative. Group related facts with consistent, useful section labels derived from the supplied content; no fixed topic roster. Retain every unique detail, including alternative figures and their distinct periods or scopes. Put document names and dates needed to interpret a fact in fact itself, not exclusively in source. Keep source bookkeeping in source, not repeated in fact or means. Use means only for additional supported interpretation, not a paraphrase of fact; return an empty string when it adds nothing. Brevity must not remove qualifications or turn proposed, historical or uncertain information into current installed facts.
 
 The application gives each record a stable fact_id. body is stored unchanged; ownership is separate. Do not generate research questions, missions or risks.
