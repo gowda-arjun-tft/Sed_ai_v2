@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import bisect
 from functools import cache
 
 import tiktoken
@@ -23,6 +22,7 @@ def token_count(text: str) -> int:
 
 def source_windows(
     text: str, size: int = CHUNK_SIZE_TOKENS, overlap: int = CHUNK_OVERLAP_TOKENS,
+    *, include_text: bool = True,
 ) -> list[dict]:
     """Input original text and policy; return UTF-8-safe windows with exact byte locators."""
     if not 0 <= overlap < size:
@@ -30,29 +30,39 @@ def source_windows(
     codec = encoding()
     ids = codec.encode(text, disallowed_special=())
     raw = text.encode("utf-8")
-    offsets = [0]
-    for token in ids:
-        offsets.append(offsets[-1] + len(codec.decode_single_token_bytes(token)))
-    # A token can end inside a Unicode character. Align to an existing token AND
-    # character boundary, keeping original bytes rather than decoding replacement text.
-    safe = [i for i, offset in enumerate(offsets)
-            if offset == len(raw) or raw[offset] & 0xC0 != 0x80]
-    result, previous_end = [], 0
-    for nominal_start in range(0, len(ids), size - overlap):
-        start = safe[max(0, bisect.bisect_right(safe, nominal_start) - 1)]
+    # Only window boundaries survive the single tokenizer allocation; no per-token
+    # offset/safe-boundary arrays or decoded corpus copies are retained.
+    starts = range(0, len(ids), size - overlap)
+    wanted = sorted({0, len(ids), *starts, *(min(s + size, len(ids)) for s in starts)})
+    before, after, cursor, offset, last_safe = {}, {}, 0, 0, (0, 0)
+    for i in range(len(ids) + 1):
+        safe = offset == len(raw) or raw[offset] & 0xC0 != 0x80
+        if safe:
+            while cursor < len(wanted) and wanted[cursor] <= i:
+                target = wanted[cursor]
+                before[target] = (i, offset) if target == i else last_safe
+                after[target] = (i, offset)
+                cursor += 1
+            last_safe = (i, offset)
+        if i < len(ids):
+            offset += len(codec.decode_single_token_bytes(ids[i]))
+    result, previous_end_byte = [], 0
+    for nominal_start in starts:
+        start, start_byte = before[nominal_start]
         nominal_end = min(nominal_start + size, len(ids))
-        end = safe[bisect.bisect_left(safe, nominal_end)]
-        boundary = max(start, previous_end)
+        end, end_byte = after[nominal_end]
+        boundary = max(start_byte, previous_end_byte)
         result.append({
             "source_id": f"s{len(result) + 1:06d}",
             "nominal_start_token": nominal_start, "nominal_end_token": nominal_end,
             "start_token": start, "end_token": end,
-            "start_byte": offsets[start], "end_byte": offsets[end],
-            "new_start_byte": offsets[boundary], "tokens": end - start,
-            "overlap_context": raw[offsets[start]:offsets[boundary]].decode("utf-8"),
-            "new_content": raw[offsets[boundary]:offsets[end]].decode("utf-8"),
+            "start_byte": start_byte, "end_byte": end_byte,
+            "new_start_byte": boundary, "tokens": end - start,
         })
-        previous_end = end
+        if include_text:
+            result[-1].update(overlap_context=raw[start_byte:boundary].decode("utf-8"),
+                              new_content=raw[boundary:end_byte].decode("utf-8"))
+        previous_end_byte = end_byte
         if end == len(ids):
             break
     return result

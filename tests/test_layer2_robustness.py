@@ -9,7 +9,9 @@ from langchain_core.runnables import RunnableLambda
 
 from ML.deep_research.layer2.backend.fs import load_json, write_json
 from ML.deep_research.layer2.backend.jobs import run_jobs
-from ML.deep_research.layer2.backend.records import catalogue, read_ledger
+from ML.deep_research.layer2.backend.evidence import EvidenceStore
+from ML.deep_research.layer2.backend.projections import apply_domains
+from tests.layer2_fixtures import read_ledger
 from ML.deep_research.layer2.backend.run_log import operational_logger
 from ML.deep_research.layer2.backend.windows import source_windows
 from tests.layer2_fixtures import FakeStages, new_run, published
@@ -33,9 +35,13 @@ class RunnerTests(unittest.TestCase):
                 expected = [line[3:] for line in plugin.splitlines() if line.startswith("## ")]
                 initial = load_json(run / "_internal/domains.json")["initial"]
                 self.assertEqual([row["definition"]["name"] for row in initial], expected)
-                for _, payload, _ in fake.calls:
-                    self.assertEqual(payload["domain_plugin"], plugin)
-                    self.assertEqual(payload["requirements"], "Preserve all facts and ownership.")
+                for stage, payload, _ in fake.calls:
+                    if stage in {"design", "observations", "catalogue"}:
+                        self.assertEqual(payload["domain_plugin"], plugin)
+                        self.assertEqual(payload["requirements"], "Preserve all facts and ownership.")
+                    else:
+                        self.assertNotIn("domain_plugin", payload)
+                        self.assertNotIn("requirements", payload)
                 final = load_json(run / "_internal/domains.json")["final"]
                 self.assertEqual(len(final), count + 1)
                 facts = read_ledger(run / "_internal/facts.jsonl")
@@ -44,13 +50,16 @@ class RunnerTests(unittest.TestCase):
                 self.assertTrue(all(a["domain_ids"] == [final[-1]["domain_id"]] for a in assignments))
                 report = (run / "domains/additional-use.md").read_text(encoding="utf-8")
                 self.assertIn("17.5 m²", report)
-                self.assertIn("Approved alternative", report)
+                self.assertIn("Approved, not operating", report)
+                self.assertNotIn("**applicability:**", report)
+                self.assertNotIn("**means:**", report)
+                self.assertEqual(facts[1]["body"]["applicability"], "Approved alternative")
                 self.assertFalse(list((run / "domains").glob("*.json")))
                 self.assertEqual(len(facts), 2)
                 self.assertEqual(load_json(run / "run.json")["coverage"]["unresolved_facts"], 0)
                 self.assertEqual(len(fake.calls[-3][1]["facts"]), 2)  # existing owner AND Extra
-                self.assertEqual(fake.calls[-3][1]["initial_catalogue"], initial)
-                self.assertEqual(fake.calls[-1][1]["final_catalogue"], final)
+                self.assertEqual(fake.calls[-3][1]["domain_definitions"], initial)
+                self.assertEqual(fake.calls[-1][1]["domain_definitions"], final)
                 self.assertEqual([f["initial_assignment"]["domain_ids"] for f in fake.calls[-1][1]["facts"]],
                                  [["d0001"], []])
                 self.assertEqual([f["body"] for f in fake.calls[-1][1]["facts"]], [f["body"] for f in facts])
@@ -64,7 +73,7 @@ class RunnerTests(unittest.TestCase):
             fake.run(run)
             self.assertEqual(load_json(run / "run.json")["status"], "complete")
             self.assertEqual(load_json(run / "run.json")["coverage"]["unresolved_facts"], 2)
-            self.assertIn("unusable_assignments", (run / "unresolved.md").read_text())
+            self.assertIn("unprocessed_response_fields", (run / "unresolved.md").read_text())
             fake.calls.clear()
             fake.run(run)
             self.assertEqual(fake.calls, [])
@@ -92,7 +101,7 @@ class RunnerTests(unittest.TestCase):
     def test_all_windows_native_concurrency_and_partial_siblings(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch("ML.deep_research.layer2.backend.create_run.source_windows",
-                       side_effect=lambda text: source_windows(text, 10, 2)):
+                       side_effect=lambda text, **kw: source_windows(text, 10, 2, **kw)):
                 run = new_run(Path(tmp), text=" property" * 60)
             record = load_json(run / "run.json")
             record["chunking"]["max_concurrency"] = 2
@@ -110,14 +119,18 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(load_json(run / "run.json")["status"], "partial")
 
     def test_safe_ids_and_unusable_catalogues(self):
-        initial, _ = catalogue({"domains": [{"name": "../../.env"}, {"name": "Same"}]})
-        self.assertEqual([d["domain_id"] for d in initial], ["d0001", "d0002"])
-        final, audit = catalogue({"domains": [
-            {"domain_id": "d0001"}, {"domain_id": "d0001"},
-            {"domain_id": "../secrets"}, {"domain_id": None, "name": "Addition"}, ["odd"]
-        ]}, initial)
-        self.assertEqual([d["domain_id"] for d in final], ["d0001", "d0003"])
-        self.assertEqual(len(audit), 3)
+        with tempfile.TemporaryDirectory() as tmp:
+            store = EvidenceStore(new_run(Path(tmp)))
+            response = {"job": "design/1", "response_path": "raw.json", "value": {"domains": [
+                {"name": "../../.env"}, {"name": "Same"}]}}
+            apply_domains(store, response)
+            self.assertEqual([d["domain_id"] for d in store.rows("domains")], ["d0001", "d0002"])
+            response["value"]["domains"] = [
+                {"domain_id": "d0001"}, {"domain_id": "d0001"},
+                {"domain_id": "../secrets"}, {"domain_id": None, "name": "Addition"}, ["odd"]]
+            apply_domains(store, response)
+            self.assertEqual([d["domain_id"] for d in store.rows("domains")], ["d0001", "d0002", "d0003"])
+            self.assertEqual(store.count("audit"), 3)
 
     def test_native_out_of_order_completion_saves_immediately_and_returns_source_order(self):
         with tempfile.TemporaryDirectory() as tmp:

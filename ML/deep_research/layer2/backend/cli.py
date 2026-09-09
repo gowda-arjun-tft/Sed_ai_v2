@@ -28,7 +28,7 @@ def load_dotenv_key(project_dir: Path = REPO_ROOT) -> None:
 
 
 def _require_current_run(parser: argparse.ArgumentParser, run_dir: Path) -> None:
-    """Input a CLI parser and run; stop CLI execution unless the run is schema 5."""
+    """Input a CLI parser and run; stop CLI execution unless the run is schema 6."""
     try:
         require_current(run_dir)
     except (OSError, ValueError) as exc:
@@ -48,13 +48,13 @@ def _print_summary(run_dir: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     """Input optional CLI arguments; create, resume or inspect one Layer 2 run."""
     parser = argparse.ArgumentParser(
-        description="Design plugin-driven domains and route original evidence (Layer 2 schema 5)."
+        description="Design plugin-driven domains and route original evidence (Layer 2 schema 6)."
     )
     parser.add_argument("fact_sheet", nargs="?", type=Path)
     parser.add_argument("--domain-plugin", type=Path)
     parser.add_argument("--requirements", type=Path)
-    parser.add_argument("--resume", type=Path, help="resume a schema-5 Layer 2 run")
-    parser.add_argument("--check-only", type=Path, help="inspect a schema-5 Layer 2 run")
+    parser.add_argument("--resume", type=Path, help="resume a schema-6 Layer 2 run")
+    parser.add_argument("--check-only", type=Path, help="inspect a schema-6 Layer 2 run")
     args = parser.parse_args(argv)
     load_dotenv_key()
     if args.check_only:

@@ -1,4 +1,4 @@
-"""Offline schema-5 fixtures; no provider calls."""
+"""Offline schema-6 fixtures; no provider calls."""
 
 import json
 from pathlib import Path
@@ -50,8 +50,8 @@ class FakeStages:
                 elif stage == "design":
                     names = [s.strip("# ") for s in data["domain_plugin"].splitlines() if s.startswith("##")]
                     response = {"domains": [{"name": name, "responsibilities": ["Facts"]}
-                                            for name in names]}
-                elif stage == "distribution":
+                                            for name in names] if not data.get("domain_definitions") else []}
+                elif stage == "distribution" and data.get("mode") != "ownership":
                     response = {"facts": [
                         {"body": {"fact": data["new_content"], "applicability": "Installed",
                                   "nested": {"quantity": "17.5 m²"}}, "domain_ids": ["d0001"]},
@@ -62,12 +62,11 @@ class FakeStages:
                     response = {"observations": [{"fact_ids": [r["fact"]["fact_id"] for r in data["facts"]],
                                                  "change": "Add use-specific responsibility"}]}
                 elif stage == "catalogue":
-                    pages = [body["content"] for path, body in value["files"].items()
-                             if "/initial_catalogue/" in path]
-                    rows = json.loads("".join(pages))
-                    response = {"domains": [
-                        {**r["definition"], "domain_id": r["domain_id"]} for r in rows
-                    ] + [{"domain_id": None, "name": "Additional use", "reason": "Recorded use"}]}
+                    response = {"domains": [{"domain_id": None, "name": "Additional use", "reason": "Recorded use"}]
+                                if not any(r.get("definition", {}).get("name") == "Additional use"
+                                           for r in data["domain_definitions"]) else [],
+                                "dispositions": [{"proposal_id": p["proposal_id"], "disposition": "accepted"}
+                                                 for p in data["observations"]]}
                 else:
                     response = {"assignments": [
                         {"fact_id": r["fact_id"], "domain_ids": [data["final_domain_ids"][-1]]}
@@ -89,3 +88,7 @@ class FakeStages:
 
 def published(run):
     return run / load_json(run / "_internal/trace/publication.json")["path"]
+
+
+def read_ledger(path):
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]

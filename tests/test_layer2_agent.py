@@ -1,4 +1,5 @@
 import asyncio
+import json
 import shutil
 import tempfile
 import unittest
@@ -8,13 +9,15 @@ from unittest.mock import patch
 
 from langchain.agents.structured_output import ProviderStrategy
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.runnables import RunnableLambda
 
 from ML.deep_research.layer2.ML.agent import Layer2Response, create_stage_agent, response_value
 from ML.deep_research.layer2.ML.context import InputBudget, InputSizeError, estimate
 from ML.deep_research.layer2.ML.harness import build_model
-from ML.deep_research.layer2.backend.records import virtual_pages
+from ML.deep_research.layer2.backend.evidence import EvidenceStore
+from ML.deep_research.layer2.ML.evidence_backend import EvidenceBackend
 from ML.deep_research.layer2.backend.settings import STAGES, PROMPTS_DIR, PROMPT_FILES
-from tests.layer2_fixtures import new_run
+from tests.layer2_fixtures import FakeStages, new_run
 
 
 class HarnessTests(unittest.TestCase):
@@ -25,7 +28,7 @@ class HarnessTests(unittest.TestCase):
                 graph = create_stage_agent(run, stage)
                 bound = graph.nodes["tools"].bound if "tools" in graph.nodes else None
                 tools = set(getattr(bound, "tools_by_name", getattr(bound, "_tools_by_name", {})))
-                expected = set() if stage in {"understanding", "distribution"} else {"ls", "glob", "grep", "read_file"}
+                expected = set() if stage in {"understanding", "design", "distribution"} else {"ls", "glob", "grep", "read_file"}
                 self.assertEqual(tools, expected)
                 self.assertFalse(any("summar" in n.lower() for n in graph.nodes))
 
@@ -62,28 +65,35 @@ class HarnessTests(unittest.TestCase):
     def test_old_tool_body_is_archived_exactly_with_tool_pairing(self):
         body = "evidence " * 3000
         policy = {"target_tokens": 100, "maximum_tokens": 250_000, "framing_reserve": 0}
-        guard = InputBudget(Path("."), policy, "instructions", {})
-        message = ToolMessage(content=body, tool_call_id="call-1", id="result-1")
-        update = guard.before_model({"messages": [
-            HumanMessage(content="job"), AIMessage(content="", tool_calls=[
-                {"name": "read_file", "args": {}, "id": "call-1"}]),
-            message, ToolMessage(content="latest", tool_call_id="call-2", id="result-2")
-        ]}, None)
-        self.assertEqual(update["messages"][0].id, "result-1")
-        self.assertEqual(update["messages"][0].tool_call_id, "call-1")
-        self.assertEqual(next(iter(update["files"].values()))["content"], body)
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            guard = InputBudget(run, policy, "instructions", {})
+            messages = [HumanMessage(content="job", id="input"),
+                        AIMessage(content="", id="a1", tool_calls=[
+                            {"name": "read_file", "args": {}, "id": "call-1"}]),
+                        ToolMessage(content=body, tool_call_id="call-1", id="result-1"),
+                        AIMessage(content="", id="a2", tool_calls=[
+                            {"name": "read_file", "args": {}, "id": "call-2"}]),
+                        ToolMessage(content="latest", tool_call_id="call-2", id="result-2")]
+            with patch("ML.deep_research.layer2.ML.context.get_config", return_value={"configurable": {"thread_id": "test"}}):
+                update = guard.before_model({"messages": messages}, None)
+            self.assertEqual([m.id for m in update["messages"][:-1]], ["a1", "result-1"])
+            import json
+            archived = next((run / "_internal/trace/history").rglob("*.json"))
+            self.assertEqual(json.loads(archived.read_text(encoding="utf-8")), [m.model_dump(mode="json") for m in messages[1:3]])
+            backend = EvidenceBackend(run, history=True, thread="test")
+            self.assertTrue(backend.ls("/").entries)
+            self.assertIn(body, "".join(text for _, text in backend.documents()))
+            self.assertEqual(list(EvidenceBackend(run, history=True, thread="other").documents()), [])
 
     def test_virtual_projection_never_mounts_host_or_other_runs(self):
-        files = virtual_pages({"source": "same-run supplied evidence"})
-        self.assertEqual(list(files), ["/evidence/source/000001.txt"])
-        self.assertEqual(files["/evidence/source/000001.txt"], "same-run supplied evidence")
         with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}):
             run = new_run(Path(tmp))
             with patch("ML.deep_research.layer2.ML.agent.create_deep_agent") as create:
-                create_stage_agent(run, "design")
+                create_stage_agent(run, "observations")
             middleware = create.call_args.kwargs["middleware"][0]
             self.assertEqual([t.name for t in middleware.tools], ["ls", "read_file", "glob", "grep"])
-            self.assertEqual(type(create.call_args.kwargs["backend"]).__name__, "StateBackend")
+            self.assertEqual(type(create.call_args.kwargs["backend"]).__name__, "CompositeBackend")
 
     def test_frozen_prompts_own_evidence_and_review_contract(self):
         prompts = {stage: (PROMPTS_DIR / PROMPT_FILES[stage]).read_text(encoding="utf-8") for stage in STAGES}
@@ -100,8 +110,8 @@ class HarnessTests(unittest.TestCase):
         self.assertIn("no implicit industry or fixed roster", prompts["design"])
         self.assertIn("No review observations or final catalogue exist", prompts["design"])
         self.assertIn("final catalogue is settled later", prompts["observations"])
-        self.assertIn("all saved observation pages", prompts["catalogue"])
-        self.assertIn("do not create or settle domains again", prompts["assignments"])
+        self.assertIn("all scheduled observation groups", prompts["catalogue"])
+        self.assertIn("do not create or settle domains again", prompts["assignments"].lower())
         self.assertNotIn('"mission":', "".join(prompts.values()))
         self.assertIn("Put unique factual detail in evidence", prompts["understanding"])
         self.assertIn("not replace evidence extraction", prompts["understanding"])
@@ -113,11 +123,14 @@ class HarnessTests(unittest.TestCase):
         self.assertIn("initial_assignment for comparison", prompts["assignments"])
         self.assertIn("Do not repeat fact bodies", prompts["assignments"])
         for stage in ("observations", "assignments"):
-            self.assertIn("when supplied inline; otherwise read all", prompts[stage])
+            self.assertIn("definition", prompts[stage])
+            self.assertIn("page", prompts[stage])
         for text in ("concise factual wording", "every unique detail", "alternative figures",
-                     "not exclusively in source", "means only for additional supported interpretation",
-                     "return an empty string", "complete fact when new_content"):
+                     "not exclusively in source", "Do not return separate means or applicability fields",
+                     "qualifications within fact", "complete fact when new_content"):
             self.assertIn(text, prompts["distribution"])
+        self.assertNotIn('"means":', prompts["distribution"])
+        self.assertNotIn('"applicability":', prompts["distribution"])
         for stage in ("design", "catalogue"):
             self.assertIn("concise research duties and boundaries", prompts[stage])
             self.assertIn("Do not repeat asset inventories", prompts[stage])
@@ -133,7 +146,7 @@ class HarnessTests(unittest.TestCase):
                 snapshots = {name: (old / "_internal/inputs/prompts" / (name + ".md")).read_bytes()
                              for name in STAGES}
                 old_metadata = (old / "run.json").read_bytes()
-                for stage in ("design", "catalogue", "distribution"):
+                for stage in ("understanding", "design", "catalogue", "distribution"):
                     path = prompts / PROMPT_FILES[stage]
                     path.write_text(path.read_text(encoding="utf-8") + "\nNew test revision.\n", encoding="utf-8")
                 new = new_run(root)
@@ -146,3 +159,67 @@ class HarnessTests(unittest.TestCase):
                 fresh = new / "_internal/inputs" / name
                 self.assertEqual(fresh.read_bytes(), (prompts / PROMPT_FILES[stage]).read_bytes())
                 self.assertEqual(metadata["inputs"][name]["sha256"], sha256(fresh))
+
+    def test_read_facts_groups_detail_with_four_prompt_owned_fields(self):
+        prompt = (PROMPTS_DIR / PROMPT_FILES["understanding"]).read_text(encoding="utf-8")
+        example = json.loads(next(line for line in prompt.splitlines() if line.startswith('{"profile":')))
+        self.assertEqual(set(example), {"profile", "evidence"})
+        self.assertEqual(set(example["evidence"][0]), {"fact", "relationships", "contradictions", "source"})
+        self.assertEqual(example["evidence"][0]["source"], ["91cb80fc", "aa1760d4"])
+        for instruction in (
+            "same subject and topic", "Keep unrelated subjects separate",
+            "Reduce repeated structure, not factual detail", "do not target an entry count or word limit",
+            "respective periods, scopes or versions", "not a separate applicability field",
+            "add information beyond fact", "otherwise []", "without resolving them",
+            "do not automatically constitute contradictions", "copied exactly as a list",
+            "Use [] when none are supplied", "Never invent IDs", "only if present in the source",
+            "filenames, source-window references, offsets or commentary",
+            "within these four fields", "substantive document dates and references",
+        ):
+            self.assertIn(instruction, prompt)
+        self.assertNotIn("source locators", prompt)
+        self.assertNotIn("Explain decisions", prompt)
+
+    def test_understanding_values_reach_storage_and_design_without_repair(self):
+        grouped = {
+            "profile": "Bâtiment A: historical records; annex proposed.",
+            "evidence": [{
+                "fact": "Bâtiment A measured 1,200 m² in 2006; another 2006 record says 1,250 m². "
+                        "A 50 m² annex was proposed in 2025; installation is unconfirmed.",
+                "relationships": ["The annex proposal identifies Bâtiment A as its host building."],
+                "contradictions": ["The two 2006 records disagree on area; the cause is unresolved."],
+                "source": ["91cb80fc", "aa1760d4"],
+            }, {"fact": "Ownership is unconfirmed.", "relationships": [],
+                "contradictions": [], "source": []}],
+        }
+        for response in (grouped, {}, {"unexpected": {"values": [None, "漢字", 17]}}):
+            with self.subTest(response=response), tempfile.TemporaryDirectory() as tmp:
+                run, fake = new_run(Path(tmp)), FakeStages()
+                original_factory = fake.factory
+
+                def factory(path, stage, checkpointer=None):
+                    graph = original_factory(path, stage, checkpointer)
+                    if stage != "understanding":
+                        return graph
+
+                    async def invoke(value, config):
+                        await graph.ainvoke(value, config)
+                        return {"structured_response": Layer2Response(root=response)}
+
+                    return RunnableLambda(invoke)
+
+                with patch.object(fake, "factory", side_effect=factory):
+                    fake.run(run)
+                    before = len(fake.calls)
+                    fake.run(run)
+                self.assertEqual(len(fake.calls), before)
+                self.assertEqual(sum(stage == "understanding" for stage, _, _ in fake.calls), 1)
+                raw = next((run / "_internal/trace/responses/understanding").rglob("response.json"))
+                self.assertEqual(json.loads(raw.read_text(encoding="utf-8")), response)
+                stored = list(EvidenceStore(run).rows("understanding"))
+                self.assertEqual([row["value"] for row in stored], [response])
+                design = next(data for stage, data, _ in fake.calls if stage == "design")
+                self.assertEqual([row["value"] for row in design["subject"]], [response])
+                record = json.loads((run / "run.json").read_text(encoding="utf-8"))
+                self.assertEqual(record["status"], "complete")
+                self.assertTrue(all(job["attempt"] == 1 for job in record["jobs"].values()))

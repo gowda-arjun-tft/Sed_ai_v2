@@ -23,3 +23,10 @@ Five documents. `markdown/` holds the detailed source of record; `html/` holds t
 - Every document declares its status in the first line: proposed, recommended, implemented, or an audit.
 - Historical measurements are labelled as historical. Superseded design documents are removed rather than kept as archives; their content lives in git history.
 - Prompts, plugins and module READMEs are code and stay beside the code. This folder holds design and audit documents only.
+
+## Jira handover packs
+
+- [SEDAI-1140 Jira update](jira/SEDAI-1140_Jira_Update.md) — copy-ready description,
+  subtasks, acceptance criteria, test coverage and completion comment.
+- [SEDAI-1140 Layer 2 architecture](jira/SEDAI-1140_Layer_2_Architecture.md) — compact
+  implemented architecture attachment for review or Jira upload.

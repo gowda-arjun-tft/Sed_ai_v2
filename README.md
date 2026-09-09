@@ -48,7 +48,7 @@ researcher threads and thread-scoped `StateBackend` scratch. Each researcher rec
 `run_python`, model-writable host folders, and cross-property memory remain disabled. Web-search
 context remains low.
 
-## Layer 2 — schema 5
+## Layer 2 — schema 6
 
 Supply three independent UTF-8 Markdown inputs: factsheet, domain plugin and your own requirements.
 The application never invents requirements. The supplied real-estate plugin preserves the current
@@ -67,6 +67,9 @@ Operational code is in `layer2/backend/`; AI code and six generic prompts are in
 Industry definitions live only in the selected plugin. The old predefined planner is a historical
 test fixture; it is not a new Layer 2 prompt.
 
+Read facts receives no plugin or requirements. Planning and domain review receive both; sorting
+and final assignment use the resulting responsibilities. No web research happens in Layer 2.
+
 Flow: read every original source window → profile fragments and evidence inventory → initial
 domain catalogue → distribute ORIGINAL facts → ONE reviewer stage (observation pages, final
 catalogue, assignment pages) → publish recorded facts by domain. Profiles are navigation, not
@@ -76,14 +79,19 @@ temporary Extra. A fact can belong to multiple domains.
 Inputs, prompts, hashes and policies are frozen. Nominal windows are 60K tokens with 10K
 original-source overlap and 50K stride. Unicode-safe actual byte/token boundaries and any original
 BOM offset are recorded; headings do not move nominal boundaries. Native abatch_as_completed
-handles reading and distribution at frozen concurrency five by default; review pages are sequential.
-Large source inputs are repacked before dispatch. The normal assembled-input target is 200K
-estimated tokens; exceptional 200–250K inputs carry a logged reason. Mandatory or indivisible
+handles reading and distribution at frozen concurrency five by default, in batches of at most ten;
+planning/review pages are sequential. Original windows are sought by recorded byte ranges.
+Large source inputs are repacked before dispatch. The normal assembled-input target is 300K
+estimated tokens; exceptional 300K–350K inputs carry a logged reason. Mandatory or indivisible
 content that cannot fit fails operationally, never silently truncates. Accounting includes
 instructions, messages, tools, schema and a conservative reserve; provider usage is separate.
 
-Reader/distributor graphs are tool-free. Designer/reviewer graphs expose only native ls, glob,
-grep and read_file against explicitly seeded run-owned StateBackend files. There is no host
+Reader/distributor graphs and new-run designers are tool-free. Choose domains receives complete
+paged understanding records, plugin, requirements and current definitions; it stays sequential
+and checkpointed. New runs freeze `design_tool_free: true`; older schema-6 runs retain their
+frozen designer behavior. Reviewer (and historical designer) graphs expose only native ls, glob,
+grep and read_file through CompositeBackend against a rebuildable, run-owned SQLite evidence index.
+StateBackend contains only small thread-local state, never a corpus copy. There is no host
 filesystem mount, shell, web, delegation, cross-run memory or automatic summarizer. SQLite saves
 retrieval sessions and lossless read-result pointers; original source and detailed evidence remain
 stored outside model context.
@@ -109,7 +117,8 @@ bytes are retained internally. No per-fact JSON files or per-domain JSON body co
 Unknown fields/references are exposed without guessing their meaning, grading or content repair.
 Prompts ask for detailed evidence but a compact navigational profile, change-only review observations,
 and explicit ownership rows with reasons only for changed/disputed/unresolved assignments. Complete
-domain definitions are inlined when the fully counted review input fits; paged access remains available.
+domain definitions are inlined when the fully counted review input fits; oversized rosters receive explicit
+fact-page × definition-page jobs. Original extraction is not repeated for each definition page.
 Storage consolidation itself does not reduce model tokens; prompt quality/cost needs a later live comparison.
 
 Execution status is separate from assignment coverage: a complete run may still have unresolved
@@ -117,8 +126,8 @@ facts. “No Extra” means every RECORDED fact has an owner, not proof of compl
 CLI --check-only is observational and makes no writes. The notebook prints only start/final status,
 run path and log path.
 
-**Schema 5 is not yet integrated with Layers 3/4.** No misleading legacy missions/ handoff is
-generated. Historical schema-2/3/4 Layer 2 artifacts remain untouched but cannot execute or run checks
+**Schema 6 is not yet integrated with Layers 3/4.** No misleading legacy missions/ handoff is
+generated. Historical schema-2/3/4/5 Layer 2 artifacts remain untouched but cannot execute or run checks
 through the new Layer 2 CLI. Layers 3/4 and their historical input workflow remain unchanged.
 Offline tests prove orchestration, not model quality or extraction completeness.
 

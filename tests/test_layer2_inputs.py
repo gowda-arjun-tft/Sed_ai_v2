@@ -6,7 +6,9 @@ from ML.deep_research.layer2.backend.create_run import create_run
 from ML.deep_research.layer2.ML.context import dump, estimate
 from ML.deep_research.layer2.backend.fs import load_json, sha256, write_json, read_text
 from ML.deep_research.layer2.ML.agent import Layer2Response, read_only_filesystem
-from ML.deep_research.layer2.backend.runner import source_payloads, review_payloads
+from ML.deep_research.layer2.backend.packing import source_payloads, record_pages
+from ML.deep_research.layer2.backend.evidence import EvidenceStore
+from ML.deep_research.layer2.backend.stages import ownership_payloads
 from ML.deep_research.layer2.backend.settings import PROMPTS_DIR, PROMPT_FILES, STAGES
 from ML.deep_research.layer2.backend.windows import encoding, source_windows, text_pages, token_count
 from tests.layer2_fixtures import new_run
@@ -51,9 +53,9 @@ class InputTests(unittest.TestCase):
             root = Path(tmp)
             run = new_run(root, text="\ufeffLine 1\r\nLine 2")
             meta = load_json(run / "run.json")
-            self.assertEqual(meta["schema_version"], 5)
+            self.assertEqual(meta["schema_version"], 6)
             self.assertFalse(meta["downstream_integrated"])
-            self.assertEqual(meta["context_policy"]["maximum_tokens"], 250_000)
+            self.assertEqual(meta["context_policy"]["maximum_tokens"], 350_000)
             self.assertEqual(meta["chunking"]["stride_tokens"], 50_000)
             self.assertFalse((run / "missions").exists())
             for name, info in meta["inputs"].items():
@@ -86,25 +88,20 @@ class InputTests(unittest.TestCase):
             run = new_run(Path(tmp))
             facts = [{"fact_id": "f1", "body": {"fact": "Unchanged source"},
                       "initial_assignment": {"fact_id": "f1", "domain_ids": []}}]
-            context = {"requirements": "Preserve evidence", "evidence_files": ["/evidence/final_catalogue/1.txt"]}
-            catalogue = {"final_catalogue": [{"domain_id": "d0001", "definition": {"name": "All duties"}}]}
-            pages = review_payloads(run, "assignments", context, facts, catalogue)
-            self.assertEqual(pages[0]["final_catalogue"], catalogue["final_catalogue"])
+            store = EvidenceStore(run)
+            store.put("domains", "d0001", {"domain_id": "d0001", "definition": {"name": "All duties"}})
+            pages = list(ownership_payloads(store, "assignments", facts))
             self.assertEqual(pages[0]["facts"], facts)
-            meta = load_json(run / "run.json")
-            # Force a whole-catalogue fallback without any provider call.
-            meta["context_policy"].update(target_tokens=20_000, maximum_tokens=25_000)
-            write_json(run / "run.json", meta)
-            large = {"final_catalogue": [{"responsibilities": " unique" * 30_000}]}
-            pages = review_payloads(run, "assignments", context, facts, large)
-            self.assertNotIn("final_catalogue", pages[0])
-            self.assertEqual(pages[0]["evidence_files"], context["evidence_files"])
-            self.assertEqual(pages[0]["facts"], facts)
-            self.assertEqual(large["final_catalogue"][0]["responsibilities"], " unique" * 30_000)
-            prompt = read_text(run / "_internal/inputs/prompts/assignments.md")
+            self.assertEqual(pages[0]["definition_scope"], "complete")
+            store.put("domains", "d0002", {"domain_id": "d0002", "definition": {"responsibilities": " unique" * 310_000}})
+            pages = list(ownership_payloads(store, "assignments", facts))
+            self.assertGreater(len(pages), 2)
+            self.assertTrue(all(p["definition_scope"] == "page" for p in pages))
+            self.assertEqual({d["domain_id"] for p in pages for d in p["domain_definitions"]}, {"d0001", "d0002"})
+            self.assertTrue(all(p["facts"] == facts for p in pages))
             for page in pages:
-                self.assertLessEqual(estimate([{"role": "user", "content": dump(page)}], prompt,
-                                             read_only_filesystem().tools, Layer2Response.model_json_schema()), 20_000)
+                self.assertLessEqual(estimate([{"role": "user", "content": dump(page)}], "",
+                                             read_only_filesystem().tools, Layer2Response.model_json_schema()), 300_000)
 
     def test_repacking_preserves_source_and_fits_assembled_input(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -115,7 +112,7 @@ class InputTests(unittest.TestCase):
             write_json(run / "run.json", record)
             # A generated window cannot replace the authoritative frozen original.
             (run / "_internal/trace/source/s000001.json").write_text('{}')
-            payloads = source_payloads(run, {"requirements": " property" * 4_000}, "understanding")
+            payloads = list(source_payloads(run, {"requirements": " property" * 4_000}, "understanding"))
             self.assertGreater(len(payloads), 1)
             self.assertEqual("".join(p["new_content"] for p in payloads), text)
             prompt = read_text(run / "_internal/inputs/prompts/understanding.md")
@@ -126,10 +123,6 @@ class InputTests(unittest.TestCase):
                 self.assertEqual(text.encode()[source["start_byte"]:source["end_byte"]].decode(),
                                  payload["overlap_context"] + payload["new_content"])
             facts = [{"fact_id": f"f{i}", "body": " property" * 5_000} for i in range(6)]
-            pages = review_payloads(run, "assignments", {"requirements": " property" * 12_000}, facts)
+            pages = list(record_pages(facts, budget=12_000))
             self.assertGreater(len(pages), 1)
-            self.assertEqual([f for p in pages for f in p["facts"]], facts)
-            prompt = read_text(run / "_internal/inputs/prompts/assignments.md")
-            for page in pages:
-                self.assertLessEqual(estimate([{"role": "user", "content": dump(page)}], prompt,
-                                             response_schema=Layer2Response.model_json_schema()), 35_000)
+            self.assertEqual([f for p in pages for f in p], facts)

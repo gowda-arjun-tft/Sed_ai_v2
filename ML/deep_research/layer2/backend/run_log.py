@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import logging
 import time
+import traceback
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
+
+
+def log_failure(logger, event, exc, **context):
+    """Input an exception and trusted identifiers; log safe frames, never values or source lines."""
+    frames = [{"file": frame.filename, "line": frame.lineno, "function": frame.name}
+              for frame in traceback.extract_tb(exc.__traceback__)]
+    logger.error("%s context=%s error_type=%s sqlite_code=%s sqlite_name=%s frames=%s",
+                 event, context, type(exc).__name__, getattr(exc, "sqlite_errorcode", None),
+                 getattr(exc, "sqlite_errorname", None), frames)
 
 
 @contextmanager

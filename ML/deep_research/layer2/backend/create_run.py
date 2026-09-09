@@ -1,11 +1,11 @@
-"""Create schema-5 runs only after all independent inputs pass operational preflight."""
+"""Create schema-6 runs after input preflight and one source-tokenization pass."""
 
 import hashlib
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .fs import now_iso, run_group_name, sha256, write_json, atomic_write_text
+from .fs import now_iso, run_group_name, sha256, write_json, atomic_write_text, storage_path
 from .settings import (
     CHUNK_ENCODING, CHUNK_INPUT_PARTITIONING, CHUNK_OVERLAP_TOKENS,
     CHUNK_SIZE_TOKENS, CHUNK_STRATEGY, CONTEXT_MAXIMUM, CONTEXT_RESERVE,
@@ -17,12 +17,12 @@ from .windows import source_windows
 
 
 def require_current(run_dir: Path) -> dict:
-    """Input a run path; return schema-5 metadata or reject historical execution unchanged."""
+    """Input a run path; return schema-6 metadata or reject historical execution unchanged."""
     from .fs import load_json
 
     record = load_json(run_dir / "run.json")
     if not isinstance(record, dict) or record.get("schema_version") != LAYER2_SCHEMA_VERSION:
-        raise ValueError("Layer 2 schema 5 is required; schema 2/3/4 runs are read-only history")
+        raise ValueError("Layer 2 schema 6 is required; schema 2/3/4/5 runs are read-only history")
     return record
 
 
@@ -30,7 +30,7 @@ def create_run(
     fact_sheet: Path, domain_plugin: Path, requirements: Path, runs_dir: Path,
     *, reasoning_effort: str = REASONING_EFFORT,
 ) -> Path:
-    """Input three user paths and root; return a frozen schema-5 run without model calls."""
+    """Input three user paths and root; return a frozen schema-6 run without model calls."""
     if reasoning_effort not in REASONING_EFFORTS:
         raise ValueError(f"unsupported reasoning effort: {reasoning_effort}")
     paths = {"fact_sheet.md": fact_sheet, "domain_plugin.md": domain_plugin,
@@ -39,15 +39,16 @@ def create_run(
     snapshots, metadata = {}, {}
     for name, path in paths.items():
         path = Path(path).resolve()
-        raw = path.read_bytes()
+        raw = storage_path(path).read_bytes()
         if not raw.decode("utf-8-sig").strip():
             raise ValueError(f"input is empty: {path}")
         snapshots[name] = raw
         metadata[name] = {"source_path": str(path), "bytes": len(raw),
                           "sha256": hashlib.sha256(raw).hexdigest()}
     source = snapshots["fact_sheet.md"].decode("utf-8-sig")
-    windows = source_windows(source)
-    group = Path(runs_dir) / run_group_name(Path(fact_sheet))
+    windows = source_windows(source, include_text=False)
+    del source
+    group = storage_path(runs_dir) / run_group_name(Path(fact_sheet))
     group.mkdir(parents=True, exist_ok=True)
     while True:
         run = group / f"L2_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"
@@ -83,8 +84,8 @@ def create_run(
         "context_policy": {"target_tokens": CONTEXT_TARGET, "maximum_tokens": CONTEXT_MAXIMUM,
                            "framing_reserve": CONTEXT_RESERVE, "count_kind": "local_estimate",
                            "history": "retrievable_pointers", "summarization": False},
-        "jobs": {}, "downstream_integrated": False,
+        "jobs": {}, "downstream_integrated": False, "design_tool_free": True,
     })
     atomic_write_text(run / "README.md",
-                      "# Layer 2 schema 5\n\nStatus: started.\n\nNot yet integrated with Layers 3/4.\n")
+                      "# Layer 2 schema 6\n\nStatus: started.\n\nNot yet integrated with Layers 3/4.\n")
     return run

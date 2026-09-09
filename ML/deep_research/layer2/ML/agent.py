@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from deepagents import create_deep_agent
-from deepagents.backends import StateBackend
+from deepagents.backends import CompositeBackend, StateBackend
 from deepagents.middleware.filesystem import FilesystemMiddleware
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.structured_output import ProviderStrategy
@@ -12,7 +12,9 @@ from pydantic import ConfigDict, RootModel
 
 from .context import InputBudget
 from ..backend.fs import load_json, read_text
+from ..backend.settings import stage_uses_tools
 from .harness import build_model, configure_harness
+from .evidence_backend import EvidenceBackend
 
 
 class Layer2Response(RootModel[dict[str, Any]]):
@@ -22,7 +24,7 @@ class Layer2Response(RootModel[dict[str, Any]]):
 
 
 class EmptyFilesystemMiddleware(AgentMiddleware):
-    """Replace implicit file capabilities for independent source-reading calls."""
+    """Replace implicit file capabilities for stages operating on supplied inputs only."""
 
     @property
     def name(self) -> str:
@@ -43,17 +45,20 @@ def create_stage_agent(run_dir: Path, stage: str, checkpointer=None):
     configure_harness()
     record = load_json(run_dir / "run.json")
     prompt = read_text(run_dir / "_internal" / "inputs" / "prompts" / f"{stage}.md")
-    backend = StateBackend()
-    retrieval = stage not in {"understanding", "distribution"}
+    retrieval = stage_uses_tools(record, stage)
+    backend = CompositeBackend(default=StateBackend(), routes={
+        "/evidence/": EvidenceBackend(run_dir),
+        "/history/": EvidenceBackend(run_dir, history=True),
+    }) if retrieval else StateBackend()
     middleware = read_only_filesystem(backend) if retrieval else EmptyFilesystemMiddleware()
-    # StateBackend contains only this job's supplied pages; no host filesystem is mounted.
+    # Only registered run evidence is readable; checkpoints contain no corpus files.
     return create_deep_agent(
         model=build_model(record["reasoning_effort"]), system_prompt=prompt,
         tools=[], subagents=[], backend=backend,
         middleware=[middleware, InputBudget(run_dir, record["context_policy"], prompt,
-                                           Layer2Response.model_json_schema())],
+                                           Layer2Response.model_json_schema(), middleware.tools if retrieval else ())],
         response_format=ProviderStrategy(Layer2Response, strict=False),
-        checkpointer=checkpointer if retrieval else None,
+        checkpointer=checkpointer if stage not in {"understanding", "distribution"} else None,
         name=f"layer2-{stage}",
     )
 

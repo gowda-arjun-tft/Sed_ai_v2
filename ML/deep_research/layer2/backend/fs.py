@@ -4,10 +4,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+
+def storage_path(path: Path) -> Path:
+    """Input a local path; return its Windows extended form for deeply versioned Layer 2 storage."""
+    path = Path(path).resolve()
+    text = str(path)
+    if os.name == "nt" and not text.startswith("\\\\?\\"):
+        return Path("\\\\?\\UNC\\" + text[2:] if text.startswith("\\\\") else "\\\\?\\" + text)
+    return path
 
 
 def now_iso() -> str:

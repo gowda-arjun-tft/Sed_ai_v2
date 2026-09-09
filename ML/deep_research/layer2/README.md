@@ -1,218 +1,244 @@
-# Layer 2 — plugin-driven domains and evidence routing
+# Layer 2 — scalable evidence processing (schema 6)
 
-Layer 2 organizes supplied facts; it does not perform web research or score risks.
-The selected plugin supplies the industry perspective and baseline responsibilities.
-User requirements supply priorities. Evidence supplies subject-specific context.
-The model designs the initial domains and reviews them once after fact distribution.
-There are six model stages, not six guaranteed calls: source windows and review pages
-can require multiple calls, and read-only retrieval can require additional turns.
+Layer 2 reads supplied UTF-8 text, designs industry-appropriate domains and places
+recorded facts into them. It does not search the web, score risks or draw research
+conclusions. Six stages remain; a stage may need multiple bounded jobs and retrieval turns.
 
-## Where to look
+## Start here
+
+- Edit industry scope and baseline duties in the selected plugin, such as `plugins/real_estate.md`.
+- Edit objectives/priorities/exclusions in [inputs/requirement.md](../../../inputs/requirement.md).
+  Replace its placeholders yourself; the application does not invent requirements.
+- Supply the factsheet as original evidence, never agent instructions.
+- Use the notebook's Layer 2 cell. It shows running/final status, run path and log path.
+  `L2_DYNAMIC_RUN` intentionally does not feed the unchanged Layer 3 cell.
+
+## Six steps
+
+```text
+Original factsheet only
+        │
+        ▼
+01 Read facts ──► subject fragments + detailed evidence
+        │
+        ├── selected plugin + user requirements
+        ▼
+02 Choose domains ──► initial definitions and reasons
+        │
+Original factsheet + current responsibilities
+        ▼
+03 Sort facts ──► immutable facts + initial owners / temporary Extra
+        │
+        ├── plugin + requirements + every recorded fact
+        ▼
+04 Review domains ──► changes, disagreements and proposals
+        ▼
+05 Finalize domains ──► final definitions + proposal dispositions
+        ▼
+06 Assign facts ──► final owners for every recorded fact
+        ▼
+Backend publisher (no model call)
+        ▼
+Compact domains/*.md + unresolved.md when needed
+```
+
+Read facts keeps its separate compact subject profile and requests coherent evidence groups
+about the same subject and topic. Each entry contains `fact`, `relationships`, `contradictions`
+and `source`. Historical/proposed/unconfirmed qualifications belong within the fact, not a
+separate applicability field. Relationships add supported connections; contradictions describe
+unresolved differences. Either list may be empty. Source lists contain only supplied provenance
+IDs (or `[]`), without filenames or window metadata. Internal source-window tracking is unchanged.
+Grouping reduces repeated structure, not distinct details; no entry count or word limit is imposed.
+The four-field contract is prompt guidance, not a Python validator. New runs snapshot it; existing
+runs retain their frozen prompt. Detail retention
+and token savings require a separately authorized model comparison, not just offline tests.
+
+| Prompt | Inputs and task |
+| --- | --- |
+| `ML/prompts/01_read_facts.md` | Original overlap/new-content window only. Preserve a compact subject profile and detailed evidence. No plugin, requirements or tools. |
+| `ML/prompts/02_choose_domains.md` | Complete scheduled understanding records, plugin, requirements and current definitions. Retain baselines; justify additions or responsibility updates. Tool-free in new runs. |
+| `ML/prompts/03_sort_facts.md` | Original source plus initial responsibilities. Extract original facts, not a previous model summary; assign relevant owners. Tool-free. |
+| `ML/prompts/04_review_domains.md` | Every recorded fact and its initial ownership, definitions, plugin and requirements. Report changes or disagreements only. |
+| `ML/prompts/05_finalize_domains.md` | Scheduled proposal groups, existing definitions, plugin and requirements. Apply explicit changes and state dispositions. |
+| `ML/prompts/06_assign_facts.md` | Fact pages, initial owners and final responsibilities. Return owner IDs without repeating fact bodies. |
+
+Steps 04–06 are one finite reviewer stage, not a designer/reviewer approval loop.
+The numbered prompts keep stable internal stage IDs: understanding, design, distribution,
+observations, catalogue, assignments. Frozen copies use those IDs as filenames.
+All industry responsibilities come from the selected plugin, never a Python roster.
+
+## Large inputs and large domain lists
+
+Preparation tokenizes once using installed `o200k_base`. Nominal windows are 60K tokens,
+10K original-source overlap and 50K stride. Actual byte boundaries are Unicode-safe;
+new-content slices reconstruct the original text. Processing stops at source end.
+Only manifest boundaries remain in memory after preparation. The tokenizer still allocates
+for the whole input during preparation: RAM is **not** input-size-independent.
+
+Execution seeks recorded ranges instead of reloading the whole factsheet. Native
+`abatch_as_completed` uses frozen concurrency five and batches of at most twice concurrency.
+Completions save immediately; records assemble in source order. Planning and review are sequential,
+with fresh page contexts unless resuming that exact checkpoint.
+
+Small subject inputs use one domain-design job. Larger inputs schedule every subject group
+in order. Models return additions/updates, not the entire roster each time. The application
+allocates stable IDs and preserves unchanged definitions. Finalization uses the same bounded
+update pattern and schedules every proposal page.
+
+New runs freeze `design_tool_free: true`: Choose domains uses only supplied JSON evidence,
+plugin, requirements and current definitions. Every understanding page is scheduled; profiles
+never replace detailed evidence. The designer stays sequential and checkpointed, but has no
+evidence backend or tools. Historical schema-6 runs without this setting retain their original
+designer behavior and prompt snapshots. No existing run is restarted or converted automatically.
+
+Large fact collections are paged. Oversized **responsibility definitions** are different:
+each fact/proposal group is explicitly compared with every definition page. Planning comparisons
+are reconciled in bounded jobs. Tool-free design reconciliation explicitly includes current
+corresponding definitions and domains added by earlier reconciliations, paging large values
+without truncation. Unknown comparison references remain in the audit, not a repair loop.
+When source plus definitions will not fit, sorting extracts
+the original source once, then schedules ownership-only comparisons. Facts can have several
+owners, including domains added during review. Failed or missing ownership comparisons remain
+visible even if another page supplied an owner.
+
+There is no repeat-until-good loop, automatic summarizer, semantic deduplication or repair call.
+Completed large values remain saved and become parent-linked text fragments only when another
+job consumes them. Fragment locations do not turn a source-window offset into an exact fact citation.
+
+## Evidence, memory and input limits
+
+The normal assembled-input target is **300K estimated tokens**, with logged exceptional
+tolerance through **350K**. Every dispatch, including tool follow-ups, counts instructions,
+messages, evidence, tool definitions, response metadata and conservative framing.
+The effective allowance is also bounded by the model's supported capacity. These estimates
+are not provider billing counts. There is **no application output-token limit**; provider limits apply.
+
+Page material first. Archive complete older assistant/tool exchanges before replacing them
+with retrievable references. Keep current instructions, pending tool calls and newest evidence.
+No generated summary replaces original evidence. Mandatory/indivisible input that cannot fit
+fails operationally, preserving completed siblings; completed content is never rejected for quality.
+
+Review (and historical tool-enabled design) exposes only native `ls`, `glob`, `grep`, `read_file` through CompositeBackend.
+An indexed read-only backend serves registered `/evidence/` pages from this run and
+`/history/` pages from this session. No arbitrary host-path resolution, shell, web, model writes,
+delegation, embeddings, vector database or cross-run memory. StateBackend contains only small
+thread state; corpus bodies are not seeded into each checkpoint.
+Tool-free design still uses SQLite checkpoints; removing its tools is not a general SQLite-locking fix.
+
+During stage execution the runner retains one idle evidence connection, without an open transaction,
+to avoid last-connection WAL cleanup overlapping new tool reads. Each retrieval still opens its own
+query-only connection with a five-second busy timeout. Native read operations retry only SQLite
+BUSY/PROTOCOL primary codes: three attempts total, with 0.25s/0.5s backoff and fresh connections.
+SQLite's internal protocol waits are separate from the busy timeout. Partial attempt results are
+discarded before returning a tool response. Initialization, history indexing, writes and checkpoints
+are outside this retry boundary. Exhaustion remains an operational failure; no LLM response is retried.
+This is tested read recovery, not a guarantee against every SQLite failure.
+
+The existing run.log records retry/recovery/failure, database/tool, stage/job/thread, timing and SQLite
+codes. Final failures include traceback file/function/line frames, not source lines, local variables,
+SQL parameters, exception payloads or model content. Database attempts do not increment model usage
+or job attempts. No separate monitoring service is added; check-only still writes nothing.
+
+SQLite stores immutable page versions and a searchable projection of source, records, identifiers,
+model-supplied entities/topics/relationships/aliases. `grep` is literal substring search with an
+exact scan, not ranked top matches; narrow truncated results through directory shards and read
+all relevant pages. Source pages link to adjacent pages/windows. An FTS accelerator is unnecessary
+for correctness and has not been added. Original snapshots, raw responses and ledger remain authoritative.
+
+## Files and code
 
 ```text
 layer2/
-├── backend/   Execution, recovery, input snapshots, publication, logging and CLI
-├── ML/        Deep Agent construction, model configuration and input-context policy
-│   └── prompts/   Six generic stage instructions
-├── plugins/   Industry definitions; currently real_estate.md
-├── README.md  This human-readable guide
-├── __init__.py    Public create_run and run_all functions
-└── __main__.py    python -m ML.deep_research.layer2 entrypoint
+├── backend/   Operations, persistence and publication
+├── ML/        Deep Agent construction, context policy and prompts
+├── plugins/   User-selectable industry definitions
+├── README.md  Human workflow guide (not a prompt)
+├── __init__.py    Public create_run / run_all
+└── __main__.py    Thin command-line entrypoint
 ```
 
-`backend` and `ML` separate operations from AI logic. Neither is frontend code;
-the Layer 2 notebook cell is the user interface.
-
-| Backend file | Responsibility |
+| Code | Purpose |
 | --- | --- |
-| `runner.py`, `jobs.py` | Stage order, bounded jobs, saved results and checkpoint recovery |
-| `create_run.py`, `settings.py` | Preflight, frozen input copies, paths and configuration |
-| `windows.py`, `records.py` | Original-source windows, immutable fact ledger and ownership references |
-| `publication.py` | Readable domain views, complete audit material and recoverable publication history |
-| `fs.py` | Atomic file writes, normalized reads, hashes and safe identifiers |
-| `usage.py`, `run_log.py` | Provider usage and one operational log per run |
-| `cli.py`, `report.py` | Thin command-line adapter and read-only diagnostics |
-
-| AI file | Responsibility |
-| --- | --- |
-| `ML/agent.py` | Stage-specific Deep Agent graphs and permissive provider JSON handling |
-| `ML/harness.py` | Existing shared model and harness configuration |
-| `ML/context.py` | Complete input estimates and lossless, retrievable read-result pointers |
-
-## Markdown file guide
-
-| File | Purpose |
-| --- | --- |
-| `plugins/real_estate.md` | Real-estate scope, baseline domains and brief responsibilities |
-| User's factsheet | Original evidence, including uncertainty; never agent instructions |
-| [`inputs/requirement.md`](../../../inputs/requirement.md) | Editable user objectives, priorities, exclusions, geography and time horizon |
-| `ML/prompts/01_read_facts.md` | Read factsheet windows; produce subject understanding and detailed evidence |
-| `ML/prompts/02_choose_domains.md` | Use that understanding, plugin and requirements to choose initial domains and duties |
-| `ML/prompts/03_sort_facts.md` | Read the original factsheet again; place extracted facts into relevant domains or temporary Extra |
-| `ML/prompts/04_review_domains.md` | Inspect all extracted facts and initial placements; suggest only needed domain/duty/ownership changes |
-| `ML/prompts/05_finalize_domains.md` | Combine the review suggestions into the final domain list and responsibilities |
-| `ML/prompts/06_assign_facts.md` | Give every recorded fact its final domain owners, including newly added domains |
-| `README.md` | Human-readable navigation and workflow; never a model prompt |
-
-Replace the requirements template's placeholders before running. No customer objective
-is supplied, and there is no placeholder-content validator. The run freezes this file as
-`_internal/inputs/requirements.md` (plural), regardless of the original filename.
-
-`02_choose_domains.md` tells the model **how to plan**, not which industry domains to use.
-Change the selected plugin for another industry; the Python engine has no fixed roster
-or real-estate fallback. Insurance and stock-market inputs are tested offline, not shipped
-as production plugins in this change.
-
-The old predefined planner is now only
-[`tests/fixtures/legacy_l2_planner_prompt.md`](../../../tests/fixtures/legacy_l2_planner_prompt.md).
-It constructs historical Layer 3 test inputs. Layer 3's historical parser and renderer live
-in `layer3/legacy_input.py`; its fixed roster lives in `layer3/settings.py`.
-New Layer 2 runs use neither. The unused live `chunk_router.md` has been removed;
-historical run snapshots remain untouched.
-
-## Workflow
-
-```text
-Factsheet + selected plugin + user requirements
-                        │
-                        ▼
-              01_read_facts.md
-              Read source windows
-                        │
-                        ▼
-          Subject profile + evidence inventory
-                        │
-                        ▼
-              02_choose_domains.md
-           Generate initial domains
-                        │
-Original factsheet ─────┤
-                        ▼
-               03_sort_facts.md
-         Extract facts and initial owners
-         Unowned facts = temporary Extra
-                        │
-                        ▼
-              04_review_domains.md
-        Review ALL facts and initial owners
-                        │
-                        ▼
-             05_finalize_domains.md
-          Settle final domains and reasons
-                        │
-                        ▼
-               06_assign_facts.md
-             Assign final fact owners
-                        │
-                        ▼
-          Backend publisher — no LLM call
-                        │
-                        ▼
-      domains/<domain-name>.md + unresolved.md when needed
-```
-
-The plugin and requirements inform **every model stage**, not just initial planning.
-Steps 04–06 are the three parts of the existing reviewer, not an extra review loop:
-suggest changes → settle the domain list → assign facts to that final list. Step 03 uses
-the initial list; step 06 can move facts to domains that the review added. The backend
-then writes the Markdown files without another model call. A catalogue simply means
-the domain list plus each domain's responsibilities.
-
-Edit the numbered prompt files above. Internal stage IDs and frozen snapshot filenames
-keep their previous names (`understanding`, `design`, `distribution`, `observations`,
-`catalogue`, `assignments`) so existing runs resume unchanged. This filename cleanup
-does not change prompt text, model calls, settings, output paths or historical artifacts.
-
-Source understanding and distribution are tool-free; design and the three review phases
-use only `ls`, `glob`, `grep` and `read_file` on explicitly provided run-local evidence.
-No host filesystem, web tools, shell, subagents or automatic summarization is enabled.
-Profiles guide navigation; distribution reads the original source again.
-
-## Run and recovery
-
-```python
-from ML.deep_research.layer2 import create_run, run_all
-
-# Pass pathlib.Path values for all four paths; fill requirements before execution.
-run = create_run(factsheet, plugin, requirements, runs_root, reasoning_effort="high")
-run_all(run)
-```
-
-The notebook exposes those paths and reasoning, then displays status, run path and log
-path only. Its `L2_DYNAMIC_RUN` variable intentionally does not feed Layer 3.
-CLI and `run.ps1` remain available; `--check-only` is observational and non-mutating.
-
-Schema 5 freezes the three inputs and six prompts, hashes, source windows and settings.
-The 60K/10K nominal window policy, native batch concurrency, 200K/250K estimated input
-policy, SQLite retrieval threads, usage records and versioned publication remain unchanged.
-Completed responses are saved without content grading, repair or content-driven retry.
-Operational failures preserve available sibling results; recovery reuses saved responses
-and the recorded thread when inputs are unchanged.
+| `backend/runner.py`, `stages.py`, `jobs.py` | Six-stage order, bounded queues, immediate saves and recovery |
+| `backend/create_run.py`, `settings.py` | Preflight, frozen input/prompt snapshots and policies |
+| `backend/windows.py`, `packing.py` | Unicode-safe source ranges and input pages |
+| `backend/evidence.py` | Rebuildable SQLite evidence/projection index and exact session archives |
+| `backend/projections.py` | Immutable ledger and explicit domain/ownership operations; observational audits |
+| `backend/publication.py`, `publish.py` | Readable rendering and streamed, versioned publication |
+| `backend/fs.py`, `usage.py`, `run_log.py` | Atomic I/O, provider usage and operational logging |
+| `backend/cli.py`, `report.py` | Thin CLI and read-only checks |
+| `ML/agent.py`, `harness.py` | Stage capabilities and unchanged shared model construction |
+| `ML/context.py`, `evidence_backend.py` | Final input guard, history pointers and native read-only evidence access |
 
 ## Read the results
 
 ```text
 L2_<id>/
-├── README.md              Execution status, recorded-fact counts and output links
-├── domain_plan.md         Subject overview, initial/final domains and review reasons
-├── domains/<name>.md      Research responsibilities and section-grouped asset facts
-├── unresolved.md          Full unassigned/unprocessed material, only when present
-├── run.json               Machine-readable status and frozen configuration
-├── run.log                Operational events, not source text or model responses
+├── README.md              Status, counts, output links
+├── domain_plan.md         Subject overview, initial/final domains, reasons and dispositions
+├── domains/<name>.md      Responsibilities and section-grouped facts
+├── unresolved.md          Complete unassigned/unprocessed material, when present
+├── run.json
+├── run.log
 └── _internal/
-    ├── inputs/            Original input bytes and all six prompt snapshots
-    ├── facts.jsonl        One canonical ledger, including retained earlier fact versions
-    ├── domains.json       Initial and final domain definitions
-    ├── assignments.json   Initial/final decisions and active fact IDs
-    └── trace/             Raw responses, source manifest, detailed evidence,
-                          review pages, publication history, usage.jsonl and checkpoints.sqlite3
+    ├── inputs/            Original bytes and six frozen prompt copies
+    ├── facts.jsonl        Immutable fact ledger, retaining earlier generations
+    ├── domains.json       Initial/final definitions and proposal dispositions
+    ├── assignments.json   Initial/final ownership and active fact IDs
+    └── trace/
+        ├── source/manifest.json
+        ├── evidence.sqlite3    Rebuildable index, shared across this run's retrieval jobs
+        ├── responses/          Raw response.json files and job-version history
+        ├── history/            Exact archived session messages
+        ├── publications/       Complete publication revisions
+        ├── presentation_history/
+        ├── checkpoints.sqlite3
+        └── usage.jsonl
 ```
 
-Start with README.md, then the domain Markdown files. Research Markdown contains the name,
-responsibilities and facts grouped by supplied section labels in first-appearance order;
-missing labels use `Other supplied facts`. It omits catalogue IDs, source bookkeeping,
-window offsets, record links and ownership explanations. Full provenance and source locators
-remain in the unchanged internal records, not another duplicate JSON copy. Fact wording,
-supported meaning, applicability, dates, conflicting quantities and additional values remain
-visible; Python does not paraphrase, deduplicate or strip keywords from prose.
-Domain filenames are sanitized and disambiguated without changing the domain definitions.
+Research Markdown contains the name, responsibilities and grouped facts, not technical IDs,
+byte offsets, source bookkeeping or decision inventories. Facts retain substantive dates,
+quantities, contradictions and qualifications within the fact. Sort facts no longer requests separate
+means or applicability fields. The publisher omits those exact top-level fields (and source bookkeeping)
+from research Markdown, but preserves full bodies in raw responses and the ledger. Other nested or
+unconventional values remain visible; words in prose are not stripped. Python does not paraphrase or
+infer missing ownership. Old qualifications stored only in a hidden field remain available internally,
+not automatically moved into fact text. New prompts apply only through new-run snapshots; existing
+run views are not refreshed until publication is explicitly invoked.
 
-Raw model objects are saved before interpretation. Recognized facts/owners are published;
-unexpected fields and unusable references are shown in unresolved.md with their complete values
-and raw-response links. Python does not guess alternate meanings or request a rewritten answer.
-Serialization failures, conflicting immutable records and oversized inputs remain operational
-errors. Coverage never gates completed content or changes execution status.
+Publications stream one domain at a time through atomic temporary files. Old visible bytes
+are archived before replacement; raw responses and checkpoints are retained. The SQLite index
+can be rebuilt from authoritative records without another model call. Damaged index bytes are
+retained for diagnosis.
 
-The fact ledger is atomically replaced while retaining immutable earlier records. Ownership
-and domain definitions are separate; no per-fact or per-domain JSON copies are generated.
-Fingerprint-based responses and committed publication revisions remain under trace/. Replaced
-visible Markdown bytes are also archived before refreshing views. Missing or interrupted views
-are rebuilt on resume from completed jobs, without content-repair calls. Checkpoints are retained.
-The usage helper still accepts the directory containing usage.jsonl; for schema 5 that directory
-is `_internal/trace/`. Public create_run/run_all interfaces remain unchanged.
+## Execution and compatibility
 
-## Less repeated model text
+```python
+from ML.deep_research.layer2 import create_run, run_all
+run = create_run(factsheet, plugin, requirements, runs_root, reasoning_effort="high")
+run_all(run)
+```
 
-Understanding keeps the profile navigational and the evidence inventory detailed. Observations
-review every fact but report only changes, disagreements or unresolved issues. Final assignment
-output contains an explicit entry for each supplied fact, with a reason only for changed,
-disputed or unresolved ownership. Initial owners are supplied for comparison, not as authority.
-Complete domain definitions are inlined on review pages only when the fully accounted input
-fits the normal context target; otherwise all definition pages remain retrievable. No fact or
-definition is truncated, and the original-source distribution pass is unchanged.
+Pass pathlib.Path values; CLI/PowerShell flags and public signatures are unchanged.
+Run snapshots include all three inputs even though step 01 receives source only.
+Operational failures resume by explicit saved thread ID. Job identity includes stage/mode/page
+scope; fingerprints include frozen policy, prompt, explicit inputs and the accessible evidence
+manifest version, not an entire corpus copy. Changed upstream evidence preserves old results and
+creates dependent versions. Completed objects, even empty/unconventional ones, are reused.
 
-Distribution requests concise facts and useful topic labels, with `means` empty when there is
-no additional supported interpretation. Material document names/dates belong in the fact,
-not exclusively in its source bookkeeping. Domain design and final catalogue request concise
-duties and boundaries, keeping rationale/evidence references separate from responsibilities.
-No word limit, fixed topic roster or additional model call is introduced. New runs snapshot
-these prompts; existing snapshots are unchanged. The cleaner renderer applies to new
-publications, including a later explicitly requested resume/republication that archives the
-previous visible bytes. Existing run files are not automatically refreshed by a code update.
+`--check-only` is observational: no model calls, file changes or log appends.
+Schema-2/3/4/5 files remain readable as history but execution/checks are rejected without migration.
+Schema 6 is **not yet integrated with Layers 3/4**. Their code, cells and historical inputs are unchanged.
 
-Fewer files do not themselves save model tokens. Prompt/input savings and quality need a later
-authorized live comparison at unchanged model/settings; offline tests prove orchestration only.
-Unresolved coverage concerns **recorded facts**, not proof that every source fact was extracted.
+## Verification boundary
 
-**Dynamic schema-5 Layer 2 is not yet integrated with Layers 3/4.** Historical runs and
-completed reports remain unchanged. Schema-2/3/4 execution and checks are rejected without migration.
+Offline fixtures exercise native tool surfaces/checkpoint recovery, exact source preservation,
+bounded jobs, exhaustive scheduled comparisons, input accounting and streamed publication.
+`python -m tests.layer2_scale prepare <fixture-dir> --tokens 10000000` followed by the corresponding
+`execute` command runs synthetic native-graph outputs with HTTP blocked. Use separate processes
+for preparation/execution RAM, I/O and timing measurements. These are operational checks:
+they do not prove extraction completeness, semantic retrieval quality or future provider latency.
+A fixed-settings model comparison requires separate authorization.
+
+See [schema-6 verification and scale measurements](docs/schema6_verification.md) for the
+offline results and their limits.
