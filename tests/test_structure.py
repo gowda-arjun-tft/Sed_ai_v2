@@ -20,7 +20,8 @@ class StructureTests(unittest.TestCase):
             "".join(cell.get("source", [])) for cell in notebook["cells"]
         )
         self.assertEqual(len(cells), 3)
-        self.assertEqual(notebook["metadata"]["kernelspec"]["display_name"], "compute")
+        self.assertIn(notebook["metadata"]["kernelspec"]["display_name"],
+                      {"compute", "Python 3", "SedAI Docker — Python 3.12"})
         for control in (
             "FACT_SHEET_PATH",
             "LAYER2_REASONING_EFFORT",
@@ -36,9 +37,11 @@ class StructureTests(unittest.TestCase):
             "LAYER4_RETRY_FAILED",
         ):
             self.assertIn(control, notebook_text)
+        # Either separator is accepted so one notebook serves the Windows host and the Linux
+        # container; forward slashes resolve on both, while a backslash is a filename on Linux.
         self.assertRegex(
             notebook_text,
-            r'LAYER4_SOURCE_RUN_PATH = r"runs\\[^"\r\n]+\\L3_[^"\r\n]+"',
+            r'LAYER4_SOURCE_RUN_PATH = r"runs[\\/][^"\r\n]+[\\/]L3_[^"\r\n]+"',
         )
         self.assertRegex(
             notebook_text,
@@ -67,14 +70,17 @@ class StructureTests(unittest.TestCase):
         layer2_text = "".join(cells[0]["source"])
         self.assertRegex(
             layer2_text,
-            r'FACT_SHEET_PATH = Path\(r"inputs\\[^"\r\n]+\.md"\)',
+            r'FACT_SHEET_PATH = Path\(r"inputs[\\/][^"\r\n]+\.md"\)',
         )
         self.assertIn('print("Layer 2: running")', layer2_text)
         self.assertIn("['status']", layer2_text)
         self.assertIn("asyncio.to_thread(run_layer2, L2_DYNAMIC_RUN)", layer2_text)
         self.assertIn("LAYER2_DOMAIN_PLUGIN", layer2_text)
         self.assertIn("LAYER2_REQUIREMENTS", layer2_text)
-        self.assertIn('LAYER2_REQUIREMENTS = Path(r"inputs\\requirement.md")', layer2_text)
+        self.assertRegex(
+            layer2_text,
+            r'LAYER2_REQUIREMENTS = Path\(r"inputs[\\/]requirement\.md"\)',
+        )
         self.assertIn("replace template placeholders before running", layer2_text)
         self.assertIn("from ML.deep_research.layer2 import create_run", layer2_text)
         self.assertIn("from ML.deep_research.layer2 import run_all", layer2_text)
@@ -104,6 +110,26 @@ class StructureTests(unittest.TestCase):
         self.assertTrue(PLANNER_PATH.is_file())
         self.assertEqual(PLANNER_PATH.parent, REPO_ROOT / "tests" / "fixtures")
         self.assertFalse((REPO_ROOT / "planner_prompt.md").exists())
+
+    def test_development_uses_original_workspace_without_hidden_run_volumes(self):
+        import yaml
+
+        compose_path = REPO_ROOT / "compose.yaml"
+        if not compose_path.exists():
+            self.skipTest("Compose is outside the runtime-only image")
+        compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
+        dev = compose["services"]["dev"]
+        self.assertEqual(dev["volumes"], [".:/app"])
+        self.assertEqual(dev["command"], ["sleep", "infinity"])
+        config = json.loads((REPO_ROOT / ".devcontainer/devcontainer.json").read_text())
+        self.assertEqual(config["service"], "dev")
+        self.assertEqual(config["runServices"], ["dev"])
+        self.assertEqual(config["workspaceFolder"], "/app")
+        self.assertEqual(config["remoteUser"], "appuser")
+        self.assertEqual(config["customizations"]["vscode"]["settings"]["python.defaultInterpreterPath"],
+                         "/usr/local/bin/python")
+        self.assertNotIn(".:/app", compose["services"]["notebook"]["volumes"])
+        self.assertFalse((REPO_ROOT / "docker/prepare_notebook.py").exists())
 
     def test_layer2_layout_public_exports_and_industry_neutral_code(self):
         from ML.deep_research.layer2.backend import settings

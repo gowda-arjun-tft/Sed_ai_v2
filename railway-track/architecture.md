@@ -46,7 +46,39 @@ The pipeline uses OpenAI models; only Layers 3/4 perform web research, through t
 
 ## Deployment
 
-Not established.
+Two supported targets run the same application code. The host PowerShell workflow (`run.ps1` with
+the `compute` interpreter) is unchanged and authoritative for historical runs. A Linux container
+defined by `docker/Dockerfile`, `compose.yaml` and `.dockerignore` provides a second target where
+the `uuid_utils` native extension loads, so the offline suite and the notebook can run; no Windows
+security control is modified. Python 3.12 matches the host interpreter, and
+`docker/constraints.txt` pins the `requirements.txt` dependency closure to the host-verified
+versions, with Jupyter installed separately under the same constraints.
+
+For browser/CLI services, inputs are bind-mounted read-only and the notebook file read-write, so its editable controls stay
+on the host. Runs and Layer 3/4 source caches live on Docker-managed volumes rather than host
+bind mounts: SQLite WAL and the LangGraph checkpointer are correct on both, but volume writes
+measured about nine times faster and a volume cannot be written by the host concurrently. Host
+`runs/` and `outputs/` are deliberately not mounted, so container and host runs stay separate
+populations and no historical run is visible, migrated or resumed. The container runs as non-root
+`appuser` with `no-new-privileges`, no privileged mode and no Docker-socket mount; JupyterLab is
+published on loopback only with token authentication and executes nothing until a human runs a
+cell. `OPENAI_API_KEY` is supplied at runtime and excluded from the image and build context.
+See the [container runtime guide](../docker/README.md).
+
+VS Code development uses `.devcontainer/devcontainer.json` and the separate Compose `dev`
+service/image. The original Windows repository is mounted read-write at `/app`, including Git,
+the original notebook, editable inputs, previous runs and outputs. No nested volumes hide those
+folders; source changes require no rebuild or export. Previous isolated development volumes are
+retained, unmounted backups. Git is installed in development, trusts only `/app`, and matches the
+host's CRLF handling without rewriting files. Workspace Conda overrides are removed; remote
+Python/Jupyter use `/usr/local/bin/python` and the named Docker kernel. No notebook startup rewrite
+or research auto-execution occurs. The complete checkout includes ignored `.env`; credentials
+remain excluded from images/logs, and no Conda installation or Docker socket is mounted.
+VS Code closure leaves development running. Browser research remains in independent service/volumes;
+never execute one shared run from Windows and Docker simultaneously. Historical runs are visible
+but retain schema and frozen-path restrictions; no migration is performed.
+The image caches the public o200k_base tokenizer asset at `/opt/tiktoken-cache`, avoiding a
+first-use download during otherwise offline execution.
 
 ## Security
 

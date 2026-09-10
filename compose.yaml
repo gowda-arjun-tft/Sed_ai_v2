@@ -1,0 +1,77 @@
+name: sedai
+
+# Browser/CLI services retain separate runtime state; development uses the original project.
+#   notebook — long-running JupyterLab UI, published on loopback only.
+#   cli      — one-shot profile for CLI entrypoints and the offline test suite.
+#   dev      — original VS Code project with Docker Python, never a research auto-start.
+#
+# Browser/CLI runs stay in their existing volumes. Never execute the same shared development
+# run concurrently from Windows and Docker.
+
+x-common: &common
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+    target: runtime
+  image: sedai-v2:local
+  init: true
+  environment:
+    # Supplied at runtime from the host shell or the host .env, which Compose reads for
+    # substitution. The value is never written into the image, a layer or a log line.
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    PYTHONIOENCODING: utf-8
+  volumes:
+    # Research inputs stay authoritative on the host and are read-only inside the container.
+    - ./inputs:/app/inputs:ro
+    # The notebook is the UI, so its editable controls stay on the host and survive
+    # `down`/`up`. It must sit at /app so its relative `inputs/...` paths resolve.
+    - ./CDI_Layer2_Layer3.ipynb:/app/CDI_Layer2_Layer3.ipynb
+    # SQLite (WAL evidence index and LangGraph checkpoints) lives on Docker-managed volumes
+    # backed by ext4 inside the Linux VM, not on a Windows bind mount. See docker/README.md.
+    - sedai-runs:/app/runs
+    - sedai-outputs:/app/outputs
+  # No privileged mode, no added capabilities, no Docker socket and no other host mounts.
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  notebook:
+    <<: *common
+    # Loopback publishing only: unreachable from the local network.
+    ports:
+      - "127.0.0.1:8888:8888"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PYTHONIOENCODING: utf-8
+      # Set JUPYTER_TOKEN in the host shell for a stable login token. Left empty, JupyterLab
+      # generates a random one per start and prints the URL in `docker compose logs notebook`.
+      # Authentication is never disabled.
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-}
+
+  cli:
+    <<: *common
+    profiles: ["cli"]
+    # Overridden on every invocation, e.g. `docker compose run --rm cli python -m unittest ...`.
+    command: ["python", "-c", "print('Pass a command, e.g. python -m ML.deep_research.layer2 --help')"]
+
+  dev:
+    <<: *common
+    profiles: ["dev"]
+    image: sedai-v2-dev:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: development
+    command: ["sleep", "infinity"]
+    # One original workspace: code, Git, editable inputs, notebooks and runs stay on Windows.
+    # Do not add nested volumes that hide its runs/ or outputs/ directories.
+    volumes:
+      - .:/app
+
+volumes:
+  sedai-runs:
+  sedai-outputs:
+  # Retained as recoverable backups; no service mounts or deletes the previous dev volumes.
+  sedai-dev-workspace:
+  sedai-dev-runs:
+  sedai-dev-outputs:
