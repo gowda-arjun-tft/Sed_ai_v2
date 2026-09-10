@@ -20,7 +20,12 @@ use schema 6, not yet integrated with Layers 3/4; do not produce a legacy missio
 
 ## Build, Test, and Development Commands
 
-Use the `compute` interpreter:
+For Docker development, follow [docker/README.md](docker/README.md). Use the shared Dev Container
+and `/usr/local/bin/python` for offline checks; preserve schema 6 and do not restart browser research.
+Do not run the same research job from two environments. After branch switches, finish active work
+before restarting the notebook kernel.
+
+The original Windows workflow uses the `compute` interpreter:
 
 ```powershell
 & 'C:\src\anaconda3\envs\compute\python.exe' -m pip install -r requirements.txt

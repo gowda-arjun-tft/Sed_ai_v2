@@ -3,6 +3,8 @@
 Layer 2 designs plugin-driven domains and organizes supplied evidence. Existing Layers 3/4 research
 real-estate risks and external influences using historical Layer 2 inputs. Python uses `compute` at
 `C:\src\anaconda3\envs\compute\python.exe`.
+For VS Code Docker development, follow the [Docker guide](docker/README.md): open the original
+project in its Dev Container and select `/usr/local/bin/python`. Layer 2 remains schema 6.
 
 ## Structure
 

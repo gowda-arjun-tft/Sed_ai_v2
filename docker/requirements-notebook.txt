@@ -1,0 +1,7 @@
+# Notebook UI only. The host `compute` environment provides Jupyter through Conda, which cannot be
+# reused inside a Linux image, so equivalent PyPI packages are installed here. These are UI
+# dependencies and do not affect Layer 2/3/4 research behavior. The application dependency closure
+# in constraints.txt is applied to this install as well, so Jupyter can never upgrade a pinned
+# framework version. Resolved versions are recorded in docker/README.md after each image build.
+jupyterlab>=4.2,<5
+ipykernel>=6.29,<8

@@ -1,6 +1,7 @@
 """Create schema-6 runs after input preflight and one source-tokenization pass."""
 
 import hashlib
+import os
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,6 +34,11 @@ def create_run(
     """Input three user paths and root; return a frozen schema-6 run without model calls."""
     if reasoning_effort not in REASONING_EFFORTS:
         raise ValueError(f"unsupported reasoning effort: {reasoning_effort}")
+    if os.name != "nt":
+        fact_sheet, domain_plugin, requirements = (
+            Path(str(path).replace("\\", "/"))
+            for path in (fact_sheet, domain_plugin, requirements)
+        )
     paths = {"fact_sheet.md": fact_sheet, "domain_plugin.md": domain_plugin,
              "requirements.md": requirements}
     paths.update({f"prompts/{stage}.md": PROMPTS_DIR / PROMPT_FILES[stage] for stage in STAGES})

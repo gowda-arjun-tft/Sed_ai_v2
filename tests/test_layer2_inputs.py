@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,6 +75,17 @@ class InputTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 create_run(root / "facts.md", root / "plugin.md", root / "requirements.md", root / "empty")
             self.assertFalse((root / "empty").exists())
+
+    @unittest.skipIf(os.name == "nt", "Windows already treats backslashes as separators")
+    def test_preflight_accepts_relative_windows_separators_on_posix(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            for name in ("facts.md", "plugin.md", "requirements.md"):
+                (root / name).write_text(name, encoding="utf-8")
+            relative = root.relative_to(Path.cwd())
+            path = lambda name: Path(str(relative / name).replace("/", "\\"))
+            run = create_run(path("facts.md"), path("plugin.md"), path("requirements.md"), root / "runs")
+            self.assertEqual(load_json(run / "run.json")["schema_version"], 6)
 
     def test_plain_markdown_plugins_and_grouping(self):
         with tempfile.TemporaryDirectory() as tmp:

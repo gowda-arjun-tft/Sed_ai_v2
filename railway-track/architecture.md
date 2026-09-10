@@ -8,6 +8,9 @@ The current implemented architecture and layer boundaries are documented in [AGE
 
 Layer 2 schema 6 reads original evidence, designs plugin-driven domains, distributes facts and performs one paged review. Its dynamic outputs are not yet integrated with Layers 3/4. The unchanged downstream layers continue using historical inputs: Layer 3 runs eight direct domain researchers and a synthesis; Layer 4 performs segregation, external research and synthesis.
 The repository-scoped Railway Track skill maintains concise durable project context for authorized meaningful changes.
+Claude development guidance lives in `CLAUDE.md` and the dated `CLAUDE_HANDOVER.md` at the project
+root. The user's Windows personal Claude skills contain exact Codex copies of Deep Agents Builder
+and Prompt Framework; these external personal files are not bundled into the Docker environment.
 Layer 2 operations live in `backend/`, while AI construction, input accounting and six generic prompts
 live in `ML/`. Industry definitions belong to the selected plugin; the editable requirements template
 is `inputs/requirement.md`. The public Python entrypoints are package-level `create_run` and `run_all`.
@@ -43,7 +46,11 @@ The pipeline uses OpenAI models; only Layers 3/4 perform web research, through t
 
 ## Deployment
 
-Not established.
+The plain_research branch provides Docker infrastructure with pinned Linux dependencies and a
+VS Code Dev Container mounting the original repository at /app. Development follows the checked-out
+branch and uses /usr/local/bin/python; Layer 2 research behavior remains schema 6. Browser/CLI
+containers retain separate volume-backed research state and image-backed application code.
+See the [Docker guide](../docker/README.md) for branch, kernel and storage boundaries.
 
 ## Security
 

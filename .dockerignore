@@ -1,0 +1,30 @@
+# Keep secrets, research data, generated runs, caches and Git history out of the build context.
+.git
+.gitignore
+.env
+.env.example
+
+# Generated research state and caches stay outside images; runtime mounts select their backing.
+runs/
+outputs/
+backup_runs/
+
+# Research inputs stay on the host: browser/CLI read-only, shared development read-write.
+inputs/
+
+# Local tooling and caches
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.vscode/
+.venv/
+.idea/
+
+# Repository memory and agent skills are not needed inside the image.
+railway-track/
+.agents/
+
+# Host-only entrypoint
+run.ps1
