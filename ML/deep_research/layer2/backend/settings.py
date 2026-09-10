@@ -13,11 +13,15 @@ REASONING_EFFORTS = frozenset({"low", "medium", "high", "max"})
 MODEL_INPUT_TOKEN_LIMIT = 1_050_000
 PROVIDER_MAX_RETRIES = 3
 
-LAYER2_SCHEMA_VERSION = 6
+LAYER2_SCHEMA_VERSION = 9
+WEB_SEARCH_INPUT_LIMIT = 128_000
+WEB_SEARCH_CONTEXT_SIZE = "medium"
+WEB_SEARCH_VERBOSITY = "medium"
+WEB_SEARCH_LEVELS = frozenset({"low", "medium", "high"})
 CHUNK_STRATEGY = "fixed_token_windows"
 CHUNK_INPUT_PARTITIONING = "overlap_context_v1"
-CHUNK_SIZE_TOKENS = 60_000
-CHUNK_OVERLAP_TOKENS = 10_000
+CHUNK_SIZE_TOKENS = 50_000
+CHUNK_OVERLAP_TOKENS = 5_000
 CHUNK_ENCODING = "o200k_base"
 MAX_CHUNK_CONCURRENCY = 5
 
@@ -30,16 +34,7 @@ DOMAIN_PLUGIN_PATH = MODULE_DIR / "plugins" / "real_estate.md"
 CONTEXT_TARGET = 300_000
 CONTEXT_MAXIMUM = 350_000
 CONTEXT_RESERVE = 8_000
-STAGES = ("understanding", "design", "distribution", "observations", "catalogue", "assignments")
-# Editable names follow execution order; frozen snapshot/job names remain stable for resume.
+STAGES = ("metadata", "design", "distribution")
 PROMPT_FILES = dict(zip(STAGES, (
-    "01_read_facts.md", "02_choose_domains.md", "03_sort_facts.md",
-    "04_review_domains.md", "05_finalize_domains.md", "06_assign_facts.md",
+    "01_build_asset_metadata.md", "02_choose_domains.md", "03_distribute_facts.md",
 )))
-
-
-def stage_uses_tools(record: dict, stage: str) -> bool:
-    """Input frozen run/stage; return read-tool availability for graphs and input packing."""
-    return stage not in {"understanding", "distribution"} and not (
-        stage == "design" and record.get("design_tool_free", False)
-    )

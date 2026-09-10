@@ -15,7 +15,7 @@ class ReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))
             fake = FakeStages()
-            fake.unusual.add("assignments")
+            fake.unusual.add("distribution")
             fake.run(run)
             before = {p: p.read_bytes() for p in run.rglob("*") if p.is_file()}
             checks = run_checks(run)
@@ -26,13 +26,13 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(before, {p: p.read_bytes() for p in run.rglob("*") if p.is_file()})
 
     def test_historical_resume_and_check_reject_without_mutation(self):
-        for schema in [2, 3, 4, 5]:
+        for schema in [2, 3, 4, 5, 6, 7, 8]:
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 write_json(root / "run.json", {"schema_version": schema})
                 before = (root / "run.json").read_bytes()
                 for function in [require_current, run_all, run_checks]:
-                    with self.assertRaisesRegex(ValueError, "schema 6"):
+                    with self.assertRaisesRegex(ValueError, "schema 9"):
                         function(root)
                 for option in ["--resume", "--check-only"]:
                     with self.assertRaises(SystemExit):

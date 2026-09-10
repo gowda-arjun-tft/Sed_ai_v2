@@ -2,6 +2,10 @@ param(
     [string]$FactSheet,
     [string]$DomainPlugin,
     [string]$Requirements,
+    [ValidateSet('low', 'medium', 'high')]
+    [string]$Layer2WebSearchDepth = 'medium',
+    [ValidateSet('low', 'medium', 'high')]
+    [string]$Layer2WebSearchVerbosity = 'medium',
     [string]$Resume,
     [string]$Research,
     [string]$ExternalResearch,
@@ -26,8 +30,11 @@ if (-not (Test-Path -LiteralPath $Python)) {
     throw "Required compute interpreter not found: $Python"
 }
 
-if (($Online -or $PublicInputConfirmed) -and -not ($Research -or $ExternalResearch)) {
-    throw '-Online and -PublicInputConfirmed require -Research or -ExternalResearch.'
+if ($Online -and -not ($Research -or $ExternalResearch)) {
+    throw '-Online requires -Research or -ExternalResearch.'
+}
+if ($PublicInputConfirmed -and ($Resume -or $ResumeL3 -or $ResumeL4)) {
+    throw 'Resume uses the frozen public-input confirmation.'
 }
 if ($Research -and -not $Online) {
     throw '-Research requires -Online.'
@@ -84,7 +91,10 @@ if ($Research) {
     if (-not $DomainPlugin -or -not $Requirements) {
         throw 'A new Layer 2 run requires -DomainPlugin and -Requirements.'
     }
-    & $Python -m ML.deep_research.layer2 $FactSheet --domain-plugin $DomainPlugin --requirements $Requirements
+    if (-not $PublicInputConfirmed) {
+        throw 'Layer 2 web-assisted domain design requires -PublicInputConfirmed.'
+    }
+    & $Python -m ML.deep_research.layer2 $FactSheet --domain-plugin $DomainPlugin --requirements $Requirements --web-search-depth $Layer2WebSearchDepth --web-search-verbosity $Layer2WebSearchVerbosity --public-input-confirmed
 }
 
 exit $LASTEXITCODE

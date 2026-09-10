@@ -1,225 +1,271 @@
-import asyncio
-import json
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
-from langchain.agents.structured_output import ProviderStrategy
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langchain_core.runnables import RunnableLambda
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from ML.deep_research.layer2.ML.agent import Layer2Response, create_stage_agent, response_value
-from ML.deep_research.layer2.ML.context import InputBudget, InputSizeError, estimate
+from ML.deep_research.layer2.ML.context import InputSizeError, estimate, messages, request_options
 from ML.deep_research.layer2.ML.harness import build_model
-from ML.deep_research.layer2.backend.evidence import EvidenceStore
-from ML.deep_research.layer2.ML.evidence_backend import EvidenceBackend
-from ML.deep_research.layer2.backend.settings import STAGES, PROMPTS_DIR, PROMPT_FILES
-from tests.layer2_fixtures import FakeStages, new_run
+from ML.deep_research.layer2.backend.fs import load_json, write_json
+from ML.deep_research.layer2.backend.settings import MODULE_DIR, PROMPTS_DIR, PROMPT_FILES
+from ML.deep_research.layer2.backend.windows import token_count
+from tests.layer2_fixtures import FakeStages, domain_plan, new_run, section
 
 
-class HarnessTests(unittest.TestCase):
-    def test_actual_native_graph_tool_surfaces(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}):
-            run = new_run(Path(tmp))
-            for stage in STAGES:
-                graph = create_stage_agent(run, stage)
-                bound = graph.nodes["tools"].bound if "tools" in graph.nodes else None
-                tools = set(getattr(bound, "tools_by_name", getattr(bound, "_tools_by_name", {})))
-                expected = set() if stage in {"understanding", "design", "distribution"} else {"ls", "glob", "grep", "read_file"}
-                self.assertEqual(tools, expected)
-                self.assertFalse(any("summar" in n.lower() for n in graph.nodes))
-
-    def test_permissive_provider_and_unchanged_model(self):
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}):
-            model = build_model("medium")
-            bound = model.bind_tools([], **ProviderStrategy(Layer2Response, strict=False).to_model_kwargs())
-        self.assertIsNone(model.max_tokens)
-        self.assertEqual(model.max_retries, 3)
-        self.assertEqual(model.reasoning_effort, "medium")
-        schema = bound.kwargs["response_format"]["json_schema"]["schema"]
-        self.assertEqual(schema["properties"], {})
-        self.assertTrue(schema["additionalProperties"])
-        for value in [{}, {"odd": [None, 3, {"unknown": "yes"}]}]:
-            self.assertEqual(response_value({"structured_response": Layer2Response(root=value)}), value)
-        with self.assertRaises(ValueError):
-            response_value({})
-
-    def test_every_dispatch_counts_tools_and_schema(self):
-        messages = [HumanMessage(content="hello")]
-        plain = estimate(messages, "instructions", reserve=0)
-        tools = [{"type": "function", "function": {"name": "read_file", "description": "extra " * 3000}}]
-        full = estimate(messages, "instructions", tools, {"description": "schema " * 1000}, reserve=0)
-        self.assertGreater(full, plain + 2000)
-        policy = {"target_tokens": 100, "maximum_tokens": 200, "framing_reserve": 0}
-        guard = InputBudget(Path("."), policy, "instructions", {})
-        request = SimpleNamespace(messages=messages, system_message=HumanMessage(content="instructions"),
-                                  tools=tools)
-        with self.assertRaises(InputSizeError):
-            guard.wrap_model_call(request, lambda _: self.fail("provider must not run"))
-        with self.assertRaises(InputSizeError):
-            asyncio.run(guard.awrap_model_call(request, lambda _: self.fail("provider must not run")))
-
-    def test_old_tool_body_is_archived_exactly_with_tool_pairing(self):
-        body = "evidence " * 3000
-        policy = {"target_tokens": 100, "maximum_tokens": 250_000, "framing_reserve": 0}
+class DirectCallTests(unittest.TestCase):
+    def test_native_json_and_web_payload_and_actual_fake_dispatch_match_accounting(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))
-            guard = InputBudget(run, policy, "instructions", {})
-            messages = [HumanMessage(content="job", id="input"),
-                        AIMessage(content="", id="a1", tool_calls=[
-                            {"name": "read_file", "args": {}, "id": "call-1"}]),
-                        ToolMessage(content=body, tool_call_id="call-1", id="result-1"),
-                        AIMessage(content="", id="a2", tool_calls=[
-                            {"name": "read_file", "args": {}, "id": "call-2"}]),
-                        ToolMessage(content="latest", tool_call_id="call-2", id="result-2")]
-            with patch("ML.deep_research.layer2.ML.context.get_config", return_value={"configurable": {"thread_id": "test"}}):
-                update = guard.before_model({"messages": messages}, None)
-            self.assertEqual([m.id for m in update["messages"][:-1]], ["a1", "result-1"])
-            import json
-            archived = next((run / "_internal/trace/history").rglob("*.json"))
-            self.assertEqual(json.loads(archived.read_text(encoding="utf-8")), [m.model_dump(mode="json") for m in messages[1:3]])
-            backend = EvidenceBackend(run, history=True, thread="test")
-            self.assertTrue(backend.ls("/").entries)
-            self.assertIn(body, "".join(text for _, text in backend.documents()))
-            self.assertEqual(list(EvidenceBackend(run, history=True, thread="other").documents()), [])
+            record = load_json(run / "run.json")
+            request = messages("Return JSON.", {"evidence": "Offline."})
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}), patch(
+                "socket.socket.connect", side_effect=AssertionError("network disabled"),
+            ):
+                model = build_model("high")
+                for stage in ("metadata", "design", "distribution"):
+                    options = request_options(stage, record)
+                    payload = model._get_request_payload(request, **options)
+                    self.assertNotIn("max_output_tokens", payload)
+                    if stage == "distribution":
+                        self.assertEqual(payload["text"]["format"], {"type": "json_object"})
+                    if stage == "design":
+                        self.assertNotIn("response_format", options)
+                        self.assertNotIn("response_format", payload)
+                        self.assertNotIn("format", payload.get("text", {}))
+                        self.assertEqual(payload["tools"], [{"type": "web_search", "search_context_size": "medium"}])
+                        self.assertEqual(payload["tool_choice"], "auto")
+                        self.assertEqual(payload["include"], ["web_search_call.action.sources"])
+                        self.assertEqual(payload["text"]["verbosity"], "medium")
+                    else:
+                        self.assertNotIn("tools", payload)
+                        if stage == "metadata":
+                            self.assertNotIn("text", payload)
+            fake = FakeStages()
+            fake.run(run)
+            record = load_json(run / "run.json")
+            for key, options in fake.options:
+                expected = request_options(key.split("/")[0], record)
+                self.assertEqual(options, expected)
+            for stage, request, key in fake.calls:
+                self.assertEqual(record["jobs"][key]["input_estimate"],
+                                 estimate(request, 8_000, request_options(stage, record)))
 
-    def test_virtual_projection_never_mounts_host_or_other_runs(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}):
-            run = new_run(Path(tmp))
-            with patch("ML.deep_research.layer2.ML.agent.create_deep_agent") as create:
-                create_stage_agent(run, "observations")
-            middleware = create.call_args.kwargs["middleware"][0]
-            self.assertEqual([t.name for t in middleware.tools], ["ls", "read_file", "glob", "grep"])
-            self.assertEqual(type(create.call_args.kwargs["backend"]).__name__, "CompositeBackend")
-
-    def test_frozen_prompts_own_evidence_and_review_contract(self):
-        prompts = {stage: (PROMPTS_DIR / PROMPT_FILES[stage]).read_text(encoding="utf-8") for stage in STAGES}
-        for prompt in prompts.values():
-            for text in ["untrusted evidence", "Approved alternative", "Unknown applicability",
-                         "private chain-of-thought", "No web research"]:
-                self.assertIn(text, prompt)
-        self.assertIn("complete cross-boundary fact", prompts["understanding"])
-        self.assertIn("ALL initial owners", prompts["assignments"])
-        self.assertIn("not only Extra", prompts["assignments"])
-        self.assertIn("stable domain_id", prompts["catalogue"])
-        self.assertIn("ORIGINAL source", prompts["distribution"])
-        self.assertIn("baseline responsibilities only from that plugin", prompts["design"])
-        self.assertIn("no implicit industry or fixed roster", prompts["design"])
-        self.assertIn("No review observations or final catalogue exist", prompts["design"])
-        self.assertIn("final catalogue is settled later", prompts["observations"])
-        self.assertIn("all scheduled observation groups", prompts["catalogue"])
-        self.assertIn("do not create or settle domains again", prompts["assignments"].lower())
-        self.assertNotIn('"mission":', "".join(prompts.values()))
-        self.assertIn("Put unique factual detail in evidence", prompts["understanding"])
-        self.assertIn("not replace evidence extraction", prompts["understanding"])
-        self.assertIn('Return {"observations": []}', prompts["observations"])
-        self.assertIn("Inspect every supplied fact", prompts["observations"])
-        self.assertIn("Do not restate correct unchanged placements", prompts["observations"])
-        self.assertIn("one explicit entry for every supplied fact", prompts["assignments"])
-        self.assertIn("reason only for changed, disputed or unresolved", prompts["assignments"])
-        self.assertIn("initial_assignment for comparison", prompts["assignments"])
-        self.assertIn("Do not repeat fact bodies", prompts["assignments"])
-        for stage in ("observations", "assignments"):
-            self.assertIn("definition", prompts[stage])
-            self.assertIn("page", prompts[stage])
-        for text in ("concise factual wording", "every unique detail", "alternative figures",
-                     "not exclusively in source", "Do not return separate means or applicability fields",
-                     "qualifications within fact", "complete fact when new_content"):
-            self.assertIn(text, prompts["distribution"])
-        self.assertNotIn('"means":', prompts["distribution"])
-        self.assertNotIn('"applicability":', prompts["distribution"])
-        for stage in ("design", "catalogue"):
-            self.assertIn("concise research duties and boundaries", prompts[stage])
-            self.assertIn("Do not repeat asset inventories", prompts[stage])
-            self.assertIn("reason and evidence_refs", prompts[stage])
-
-    def test_prompt_changes_only_reach_new_snapshots(self):
+    def test_search_controls_are_frozen_and_bound_only_to_designer(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            prompts = root / "prompts"
-            shutil.copytree(PROMPTS_DIR, prompts)
-            with patch("ML.deep_research.layer2.backend.create_run.PROMPTS_DIR", prompts):
-                old = new_run(root)
-                snapshots = {name: (old / "_internal/inputs/prompts" / (name + ".md")).read_bytes()
-                             for name in STAGES}
-                old_metadata = (old / "run.json").read_bytes()
-                for stage in ("understanding", "design", "catalogue", "distribution"):
-                    path = prompts / PROMPT_FILES[stage]
-                    path.write_text(path.read_text(encoding="utf-8") + "\nNew test revision.\n", encoding="utf-8")
-                new = new_run(root)
-            self.assertEqual((old / "run.json").read_bytes(), old_metadata)
-            from ML.deep_research.layer2.backend.fs import load_json, sha256
-            metadata = load_json(new / "run.json")
-            for stage in STAGES:
-                name = "prompts/" + stage + ".md"
-                self.assertEqual((old / "_internal/inputs" / name).read_bytes(), snapshots[stage])
-                fresh = new / "_internal/inputs" / name
-                self.assertEqual(fresh.read_bytes(), (prompts / PROMPT_FILES[stage]).read_bytes())
-                self.assertEqual(metadata["inputs"][name]["sha256"], sha256(fresh))
+            run = new_run(Path(tmp))
+            record = load_json(run / "run.json")
+            record["web_search"].update(context_size="high", verbosity="low")
+            write_json(run / "run.json", record)
+            self.assertEqual(request_options("metadata", record), {})
+            self.assertEqual(request_options("distribution", record),
+                             {"response_format": {"type": "json_object"}})
+            design = request_options("design", record)
+            self.assertNotIn("response_format", design)
+            self.assertEqual(design["tools"], [{"type": "web_search", "search_context_size": "high"}])
+            self.assertEqual(design["text"], {"verbosity": "low"})
+            del record["web_search"]["verbosity"]
+            self.assertNotIn("text", request_options("design", record))
 
-    def test_read_facts_groups_detail_with_four_prompt_owned_fields(self):
-        prompt = (PROMPTS_DIR / PROMPT_FILES["understanding"]).read_text(encoding="utf-8")
-        example = json.loads(next(line for line in prompt.splitlines() if line.startswith('{"profile":')))
-        self.assertEqual(set(example), {"profile", "evidence"})
-        self.assertEqual(set(example["evidence"][0]), {"fact", "relationships", "contradictions", "source"})
-        self.assertEqual(example["evidence"][0]["source"], ["91cb80fc", "aa1760d4"])
-        for instruction in (
-            "same subject and topic", "Keep unrelated subjects separate",
-            "Reduce repeated structure, not factual detail", "do not target an entry count or word limit",
-            "respective periods, scopes or versions", "not a separate applicability field",
-            "add information beyond fact", "otherwise []", "without resolving them",
-            "do not automatically constitute contradictions", "copied exactly as a list",
-            "Use [] when none are supplied", "Never invent IDs", "only if present in the source",
-            "filenames, source-window references, offsets or commentary",
-            "within these four fields", "substantive document dates and references",
+    def test_designer_web_limit_preserves_oversized_metadata_without_dispatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeStages()
+            fake.outputs["metadata"] = " x" * 129_000
+            with self.assertRaises(InputSizeError):
+                fake.run(run)
+            self.assertEqual(len(fake.calls), 1)
+            self.assertEqual((run / "asset_metadata.md").read_text(), fake.outputs["metadata"])
+            record = load_json(run / "run.json")
+            self.assertEqual(record["jobs"]["design/000001"]["input_ceiling"], 128_000)
+
+    def test_native_web_actions_sources_annotations_and_usage_saved_not_logged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeStages()
+            actions = [{"type": "web_search_call", "id": "ws-offline", "status": "completed",
+                        "action": {"type": "search", "query": "PRIVATE_WEB_QUERY",
+                                   "sources": [{"url": "https://example.org/PRIVATE_SOURCE"}]}}]
+            fake.outputs["design"] = AIMessage(
+                content=domain_plan("Operations", "Ownership"),
+                additional_kwargs={"tool_outputs": actions, "annotations": [{"citation": "PRIVATE_CITATION"}]},
+                usage_metadata={"input_tokens": 40, "output_tokens": 20, "total_tokens": 60},
+                response_metadata={"status": "completed"},
+            )
+            fake.run(run)
+            record = load_json(run / "run.json")
+            row = record["jobs"]["design/000001"]
+            saved = load_json((run / row["response_path"]).with_name("provider_message.json"))
+            self.assertEqual(saved["additional_kwargs"]["tool_outputs"], actions)
+            self.assertEqual(saved["usage_metadata"]["total_tokens"], 60)
+            self.assertEqual(row["web_search_actions"], 1)
+            self.assertEqual(record["usage"]["model_calls"], 3)
+            self.assertEqual(record["usage"]["total_tokens"], 90)
+            log = (run / "run.log").read_text()
+            for private in ("PRIVATE_WEB_QUERY", "PRIVATE_SOURCE", "PRIVATE_CITATION"):
+                self.assertNotIn(private, log)
+            self.assertIn("designer_web_actions job=design/000001 count=1", log)
+            fake.run(run)
+            self.assertEqual(len(fake.calls), 3)
+            (run / row["response_path"]).unlink()
+            fake.fail.add("design")
+            fake.run(run)
+            failed = load_json(run / "run.json")["jobs"]["design/000001"]
+            self.assertNotIn("web_search_actions", failed)
+            self.assertIn("designer_web_actions job=design/000001 count=None", (run / "run.log").read_text())
+
+    def test_real_model_builder_has_no_bound_tools_format_or_output_cap(self):
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}), patch(
+            "socket.socket.connect", side_effect=AssertionError("network disabled"),
         ):
-            self.assertIn(instruction, prompt)
-        self.assertNotIn("source locators", prompt)
-        self.assertNotIn("Explain decisions", prompt)
+            model = build_model("high")
+            payload = model._get_request_payload([SystemMessage(content="Instructions"), HumanMessage(content="Evidence")])
+        self.assertEqual(payload["model"], "gpt-5.6-luna")
+        self.assertEqual(payload["reasoning"]["effort"], "high")
+        self.assertFalse(payload["store"])
+        self.assertEqual(model.max_retries, 3)
+        for key in ("tools", "text", "response_format", "max_output_tokens", "previous_response_id"):
+            self.assertNotIn(key, payload)
 
-    def test_understanding_values_reach_storage_and_design_without_repair(self):
-        grouped = {
-            "profile": "Bâtiment A: historical records; annex proposed.",
-            "evidence": [{
-                "fact": "Bâtiment A measured 1,200 m² in 2006; another 2006 record says 1,250 m². "
-                        "A 50 m² annex was proposed in 2025; installation is unconfirmed.",
-                "relationships": ["The annex proposal identifies Bâtiment A as its host building."],
-                "contradictions": ["The two 2006 records disagree on area; the cause is unresolved."],
-                "source": ["91cb80fc", "aa1760d4"],
-            }, {"fact": "Ownership is unconfirmed.", "relationships": [],
-                "contradictions": [], "source": []}],
-        }
-        for response in (grouped, {}, {"unexpected": {"values": [None, "漢字", 17]}}):
-            with self.subTest(response=response), tempfile.TemporaryDirectory() as tmp:
-                run, fake = new_run(Path(tmp)), FakeStages()
-                original_factory = fake.factory
+    def test_sequential_carry_forward_and_single_design(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), text=" x" * 22, size=10)
+            fake = FakeStages()
+            fake.run(run)
+            windows = load_json(run / "run.json")["source_windows"]
+            self.assertEqual(len(fake.calls), windows * 2 + 1)
+            self.assertEqual([s for s, _, _ in fake.calls],
+                             ["metadata"] * windows + ["design"] + ["distribution"] * windows)
+            cumulative = ""
+            for stage, request, _ in fake.calls:
+                self.assertEqual(len(request), 2)
+                self.assertIsInstance(request[0], SystemMessage)
+                self.assertIsInstance(request[1], HumanMessage)
+                if stage == "metadata":
+                    self.assertEqual(section(request, "previous_metadata"), cumulative)
+                    cumulative += section(request, "new_content")
+                    self.assertNotIn("<domain_plugin>", request[1].content)
+                    self.assertNotIn("<requirements>", request[1].content)
+                elif stage == "design":
+                    self.assertEqual(section(request, "asset_metadata"), cumulative)
+                    self.assertNotIn("<new_content>", request[1].content)
+                else:
+                    self.assertEqual(section(request, "asset_metadata"), cumulative)
+                    self.assertEqual(section(request, "domain_plan"), domain_plan("Operations", "Ownership"))
+            self.assertEqual((run / "asset_metadata.md").read_text(), " x" * 22)
 
-                def factory(path, stage, checkpointer=None):
-                    graph = original_factory(path, stage, checkpointer)
-                    if stage != "understanding":
-                        return graph
+    def test_no_sqlite_activity_or_retired_agent_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            with patch("sqlite3.connect", side_effect=AssertionError("SQLite is retired in Layer 2")):
+                FakeStages().run(run)
+            self.assertFalse(list(run.rglob("*.sqlite*")))
+            self.assertTrue(list(run.rglob("response.json")))
+            for name in ("ML/agent.py", "ML/evidence_backend.py", "backend/evidence.py", "backend/stages.py"):
+                self.assertFalse((MODULE_DIR / name).exists())
 
-                    async def invoke(value, config):
-                        await graph.ainvoke(value, config)
-                        return {"structured_response": Layer2Response(root=response)}
+    def test_actual_plain_messages_accounted_and_exceptional_input_logged(self):
+        values = messages("System\n", {"new_content": '"Text"\n医院'})
+        self.assertEqual(estimate(values, 200), sum(token_count(m.content) for m in values) + 264)
+        self.assertIn('"Text"\n医院', values[1].content)
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            record = load_json(run / "run.json")
+            record["context_policy"]["target_tokens"] = 1
+            write_json(run / "run.json", record)
+            fake = FakeStages()
+            fake.run(run)
+            record = load_json(run / "run.json")
+            for stage, request, key in fake.calls:
+                self.assertEqual(record["jobs"][key]["input_estimate"],
+                                 estimate(request, 8_000, request_options(stage, record)))
+            self.assertIn("reason=complete mandatory context", (run / "run.log").read_text())
 
-                    return RunnableLambda(invoke)
+    def test_unfit_input_stops_safely_without_dispatch_or_truncation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            record = load_json(run / "run.json")
+            record["context_policy"]["maximum_tokens"] = 10
+            write_json(run / "run.json", record)
+            fake = FakeStages()
+            with self.assertRaises(InputSizeError):
+                fake.run(run)
+            self.assertEqual(fake.calls, [])
+            self.assertEqual(load_json(run / "run.json")["status"], "failed")
+            self.assertTrue((run / "_internal/trace/routing_issues.json").exists())
 
-                with patch.object(fake, "factory", side_effect=factory):
-                    fake.run(run)
-                    before = len(fake.calls)
-                    fake.run(run)
-                self.assertEqual(len(fake.calls), before)
-                self.assertEqual(sum(stage == "understanding" for stage, _, _ in fake.calls), 1)
-                raw = next((run / "_internal/trace/responses/understanding").rglob("response.json"))
-                self.assertEqual(json.loads(raw.read_text(encoding="utf-8")), response)
-                stored = list(EvidenceStore(run).rows("understanding"))
-                self.assertEqual([row["value"] for row in stored], [response])
-                design = next(data for stage, data, _ in fake.calls if stage == "design")
-                self.assertEqual([row["value"] for row in design["subject"]], [response])
-                record = json.loads((run / "run.json").read_text(encoding="utf-8"))
-                self.assertEqual(record["status"], "complete")
-                self.assertTrue(all(job["attempt"] == 1 for job in record["jobs"].values()))
+    def test_provider_capacity_is_separate_from_application_policy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeStages()
+            fake.model_profile = {"max_input_tokens": 5}
+            with self.assertRaises(InputSizeError):
+                fake.run(run)
+            self.assertFalse(fake.calls)
+
+    def test_prompt_contracts_and_subject_fixtures(self):
+        prompts = {k: (PROMPTS_DIR / v).read_text() for k, v in PROMPT_FILES.items()}
+        self.assertEqual(set(prompts), {"metadata", "design", "distribution"})
+        for word in ("complete updated", "aliases", "counterparties", "uncertainties", "not mandatory headings"):
+            self.assertIn(word, prompts["metadata"])
+        self.assertNotIn("requirements", prompts["metadata"])
+        self.assertNotIn("plugin", prompts["metadata"])
+        for word in ("baseline responsibilities", "domain_id", "supplied context", "web_search"):
+            self.assertIn(word, prompts["design"])
+        for word in ("exceptions", "responsible party", "overlap-only", "multi-domain", "scope"):
+            self.assertIn(word, prompts["distribution"])
+        for word in ("no quota", "positive research responsibilities", "Stop once", "Search may be unnecessary"):
+            self.assertIn(word, prompts["design"])
+        for word in ("notice periods", "genuinely identical", "no relevant new content", "domain IDs",
+                     "complete research-relevant meanings", "separate consequences", "cost basis",
+                     "comparable subject, party, scope and time", "return no intermediate inventory",
+                     "entry-count or word limit", "Shared identity/context need not be repeated",
+                     "Rule with two consequences", "Whole versus component estimate"):
+            self.assertIn(word, prompts["distribution"])
+        plugin = (MODULE_DIR / "plugins/real_estate.md").read_text()
+        requirements = (MODULE_DIR.parents[2] / "inputs/requirement.md").read_text()
+        self.assertNotIn("## Exclusions", requirements)
+        self.assertNotIn("## Deferred to a later round", requirements)
+        for word in ("valuation", "ESG", "CapEx", "employment", "interest rates"):
+            self.assertIn(word.casefold(), plugin.casefold())
+            self.assertIn(word.casefold(), requirements.casefold())
+        for label, content in {
+            "property": "Clinic A in Bonn; solar system proposed, not installed.",
+            "stock": "Issuer A, ordinary shares; manufacturing in France.",
+            "bond": "Issuer B, EUR bond due 2030; secured repayment structure.",
+            "insurance": "Insurer C covers the vessel for 2026, excluding war damage.",
+            "mixed": "Issuer owns Clinic A; portfolio also holds Bond B. Separate subjects.",
+        }.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                run = new_run(Path(tmp), text=content, plugin=f"# {label} research\nScope of {label}.")
+                fake = FakeStages()
+                fake.run(run)
+                design = next(request for stage, request, _ in fake.calls if stage == "design")
+                self.assertEqual(section(design, "asset_metadata"), content)
+                self.assertEqual(section(design, "domain_plugin"), f"# {label} research\nScope of {label}.")
+
+    def test_provider_incomplete_text_is_saved_not_used_as_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeStages()
+            fake.outputs["metadata"] = AIMessage(content="Received partial text", response_metadata={"status": "incomplete"})
+            fake.run(run)
+            record = load_json(run / "run.json")
+            row = record["jobs"]["metadata/000001"]
+            self.assertEqual((run / row["response_path"]).read_text(), "Received partial text")
+            self.assertEqual(row["error_type"], "IncompleteResponseError")
+            self.assertEqual(len(fake.calls), 1)
+
+    def test_large_completed_metadata_is_retained_when_next_input_cannot_fit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), text=" x" * 11, size=10)
+            record = load_json(run / "run.json")
+            record["context_policy"]["maximum_tokens"] = 10_000
+            write_json(run / "run.json", record)
+            fake = FakeStages()
+            fake.outputs["metadata/000001"] = " x" * 12_000
+            with self.assertRaises(InputSizeError):
+                fake.run(run)
+            self.assertEqual(len(fake.calls), 1)
+            self.assertEqual((run / "asset_metadata.md").read_text(), " x" * 12_000)
+            self.assertIn("workflow_incomplete", (run / "_internal/trace/routing_issues.json").read_text())

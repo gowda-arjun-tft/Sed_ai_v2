@@ -1,244 +1,199 @@
-# Layer 2 — scalable evidence processing (schema 6)
+# Layer 2 V3 — stable domain routing and web-assisted design (schema 9)
 
-Layer 2 reads supplied UTF-8 text, designs industry-appropriate domains and places
-recorded facts into them. It does not search the web, score risks or draw research
-conclusions. Six stages remain; a stage may need multiple bounded jobs and retrieval turns.
+Layer 2 prepares an asset overview and domain-specific research inputs through three direct model stages.
+Only the domain designer can use native web search; there is no reviewer, agent graph, custom tool loop or synthesis.
+Industry definitions live in the selected plugin, not Python or the generic prompts.
 
 ## Start here
 
-- Edit industry scope and baseline duties in the selected plugin, such as `plugins/real_estate.md`.
-- Edit objectives/priorities/exclusions in [inputs/requirement.md](../../../inputs/requirement.md).
-  Replace its placeholders yourself; the application does not invent requirements.
-- Supply the factsheet as original evidence, never agent instructions.
-- Use the notebook's Layer 2 cell. It shows running/final status, run path and log path.
-  `L2_DYNAMIC_RUN` intentionally does not feed the unchanged Layer 3 cell.
+1. Choose your original factsheet and industry plugin, such as [real_estate.md](plugins/real_estate.md).
+2. Review [requirements](../../../inputs/requirement.md). The current user's expanded scope includes finance, valuation, ESG/CapEx and local-market research while preserving the original priorities.
+3. Review **all three inputs** for public web-assisted planning. The requirements have a confidential origin; copying them into a run does not make them public. Use public or invented input only.
+4. In the Layer 2 notebook cell, explicitly set `LAYER2_PUBLIC_INPUT_CONFIRMED = True` only after that review. It defaults to False; unconfirmed runs fail before creating a folder or calling a model.
+5. Select paths, reasoning, web-search depth and response verbosity; use the existing [Docker environment](../../../docker/README.md). The notebook prints running/final status, run path and log path only.
 
-## Six steps
+The separate `L2_DYNAMIC_RUN` variable does not feed the unchanged Layer 3 cell. Do not execute one run in two environments.
 
-```text
-Original factsheet only
-        │
-        ▼
-01 Read facts ──► subject fragments + detailed evidence
-        │
-        ├── selected plugin + user requirements
-        ▼
-02 Choose domains ──► initial definitions and reasons
-        │
-Original factsheet + current responsibilities
-        ▼
-03 Sort facts ──► immutable facts + initial owners / temporary Extra
-        │
-        ├── plugin + requirements + every recorded fact
-        ▼
-04 Review domains ──► changes, disagreements and proposals
-        ▼
-05 Finalize domains ──► final definitions + proposal dispositions
-        ▼
-06 Assign facts ──► final owners for every recorded fact
-        ▼
-Backend publisher (no model call)
-        ▼
-Compact domains/*.md + unresolved.md when needed
-```
-
-Read facts keeps its separate compact subject profile and requests coherent evidence groups
-about the same subject and topic. Each entry contains `fact`, `relationships`, `contradictions`
-and `source`. Historical/proposed/unconfirmed qualifications belong within the fact, not a
-separate applicability field. Relationships add supported connections; contradictions describe
-unresolved differences. Either list may be empty. Source lists contain only supplied provenance
-IDs (or `[]`), without filenames or window metadata. Internal source-window tracking is unchanged.
-Grouping reduces repeated structure, not distinct details; no entry count or word limit is imposed.
-The four-field contract is prompt guidance, not a Python validator. New runs snapshot it; existing
-runs retain their frozen prompt. Detail retention
-and token savings require a separately authorized model comparison, not just offline tests.
-
-| Prompt | Inputs and task |
-| --- | --- |
-| `ML/prompts/01_read_facts.md` | Original overlap/new-content window only. Preserve a compact subject profile and detailed evidence. No plugin, requirements or tools. |
-| `ML/prompts/02_choose_domains.md` | Complete scheduled understanding records, plugin, requirements and current definitions. Retain baselines; justify additions or responsibility updates. Tool-free in new runs. |
-| `ML/prompts/03_sort_facts.md` | Original source plus initial responsibilities. Extract original facts, not a previous model summary; assign relevant owners. Tool-free. |
-| `ML/prompts/04_review_domains.md` | Every recorded fact and its initial ownership, definitions, plugin and requirements. Report changes or disagreements only. |
-| `ML/prompts/05_finalize_domains.md` | Scheduled proposal groups, existing definitions, plugin and requirements. Apply explicit changes and state dispositions. |
-| `ML/prompts/06_assign_facts.md` | Fact pages, initial owners and final responsibilities. Return owner IDs without repeating fact bodies. |
-
-Steps 04–06 are one finite reviewer stage, not a designer/reviewer approval loop.
-The numbered prompts keep stable internal stage IDs: understanding, design, distribution,
-observations, catalogue, assignments. Frozen copies use those IDs as filenames.
-All industry responsibilities come from the selected plugin, never a Python roster.
-
-## Large inputs and large domain lists
-
-Preparation tokenizes once using installed `o200k_base`. Nominal windows are 60K tokens,
-10K original-source overlap and 50K stride. Actual byte boundaries are Unicode-safe;
-new-content slices reconstruct the original text. Processing stops at source end.
-Only manifest boundaries remain in memory after preparation. The tokenizer still allocates
-for the whole input during preparation: RAM is **not** input-size-independent.
-
-Execution seeks recorded ranges instead of reloading the whole factsheet. Native
-`abatch_as_completed` uses frozen concurrency five and batches of at most twice concurrency.
-Completions save immediately; records assemble in source order. Planning and review are sequential,
-with fresh page contexts unless resuming that exact checkpoint.
-
-Small subject inputs use one domain-design job. Larger inputs schedule every subject group
-in order. Models return additions/updates, not the entire roster each time. The application
-allocates stable IDs and preserves unchanged definitions. Finalization uses the same bounded
-update pattern and schedules every proposal page.
-
-New runs freeze `design_tool_free: true`: Choose domains uses only supplied JSON evidence,
-plugin, requirements and current definitions. Every understanding page is scheduled; profiles
-never replace detailed evidence. The designer stays sequential and checkpointed, but has no
-evidence backend or tools. Historical schema-6 runs without this setting retain their original
-designer behavior and prompt snapshots. No existing run is restarted or converted automatically.
-
-Large fact collections are paged. Oversized **responsibility definitions** are different:
-each fact/proposal group is explicitly compared with every definition page. Planning comparisons
-are reconciled in bounded jobs. Tool-free design reconciliation explicitly includes current
-corresponding definitions and domains added by earlier reconciliations, paging large values
-without truncation. Unknown comparison references remain in the audit, not a repair loop.
-When source plus definitions will not fit, sorting extracts
-the original source once, then schedules ownership-only comparisons. Facts can have several
-owners, including domains added during review. Failed or missing ownership comparisons remain
-visible even if another page supplied an owner.
-
-There is no repeat-until-good loop, automatic summarizer, semantic deduplication or repair call.
-Completed large values remain saved and become parent-linked text fragments only when another
-job consumes them. Fragment locations do not turn a source-window offset into an exact fact citation.
-
-## Evidence, memory and input limits
-
-The normal assembled-input target is **300K estimated tokens**, with logged exceptional
-tolerance through **350K**. Every dispatch, including tool follow-ups, counts instructions,
-messages, evidence, tool definitions, response metadata and conservative framing.
-The effective allowance is also bounded by the model's supported capacity. These estimates
-are not provider billing counts. There is **no application output-token limit**; provider limits apply.
-
-Page material first. Archive complete older assistant/tool exchanges before replacing them
-with retrievable references. Keep current instructions, pending tool calls and newest evidence.
-No generated summary replaces original evidence. Mandatory/indivisible input that cannot fit
-fails operationally, preserving completed siblings; completed content is never rejected for quality.
-
-Review (and historical tool-enabled design) exposes only native `ls`, `glob`, `grep`, `read_file` through CompositeBackend.
-An indexed read-only backend serves registered `/evidence/` pages from this run and
-`/history/` pages from this session. No arbitrary host-path resolution, shell, web, model writes,
-delegation, embeddings, vector database or cross-run memory. StateBackend contains only small
-thread state; corpus bodies are not seeded into each checkpoint.
-Tool-free design still uses SQLite checkpoints; removing its tools is not a general SQLite-locking fix.
-
-During stage execution the runner retains one idle evidence connection, without an open transaction,
-to avoid last-connection WAL cleanup overlapping new tool reads. Each retrieval still opens its own
-query-only connection with a five-second busy timeout. Native read operations retry only SQLite
-BUSY/PROTOCOL primary codes: three attempts total, with 0.25s/0.5s backoff and fresh connections.
-SQLite's internal protocol waits are separate from the busy timeout. Partial attempt results are
-discarded before returning a tool response. Initialization, history indexing, writes and checkpoints
-are outside this retry boundary. Exhaustion remains an operational failure; no LLM response is retried.
-This is tested read recovery, not a guarantee against every SQLite failure.
-
-The existing run.log records retry/recovery/failure, database/tool, stage/job/thread, timing and SQLite
-codes. Final failures include traceback file/function/line frames, not source lines, local variables,
-SQL parameters, exception payloads or model content. Database attempts do not increment model usage
-or job attempts. No separate monitoring service is added; check-only still writes nothing.
-
-SQLite stores immutable page versions and a searchable projection of source, records, identifiers,
-model-supplied entities/topics/relationships/aliases. `grep` is literal substring search with an
-exact scan, not ranked top matches; narrow truncated results through directory shards and read
-all relevant pages. Source pages link to adjacent pages/windows. An FTS accelerator is unnecessary
-for correctness and has not been added. Original snapshots, raw responses and ledger remain authoritative.
-
-## Files and code
+## Workflow and prompt guide
 
 ```text
-layer2/
-├── backend/   Operations, persistence and publication
-├── ML/        Deep Agent construction, context policy and prompts
-├── plugins/   User-selectable industry definitions
-├── README.md  Human workflow guide (not a prompt)
-├── __init__.py    Public create_run / run_all
-└── __main__.py    Thin command-line entrypoint
+Original factsheet → Python: 50K windows / 5K overlap / 45K stride
+       ↓
+01 Build asset metadata — sequential, no tools/plugin/requirements
+   window 1 → metadata v1
+   previous complete metadata + next window → ... → asset_metadata.md
+       ↓
+02 Choose domains — metadata + complete plugin + requirements
+   optional provider-hosted web search → internal raw plan JSON → domain_plan.md view
+       ↓
+03 Distribute original facts — original window + metadata + complete plan
+   independent tool-free calls → domain-ID / Markdown contributions
+       ↓
+Python: source-order assembly by ID → domains/*.md
 ```
 
-| Code | Purpose |
+| Prompt | Purpose |
 | --- | --- |
-| `backend/runner.py`, `stages.py`, `jobs.py` | Six-stage order, bounded queues, immediate saves and recovery |
-| `backend/create_run.py`, `settings.py` | Preflight, frozen input/prompt snapshots and policies |
-| `backend/windows.py`, `packing.py` | Unicode-safe source ranges and input pages |
-| `backend/evidence.py` | Rebuildable SQLite evidence/projection index and exact session archives |
-| `backend/projections.py` | Immutable ledger and explicit domain/ownership operations; observational audits |
-| `backend/publication.py`, `publish.py` | Readable rendering and streamed, versioned publication |
-| `backend/fs.py`, `usage.py`, `run_log.py` | Atomic I/O, provider usage and operational logging |
-| `backend/cli.py`, `report.py` | Thin CLI and read-only checks |
-| `ML/agent.py`, `harness.py` | Stage capabilities and unchanged shared model construction |
-| `ML/context.py`, `evidence_backend.py` | Final input guard, history pointers and native read-only evidence access |
+| [01_build_asset_metadata.md](ML/prompts/01_build_asset_metadata.md) | Return complete updated subject metadata; unchanged by schema 9 |
+| [02_choose_domains.md](ML/prompts/02_choose_domains.md) | Preserve baseline duties, extend or add justified domains, return IDs/names/compact responsibilities |
+| [03_distribute_facts.md](ML/prompts/03_distribute_facts.md) | Read original source again; retain facts and qualifications in ID-keyed Markdown strings |
 
-## Read the results
+Metadata is a navigational subject overview, not file properties or a detailed fact inventory.
+It does not replace the original source in distribution. There is no fixed industry roster or
+quota for new domains. Responsibilities are positive research duties, not Boundaries sections.
+Web information can inform what to investigate; it must not become an invented supplied asset fact.
+
+For 159,316 source tokens, windows are 50,000 / 50,000 / 50,000 / 24,316:
+four metadata jobs, one designer job and four distribution jobs = nine logical model calls.
+Native web actions and transport retries are separate; nine jobs does not mean nine billed operations.
+
+## Minimal routing contract
+
+Domain design requests JSON through the prompt, without API-enforced JSON mode or a strict schema.
+Native web search cannot be combined with JSON mode. The requested plan remains:
+
+```json
+{"domains":[{"domain_id":"D01","name":"Domain name","responsibilities":["Research duty."]}]}
+```
+
+Tool-free distribution retains permissive API JSON-object mode and uses the same frozen IDs:
+
+```json
+{"D01":"## Relevant topic\n- Supplied facts and qualifications."}
+```
+
+Names label files; they do not route content. Repeated members for a known ID append in source order,
+preserving Markdown strings exactly. Filename handling covers collisions and Windows-reserved names.
+Python does not paraphrase, semantically deduplicate, strip words or grade completed content.
+The distribution prompt prioritizes complete meanings before domain organization or compression: rules retain
+their parties, conditions, exceptions, deadlines and separate consequences; figures retain subject/component,
+period, status and cost basis. Two generic examples illustrate consequences and whole-versus-component scope.
+Different parties, periods or scopes are not automatically contradictions. There is no intermediate inventory,
+new call or content check; reducing genuinely repeated wording must not remove distinct qualifications.
+These are prompt instructions, not verified guarantees of model extraction quality.
+
+All raw responses are saved before interpretation, including malformed or unconventional output.
+The parser preserves duplicate object members rather than silently taking the last value.
+Ambiguous definitions, unknown IDs, non-text contributions and unexpected fields remain in the
+internal routing audit, with references to the full raw response. Only usable ID definitions are
+passed to distribution; the full raw plan remains saved unchanged. Nested objects in the audit use ordered
+member-pair lists to retain duplicate keys. Usable sibling content still publishes.
+
+A plan without usable identities stops dependent distribution but remains a completed saved response:
+resume does not resend it for repair. An empty distribution object or a missing domain member is not
+a factual failure. Routing coverage does not establish extraction completeness.
+
+## Files and recovery
 
 ```text
 L2_<id>/
-├── README.md              Status, counts, output links
-├── domain_plan.md         Subject overview, initial/final domains, reasons and dispositions
-├── domains/<name>.md      Responsibilities and section-grouped facts
-├── unresolved.md          Complete unassigned/unprocessed material, when present
+├── README.md                Status, outputs and warning link when needed
+├── asset_metadata.md
+├── domain_plan.md            Domain names and research responsibilities
+├── domains/<safe-domain-name>.md
 ├── run.json
 ├── run.log
 └── _internal/
-    ├── inputs/            Original bytes and six frozen prompt copies
-    ├── facts.jsonl        Immutable fact ledger, retaining earlier generations
-    ├── domains.json       Initial/final definitions and proposal dispositions
-    ├── assignments.json   Initial/final ownership and active fact IDs
+    ├── inputs/              Original bytes and three prompt snapshots
     └── trace/
         ├── source/manifest.json
-        ├── evidence.sqlite3    Rebuildable index, shared across this run's retrieval jobs
-        ├── responses/          Raw response.json files and job-version history
-        ├── history/            Exact archived session messages
-        ├── publications/       Complete publication revisions
+        ├── responses/<stage>/<window>/<fingerprint>/<attempt>/
+        │   ├── response.md or response.json   Exact returned text, even if malformed
+        │   ├── provider_message.json          Designer web actions/sources/annotations/usage
+        │   └── completion.json
+        ├── routing_issues.json
+        ├── history/         Previous operational run records
+        ├── publications/    Rebuildable revisions including internal diagnostics
         ├── presentation_history/
-        ├── checkpoints.sqlite3
         └── usage.jsonl
 ```
 
-Research Markdown contains the name, responsibilities and grouped facts, not technical IDs,
-byte offsets, source bookkeeping or decision inventories. Facts retain substantive dates,
-quantities, contradictions and qualifications within the fact. Sort facts no longer requests separate
-means or applicability fields. The publisher omits those exact top-level fields (and source bookkeeping)
-from research Markdown, but preserves full bodies in raw responses and the ledger. Other nested or
-unconventional values remain visible; words in prose are not stripped. Python does not paraphrase or
-infer missing ownership. Old qualifications stored only in a hidden field remain available internally,
-not automatically moved into fact text. New prompts apply only through new-run snapshots; existing
-run views are not refreshed until publication is explicitly invoked.
+There is no visible unresolved.md, SQLite database, evidence ledger or ownership table in schema 9.
+The complete raw plan stays in the designer's existing trace response.json; malformed saved text may not parse as JSON.
+The root domain_plan.md renders usable names and responsibilities without routing IDs and links to that original response.
+It is a Python view, not another model call or summary. No duplicate root JSON plan is created.
+Only usable projections enter domain files. Internal audit details are not injected into later prompts.
 
-Publications stream one domain at a time through atomic temporary files. Old visible bytes
-are archived before replacement; raw responses and checkpoints are retained. The SQLite index
-can be rebuilt from authoritative records without another model call. Damaged index bytes are
-retained for diagnosis.
+Freeze original bytes, prompt snapshots, source ranges, consent and model/search/input settings.
+Metadata is sequential. Distribution uses native `abatch_as_completed`, frozen concurrency five,
+and batches at most twice concurrency. Every call starts fresh; only the preceding metadata is carried forward.
 
-## Execution and compatibility
+Reuse completed responses on resume. Fingerprints include exact message dependencies, native request
+options and frozen policies. Changed upstream versions preserve history and invalidate dependent jobs.
+Metadata failure stops its chain; designer failure prevents distribution; failed distribution siblings
+still publish. Provider-reported incomplete text remains an operational failure, never complete metadata.
+
+Prepare publication revisions before atomic per-file refresh, archiving previous visible bytes first.
+Interrupted publication rebuilds from saved responses without calls for completed jobs. Nothing automatically
+deletes response history, source snapshots or replaced views.
+This presentation applies to future publications; implementation does not refresh historical runs.
+A later explicitly authorized republication archives the old domain_plan.json before removing that redundant view.
+
+## Model, privacy and input policy
+
+Reuse the fixed model and selected reasoning, three provider transport retries and `store=False`.
+Metadata has no bound tool/format. Only distribution uses native `response_format={"type":"json_object"}`.
+The designer binds `web_search` with automatic selection and no output-format enforcement;
+its prompt still requests JSON, saved verbatim before parsing. New runs freeze independently selected
+`low`, `medium` or `high` search depth and response verbosity; both default to `medium`.
+Use the installed model's native `bind`, not a strict schema helper. Do not silently fall back to a
+different model or disable search if the provider rejects the request; retain an operational failure.
+
+No application output-token cap. Account for actual messages, tools, format metadata and conservative
+framing: normal target 300K estimated tokens, exceptional ceiling 350K, bounded by model capacity.
+The designer also applies the documented 128K web-search context limit. Provider-hosted intermediate
+search context is managed by the provider, not an application conversation we can inspect before each turn.
+If mandatory input does not fit, stop safely: no truncation, automatic summarization or added reconciliation.
+The tokenizer still allocates for the complete source during preparation; scale is not unlimited.
+
+### Reading run.log
+
+The existing append-only UTF-8 log uses UTC timestamps. Stage start/end events show expected,
+completed, reused, failed and outstanding job counts, with stage wall-clock duration. Job events
+show scheduling, native model dispatch, raw-response saving and reuse. Every 30 seconds while calls
+are outstanding, `waiting_for_provider` lists active/pending and queued jobs with batch elapsed time;
+it does not claim to observe provider reasoning or search progress. One local task observes each
+bounded batch and is cancelled/joined on completion, failure or cancellation; it never schedules model work.
+
+`queued_seconds` measures local time from prepared job to native model start. Job `elapsed` includes
+that queue and response handling; `dispatch_to_handled_seconds` excludes the queue but includes local
+response handling, including failure handling. Neither is pure provider processing time. Publication
+has its own wall duration; final run duration and finished_at include publication. Reused jobs do not
+produce a new dispatch. Job attempt numbers and configured provider transport retries are separate;
+hidden transport attempts are labelled unavailable rather than inferred from job counts.
+
+Keep the single append-only run.log free of source text, prompts, responses, queries, URLs, credentials
+and unrestricted error messages. It records stages, attempts, durations, estimates, completion state,
+web-action counts and safe error frames. API failures also record HTTP status, bounded diagnostic
+identifiers (code, parameter and provider request ID), and a known web-search/JSON-mode incompatibility
+diagnostic when that exact provider error is received; arbitrary error bodies/messages are not logged.
+Full designer tool output and available citations/usage stay
+in the internal provider message; existing usage.jsonl attribution remains separate from estimates.
+
+## Interfaces and verification
 
 ```python
 from ML.deep_research.layer2 import create_run, run_all
-run = create_run(factsheet, plugin, requirements, runs_root, reasoning_effort="high")
+run = create_run(factsheet, plugin, requirements, runs_root,
+                 reasoning_effort="high", web_search_context_size="high",
+                 web_search_verbosity="medium", public_input_confirmed=True)
 run_all(run)
 ```
 
-Pass pathlib.Path values; CLI/PowerShell flags and public signatures are unchanged.
-Run snapshots include all three inputs even though step 01 receives source only.
-Operational failures resume by explicit saved thread ID. Job identity includes stage/mode/page
-scope; fingerprints include frozen policy, prompt, explicit inputs and the accessible evidence
-manifest version, not an entire corpus copy. Changed upstream evidence preserves old results and
-creates dependent versions. Completed objects, even empty/unconventional ones, are reused.
+CLI new runs accept `--web-search-depth` and `--web-search-verbosity` and require
+`--public-input-confirmed`. PowerShell uses `-Layer2WebSearchDepth`,
+`-Layer2WebSearchVerbosity` and `-PublicInputConfirmed`. Layer 2 does not require `-Online`;
+that flag retains its Layer 3/4 meaning.
+Resume uses frozen consent. Check-only is observational and makes no writes, log appends or model calls.
+Schemas 2–8 are read-only history, unavailable for execution/check through this runner; no migration.
+**Dynamic Layer 2 is not yet integrated with Layers 3/4.**
 
-`--check-only` is observational: no model calls, file changes or log appends.
-Schema-2/3/4/5 files remain readable as history but execution/checks are rejected without migration.
-Schema 6 is **not yet integrated with Layers 3/4**. Their code, cells and historical inputs are unchanged.
-
-## Verification boundary
-
-Offline fixtures exercise native tool surfaces/checkpoint recovery, exact source preservation,
-bounded jobs, exhaustive scheduled comparisons, input accounting and streamed publication.
-`python -m tests.layer2_scale prepare <fixture-dir> --tokens 10000000` followed by the corresponding
-`execute` command runs synthetic native-graph outputs with HTTP blocked. Use separate processes
-for preparation/execution RAM, I/O and timing measurements. These are operational checks:
-they do not prove extraction completeness, semantic retrieval quality or future provider latency.
-A fixed-settings model comparison requires separate authorization.
-
-See [schema-6 verification and scale measurements](docs/schema6_verification.md) for the
-offline results and their limits.
+Run the existing offline unittest suite, compileall, pip check and git diff --check in Docker.
+Tests cover native request serialization, consent, source windows, generic subject inputs, exact routing,
+input limits, unusual outputs, safe logs, recovery and partial publication. They do not establish actual
+provider acceptance, extraction completeness or useful web discovery on a live run.
+Use the [fixed research-context benchmark](docs/research_context_benchmark.md) for a separately authorized
+comparison. Its schema-9 baseline records observed omissions and distortions; earlier schema audits remain
+historical evidence. Evaluate shared metadata plus domain content together: no mandatory duplication of common
+context, but correct metadata cannot cancel misleading domain prose. New runs snapshot the revised distribution
+prompt; existing runs keep their frozen instructions and outputs. No run is automatically refreshed.

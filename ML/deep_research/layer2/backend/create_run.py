@@ -1,4 +1,4 @@
-"""Create schema-6 runs after input preflight and one source-tokenization pass."""
+"""Create consented schema-9 runs after input preflight and one source-tokenization pass."""
 
 import hashlib
 import os
@@ -10,30 +10,40 @@ from .fs import now_iso, run_group_name, sha256, write_json, atomic_write_text, 
 from .settings import (
     CHUNK_ENCODING, CHUNK_INPUT_PARTITIONING, CHUNK_OVERLAP_TOKENS,
     CHUNK_SIZE_TOKENS, CHUNK_STRATEGY, CONTEXT_MAXIMUM, CONTEXT_RESERVE,
-    CONTEXT_TARGET, DEEPAGENTS_VERSION, LAYER2_SCHEMA_VERSION,
+    CONTEXT_TARGET, LAYER2_SCHEMA_VERSION, MODEL_INPUT_TOKEN_LIMIT,
     MAX_CHUNK_CONCURRENCY, MODEL_NAME, PROMPTS_DIR, PROMPT_FILES, PROVIDER_MAX_RETRIES,
-    REASONING_EFFORT, REASONING_EFFORTS, STAGES,
+    REASONING_EFFORT, REASONING_EFFORTS, STAGES, WEB_SEARCH_CONTEXT_SIZE,
+    WEB_SEARCH_INPUT_LIMIT, WEB_SEARCH_LEVELS, WEB_SEARCH_VERBOSITY,
 )
 from .windows import source_windows
 
 
 def require_current(run_dir: Path) -> dict:
-    """Input a run path; return schema-6 metadata or reject historical execution unchanged."""
+    """Input a run path; return schema-9 metadata or reject historical execution unchanged."""
     from .fs import load_json
 
     record = load_json(run_dir / "run.json")
     if not isinstance(record, dict) or record.get("schema_version") != LAYER2_SCHEMA_VERSION:
-        raise ValueError("Layer 2 schema 6 is required; schema 2/3/4/5 runs are read-only history")
+        raise ValueError("Layer 2 schema 9 is required; older runs are read-only history")
     return record
 
 
 def create_run(
     fact_sheet: Path, domain_plugin: Path, requirements: Path, runs_dir: Path,
     *, reasoning_effort: str = REASONING_EFFORT,
+    web_search_context_size: str = WEB_SEARCH_CONTEXT_SIZE,
+    web_search_verbosity: str = WEB_SEARCH_VERBOSITY,
+    public_input_confirmed: bool = False,
 ) -> Path:
-    """Input three user paths and root; return a frozen schema-6 run without model calls."""
+    """Input public-confirmed paths and settings; return a frozen run without model calls."""
+    if public_input_confirmed is not True:
+        raise ValueError("Layer 2 web-assisted design requires public-input confirmation")
     if reasoning_effort not in REASONING_EFFORTS:
         raise ValueError(f"unsupported reasoning effort: {reasoning_effort}")
+    if web_search_context_size not in WEB_SEARCH_LEVELS:
+        raise ValueError(f"unsupported web-search context size: {web_search_context_size}")
+    if web_search_verbosity not in WEB_SEARCH_LEVELS:
+        raise ValueError(f"unsupported web-search verbosity: {web_search_verbosity}")
     if os.name != "nt":
         fact_sheet, domain_plugin, requirements = (
             Path(str(path).replace("\\", "/"))
@@ -72,16 +82,19 @@ def create_run(
     bom_bytes = 3 if snapshots["fact_sheet.md"].startswith(b"\xef\xbb\xbf") else 0
     for window in windows:
         window["input_bom_bytes"] = bom_bytes
-    write_json(run / "_internal" / "trace" / "source" / "manifest.json", [
-        {k: v for k, v in window.items() if k not in {"overlap_context", "new_content"}}
-        for window in windows
-    ])
+    write_json(run / "_internal" / "trace" / "source" / "manifest.json", windows)
     write_json(run / "run.json", {
         "schema_version": LAYER2_SCHEMA_VERSION, "run_id": run.name,
         "run_group": group.name, "status": "started", "started_at": now_iso(),
         "inputs": metadata, "model": MODEL_NAME, "reasoning_effort": reasoning_effort,
         "source_manifest_sha256": sha256(run / "_internal" / "trace" / "source" / "manifest.json"),
-        "deepagents_version": DEEPAGENTS_VERSION, "provider_max_retries": PROVIDER_MAX_RETRIES,
+        "execution": "direct_id_routing", "provider_max_retries": PROVIDER_MAX_RETRIES,
+        "public_input_confirmed": True,
+        "web_search": {"context_size": web_search_context_size,
+                       "verbosity": web_search_verbosity, "tool_choice": "auto",
+                       "input_token_limit": WEB_SEARCH_INPUT_LIMIT},
+        "model_input_token_limit": MODEL_INPUT_TOKEN_LIMIT,
+        "source_tokens": windows[-1]["end_token"], "source_windows": len(windows),
         "chunking": {"strategy": CHUNK_STRATEGY, "input_partitioning": CHUNK_INPUT_PARTITIONING,
                      "encoding": CHUNK_ENCODING, "size_tokens": CHUNK_SIZE_TOKENS,
                      "overlap_tokens": CHUNK_OVERLAP_TOKENS,
@@ -89,9 +102,9 @@ def create_run(
                      "max_concurrency": MAX_CHUNK_CONCURRENCY},
         "context_policy": {"target_tokens": CONTEXT_TARGET, "maximum_tokens": CONTEXT_MAXIMUM,
                            "framing_reserve": CONTEXT_RESERVE, "count_kind": "local_estimate",
-                           "history": "retrievable_pointers", "summarization": False},
-        "jobs": {}, "downstream_integrated": False, "design_tool_free": True,
+                           "summarization": False},
+        "jobs": {}, "downstream_integrated": False,
     })
     atomic_write_text(run / "README.md",
-                      "# Layer 2 schema 6\n\nStatus: started.\n\nNot yet integrated with Layers 3/4.\n")
+                      "# Layer 2 schema 9\n\nStatus: started.\n\nNot yet integrated with Layers 3/4.\n")
     return run

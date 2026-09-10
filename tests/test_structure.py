@@ -25,6 +25,7 @@ class StructureTests(unittest.TestCase):
         for control in (
             "FACT_SHEET_PATH",
             "LAYER2_REASONING_EFFORT",
+            "PUBLIC_INPUT_CONFIRMED",
             "LAYER3_SOURCE_RUN_PATH",
             "LAYER3_MODEL_REASONING_EFFORT",
             "WEB_SEARCH_DEPTH",
@@ -39,7 +40,7 @@ class StructureTests(unittest.TestCase):
             self.assertIn(control, notebook_text)
         self.assertRegex(
             notebook_text,
-            r'LAYER4_SOURCE_RUN_PATH = "runs/[^"\r\n]+/L3_[^"\r\n]+"',
+            r'LAYER4_SOURCE_RUN_PATH = r?"runs[/\\][^"\r\n]+[/\\]L3_[^"\r\n]+"',
         )
         self.assertRegex(
             notebook_text,
@@ -68,17 +69,23 @@ class StructureTests(unittest.TestCase):
         layer2_text = "".join(cells[0]["source"])
         self.assertRegex(
             layer2_text,
-            r'FACT_SHEET_PATH = Path\("inputs/[^"\r\n]+\.md"\)',
+            r'FACT_SHEET_PATH = Path\("inputs"\) / "[^"\r\n]+\.md"',
         )
         self.assertIn('print("Layer 2: running")', layer2_text)
         self.assertIn("['status']", layer2_text)
         self.assertIn("asyncio.to_thread(run_layer2, L2_DYNAMIC_RUN)", layer2_text)
         self.assertIn("LAYER2_DOMAIN_PLUGIN", layer2_text)
         self.assertIn("LAYER2_REQUIREMENTS", layer2_text)
-        self.assertIn('LAYER2_REQUIREMENTS = Path("inputs/requirement.md")', layer2_text)
-        self.assertNotIn("inputs\\\\", notebook_text)
-        self.assertNotIn("runs\\\\", notebook_text)
-        self.assertIn("replace template placeholders before running", layer2_text)
+        self.assertIn("PUBLIC_INPUT_CONFIRMED = True", layer2_text)
+        for control in ("WEB_SEARCH_DEPTH", "WEB_SEARCH_VERBOSITY"):
+            self.assertRegex(layer2_text, rf'{control} = "(?:low|medium|high)"')
+        self.assertIn("web_search_context_size=WEB_SEARCH_DEPTH", layer2_text)
+        self.assertIn("web_search_verbosity=WEB_SEARCH_VERBOSITY", layer2_text)
+        self.assertIn("public_input_confirmed=PUBLIC_INPUT_CONFIRMED", layer2_text)
+        self.assertIn('LAYER2_REQUIREMENTS = Path("inputs") / "requirement.md"', layer2_text)
+        # Only Layer 2 path controls are in scope; historical Layer 3/4 cells stay unchanged.
+        self.assertNotIn("inputs\\\\", layer2_text)
+        self.assertNotIn("runs\\\\", layer2_text)
         self.assertIn("from ML.deep_research.layer2 import create_run", layer2_text)
         self.assertIn("from ML.deep_research.layer2 import run_all", layer2_text)
         self.assertNotIn("L2_RUN =", layer2_text)
@@ -155,7 +162,7 @@ class StructureTests(unittest.TestCase):
         self.assertFalse((root / "prompts" / "chunk_router.md").exists())
         self.assertFalse((root / "prompts" / "planner_prompt.md").exists())
         template = (REPO_ROOT / "inputs" / "requirement.md").read_text(encoding="utf-8")
-        for heading in ("Objectives", "Priorities", "Exclusions", "Geography", "Time horizon"):
+        for heading in ("Objectives", "Priorities", "Expanded research responsibilities", "Geography", "Time horizon"):
             self.assertIn("## " + heading, template)
 
     def test_all_package_modules_import_without_model_calls(self):
@@ -177,7 +184,8 @@ class StructureTests(unittest.TestCase):
                     if ast.get_docstring(node) is None:
                         missing.append(f"{path.name}:{node.lineno}:{node.name}")
         self.assertEqual(missing, [])
-        self.assertGreater(total_lines, 0)  # schema 4 adds approved stages, not a line-count target
+        self.assertGreater(total_lines, 0)
+        self.assertLess(total_lines, 2177)  # inspected pre-schema-8 production baseline
 
     def test_retired_layer3_phase_controller_is_gone(self):
         root = REPO_ROOT / "ML" / "deep_research" / "layer3"

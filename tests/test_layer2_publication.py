@@ -1,253 +1,207 @@
 import json
-import copy
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer2.backend.publication import domain_markdown, domain_names, readable
-from ML.deep_research.layer2.backend.publish import publish, write_domain
-from ML.deep_research.layer2.backend.evidence import EvidenceStore
-from ML.deep_research.layer2.backend.projections import ingest_facts, save_ledger, apply_owners, apply_domains
-from tests.layer2_fixtures import read_ledger
-from tests.layer2_fixtures import FakeStages, new_run, published
+from ML.deep_research.layer2.backend.fs import load_json
+from ML.deep_research.layer2.backend.jobs import saved_text
+from ML.deep_research.layer2.backend.publication import domain_definitions, domain_names, materialize
+from tests.layer2_fixtures import FakeStages, domain_plan, new_run
 
 
-class PublicationTests(unittest.TestCase):
-    def test_unconventional_domains_do_not_hide_usable_dispositions(self):
+class MarkdownTests(unittest.TestCase):
+    def test_complete_qualified_meanings_survive_raw_storage_and_shared_domain_routing(self):
+        from tests.layer2_fixtures import section
+
+        rule = ("## Delivery\n- If supplier S misses the agreed date, buyer B may cancel without a fee "
+                "and recover the advance, except for buyer-caused delay; notify within 14 days.\n")
+        costs = ("## Estimates\n- Indicative 2027 programme: EUR 900,000 net; proposed control unit: "
+                 "EUR 80,000 net. 医院: not approved spend.\n"
+                 "- A separate 2026 gross estimate is EUR 850,000; comparability unresolved.\n")
         with tempfile.TemporaryDirectory() as tmp:
-            store = EvidenceStore(new_run(Path(tmp)))
-            store.put("observations", "p1", {"proposal_id": "p1", "body": "Keep this issue"})
-            disposition = {"proposal_id": "p1", "disposition": "unresolved", "reason": "Evidence insufficient"}
-            apply_domains(store, {"job": "catalogue/1", "response_path": "raw.json",
-                                  "value": {"domains": "Unconventional but preserved", "dispositions": [disposition]}})
-            self.assertEqual(store.get("dispositions", "p1"), disposition)
-            self.assertTrue(any(a.get("value", {}).get("domains") == "Unconventional but preserved"
-                                for a in store.rows("audit")))
-
-    def test_root_layout_raw_preservation_and_rebuild_without_calls(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            run = new_run(Path(tmp))
+            run = new_run(Path(tmp), text=rule + costs, plugin="# Operations\n# Finance")
             fake = FakeStages()
+            fake.outputs["metadata"] = "# Subject\nShared identity: 医院 programme.\n"
+            raw = json.dumps({"D01": rule + costs, "D02": rule + costs}, ensure_ascii=False)
+            fake.outputs["distribution"] = raw
             fake.run(run)
-            self.assertEqual({p.name for p in run.iterdir()}, {
-                "README.md", "domain_plan.md", "domains", "run.json", "run.log", "_internal"})
-            self.assertTrue((run / "_internal/trace/checkpoints.sqlite3").exists())
-            facts = read_ledger(run / "_internal/facts.jsonl")
-            raw = load_json(run / facts[0]["response_path"])
-            self.assertEqual([r["body"] for r in facts], [r["body"] for r in raw["facts"]])
-            self.assertFalse((run / "facts").exists())
-            self.assertFalse(list(run.glob("domains/**/*.json")))
-            report = run / "domains/additional-use.md"
-            expected = report.read_bytes()
-            report.unlink()
-            fake.calls.clear()
+            request = next(req for stage, req, _ in fake.calls if stage == "distribution")
+            self.assertEqual(section(request, "new_content"), rule + costs)
+            self.assertEqual(section(request, "asset_metadata"), fake.outputs["metadata"])
+            record = load_json(run / "run.json")
+            response = run / record["jobs"]["distribution/000001"]["response_path"]
+            self.assertEqual(saved_text(response), raw)
+            for name in ("operations", "finance"):
+                self.assertEqual(saved_text(run / f"domains/{name}.md"),
+                                 f"# {name.title()}\n\n## Research responsibilities\n"
+                                 f"- Research {name.title()}.\n\n\n" + rule + costs)
             fake.run(run)
-            self.assertEqual(fake.calls, [])
-            self.assertEqual(report.read_bytes(), expected)
-            self.assertEqual(read_ledger(run / "_internal/facts.jsonl"), facts)
-            self.assertIn("## Research responsibilities", expected.decode())
-            for metadata in ("Source window", "Record:", "Saved response", "### Fact", "Ownership note"):
-                self.assertNotIn(metadata, expected.decode())
+            self.assertEqual(len(fake.calls), 3)
 
-    def test_ledger_retains_generations_and_rejects_conflict_without_overwrite(self):
+    def test_ids_ignore_body_headings_and_preserve_exact_unicode_text(self):
         with tempfile.TemporaryDirectory() as tmp:
-            run = new_run(Path(tmp))
-            row = {"job": "distribution/000001", "fingerprint": "a" * 64,
-                   "payload": {"source": {"source_id": "s1", "start_byte": 0}},
-                   "value": {"facts": [{"body": {"fact": "ä\n原文", "unknown": [None, False, 3]},
-                                         "domain_ids": []}]}}
-            store = EvidenceStore(run)
-            row["response_path"] = "raw.json"
-            ingest_facts(store, row)
-            save_ledger(store)
-            original = list(store.rows("facts"))
-            before = (run / "_internal/facts.jsonl").read_bytes()
-            ingest_facts(store, row)
-            save_ledger(store)
-            self.assertEqual((run / "_internal/facts.jsonl").read_bytes(), before)
-            with patch("ML.deep_research.layer2.backend.projections.atomic_text", side_effect=OSError):
-                with self.assertRaises(OSError):
-                    ingest_facts(store, {**row, "fingerprint": "b" * 64})
-                    save_ledger(store)
-            self.assertEqual((run / "_internal/facts.jsonl").read_bytes(), before)
-            ingest_facts(store, {**row, "fingerprint": "b" * 64})
-            save_ledger(store)
-            ledger = read_ledger(run / "_internal/facts.jsonl")
-            self.assertEqual(ledger[0], original[0])
-            self.assertEqual(len(ledger), 2)
-            before = (run / "_internal/facts.jsonl").read_bytes()
-            row["value"]["facts"][0]["body"] = "changed"
-            with self.assertRaisesRegex(OSError, "immutable"):
-                ingest_facts(store, row)
-            self.assertEqual((run / "_internal/facts.jsonl").read_bytes(), before)
-
-    def test_unknown_values_and_references_are_fully_visible_without_repair(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            run = new_run(Path(tmp))
+            run = new_run(Path(tmp), plugin="# Energy\n# Finance")
             fake = FakeStages()
+            body = "## Heating\r\n- Proposed, not installed; 医院 4 MW in 2024.\r\n"
+            body += "```md\n# Not a routing heading\n```\n# Energy  TYPO\n- Scope matters."
+            fake.outputs["distribution"] = json.dumps({"D01": body, "D02": "- 500 EUR; exceptions retained."})
+            fake.run(run)
+            energy = saved_text(run / "domains/energy.md")
+            self.assertIn("Research Energy.", energy)
+            self.assertIn(body, energy)
+            self.assertIn("500 EUR", (run / "domains/finance.md").read_text())
+            self.assertNotIn("D01", energy)
+            self.assertNotIn("domain_id", energy)
+            self.assertFalse((run / "unresolved.md").exists())
+            overview = (run / "domain_plan.md").read_text()
+            self.assertIn("## Energy\n\n- Research Energy.", overview)
+            self.assertIn("## Finance\n\n- Research Finance.", overview)
+            self.assertNotIn("D01", overview)
+            self.assertFalse((run / "domain_plan.json").exists())
+            self.assertEqual(load_json(run / "_internal/trace/routing_issues.json")["issues"], [])
+            design = load_json(run / "run.json")["jobs"]["design/000001"]["response_path"]
+            self.assertEqual(saved_text(run / design), domain_plan("Energy", "Finance"))
+            self.assertIn(f"({design})", overview)
+            self.assertIn("[Domain plan](domain_plan.md)", (run / "README.md").read_text())
+
+    def test_duplicate_contributions_unknown_ids_and_unconventional_values_remain_visible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), plugin="# Energy\n# Finance")
+            fake = FakeStages()
+            raw = '{"D01":"First 4 MW","D01":"Second 5 MW","D99":"Unmatched 医院","D02":{"x":1,"x":2}}'
+            fake.outputs["distribution"] = raw
             fake.run(run)
             record = load_json(run / "run.json")
-            # Modify saved fake responses, not real research. Valid objects remain reusable.
-            for stage in ("understanding", "design", "distribution", "observations", "catalogue", "assignments"):
-                path = run / record["jobs"][stage + "/000001"]["response_path"]
-                value = load_json(path)
-                value["unexpected"] = {"marker": stage + "-EXTRA", "nested": [False, None, []]}
-                write_json(path, value)
-            # Changed upstream objects cause legitimate dependent fingerprints; return
-            # extras in fresh fake jobs too, not a content retry on the changed object.
-            from ML.deep_research.layer2.ML.agent import Layer2Response
-            factory = fake.factory
+            energy = (run / "domains/energy.md").read_text()
+            self.assertLess(energy.index("First 4 MW"), energy.index("Second 5 MW"))
+            self.assertEqual(saved_text(run / record["jobs"]["distribution/000001"]["response_path"]), raw)
+            audit = load_json(run / "_internal/trace/routing_issues.json")
+            self.assertTrue(audit["object_values_are_member_pairs"])
+            self.assertEqual([item["value"] for item in audit["issues"]], ["Unmatched 医院", [["x", 1], ["x", 2]]])
+            self.assertIn("Warning: 2", (run / "README.md").read_text())
+            self.assertEqual(record["status"], "complete")
+            fake.run(run)
+            self.assertEqual(len(fake.calls), 3)
 
-            def with_extras(run, stage, saver=None):
-                graph = factory(run, stage, saver)
-                invoke = graph.afunc
+    def test_ambiguous_plan_ids_and_duplicate_fields_are_not_guessed(self):
+        raw = '{"domains":[{"domain_id":"D01","name":"First"},{"domain_id":"D01","name":"Second"},'
+        raw += '{"domain_id":"D02","name":"Useful","responsibilities":["Investigate"]},'
+        raw += '{"domain_id":"D03","name":"One","name":"Two"},{"domain_id":"D03","name":"Three"}],'
+        raw += '"unexpected":{"a":1,"a":2}}'
+        definitions, issues = domain_definitions(raw, "raw-response.json")
+        self.assertEqual(list(definitions), ["D02"])
+        self.assertTrue(any(item["kind"] == "duplicate_domain_id" for item in issues))
+        self.assertTrue(any(item["kind"] == "ambiguous_definition" for item in issues))
+        self.assertEqual(issues[-1]["value"], ["unexpected", [("a", 1), ("a", 2)]])
+        for item in issues:
+            self.assertEqual(item["response_path"], "raw-response.json")
 
-                async def wrapped(value, config):
-                    result = await invoke(value, config)
-                    body = result["structured_response"].root
-                    body["unexpected"] = {"marker": stage + "-EXTRA", "nested": [False, None, []]}
-                    result["structured_response"] = Layer2Response(root=body)
-                    return result
+    def test_missing_or_unconventional_responsibilities_do_not_reject_other_content(self):
+        raw = '{"domains":[{"domain_id":"D01","name":"A","responsibilities":["Duty",{"other":5}],"extra":"keep"},'
+        raw += '{"domain_id":"D02","name":"B"}],"domains":[{"domain_id":"D03","name":"C","responsibilities":"Duty C"}]}'
+        definitions, issues = domain_definitions(raw, "saved.json")
+        self.assertEqual(list(definitions), ["D01", "D02", "D03"])
+        self.assertEqual(definitions["D01"]["responsibilities"], ["Duty"])
+        self.assertEqual(definitions["D02"]["responsibilities"], [])
+        self.assertEqual(definitions["D03"]["responsibilities"], ["Duty C"])
+        self.assertEqual(len(issues), 2)
 
-                graph.afunc = wrapped
-                return graph
+    def test_only_unambiguous_definitions_reach_distribution_and_fact_qualifications_survive(self):
+        from tests.layer2_fixtures import section
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeStages()
+            fake.outputs["design"] = '{"domains":[{"domain_id":"D01","name":"Wrong A"},'
+            fake.outputs["design"] += '{"domain_id":"D01","name":"Wrong B"},'
+            fake.outputs["design"] += '{"domain_id":"D02","name":"Useful","responsibilities":["Duty"]}]}'
+            body = "## Contract\n- Area/parking differences: no claim or rent change.\n"
+            body += "- Landlord changes fire plans for future authority requirements unrelated to tenant works/use.\n"
+            body += "- 30 years; three-year extensions unless terminated 12 months before term-end.\n"
+            body += "- January 2026 payments under reservation pending signed addendum.\n"
+            body += "## Scope\n- Indicative 1,888,100 across repair categories; not garage-only.\n"
+            body += "- Access over neighboring parcel benefits this asset; no burden against it.\n"
+            body += "- 医院: alternative approved, not installed; different periods are not a contradiction.\n"
+            fake.outputs["distribution"] = json.dumps({"D02": body}, ensure_ascii=False)
+            fake.run(run)
+            request = next(req for stage, req, _ in fake.calls if stage == "distribution")
+            definitions = json.loads(section(request, "domain_plan"))["domains"]
+            self.assertEqual([row["domain_id"] for row in definitions], ["D02"])
+            self.assertTrue(saved_text(run / "domains/useful.md").endswith(body))
+            design = load_json(run / "run.json")["jobs"]["design/000001"]["response_path"]
+            self.assertEqual(saved_text(run / design), fake.outputs["design"])
+            self.assertNotIn("Wrong A", (run / "domain_plan.md").read_text())
 
-            with patch.object(fake, "factory", side_effect=with_extras):
+    def test_collision_reserved_unicode_and_untrusted_names_or_ids(self):
+        names = ["CON", "con", "NUL", "COM1", "LPT9", "Energy & Carbon", "Energy and Carbon",
+                 "../escape/C:/foo", "保险", "A" * 120, "A" * 119 + "B", "保险"]
+        definitions = {f"../../D{i}": {"name": name} for i, name in enumerate(names)}
+        paths = domain_names(definitions)
+        self.assertEqual(len({p.casefold() for p in paths.values()}), len(names))
+        self.assertEqual(paths, domain_names(definitions))
+        for path in paths.values():
+            self.assertEqual(Path(path).parent, Path("domains"))
+            self.assertLess(len(Path(path).name), 140)
+            self.assertNotIn(Path(path).stem.casefold(), {"con", "nul", "com1", "lpt9"})
+
+    def test_empty_distribution_and_missing_members_are_not_failures_or_retry_triggers(self):
+        for response in ("{}", '{"D01":"Only relevant domain"}'):
+            with self.subTest(response=response), tempfile.TemporaryDirectory() as tmp:
+                run = new_run(Path(tmp))
+                fake = FakeStages()
+                fake.outputs["distribution"] = response
                 fake.run(run)
-            report = (run / "unresolved.md").read_text(encoding="utf-8")
-            for stage in ("understanding", "design", "distribution", "observations", "catalogue", "assignments"):
-                self.assertIn(stage + "-EXTRA", report)
-            self.assertIn("[Preserved response]", report)
-            self.assertIn("false", report)
-            self.assertEqual(load_json(run / "run.json")["status"], "complete")
-            fake.calls.clear()
-            fake.run(run)
-            self.assertEqual(fake.calls, [])
+                fake.run(run)
+                self.assertEqual(len(fake.calls), 3)
+                record = load_json(run / "run.json")
+                self.assertEqual(record["status"], "complete")
+                self.assertEqual(record["publication"]["routing_issues"], 0)
+                self.assertNotIn("Warning:", (run / "README.md").read_text())
 
-    def test_multidomain_publication_and_unresolved_reasons(self):
+    def test_failed_publication_can_rebuild_without_model_calls(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))
             fake = FakeStages()
-            fake.run(run)
-            domains = load_json(run / "_internal/domains.json")["final"]
-            facts = read_ledger(run / "_internal/facts.jsonl")
-            response = {"job": "assignments/000001", "fingerprint": "c" * 64,
-                        "value": {"assignments": [
-                            {"fact_id": facts[0]["fact_id"], "domain_ids": ["d0001", "d0002"],
-                             "reason": "Two relevant owners", "extra": {"keep": "nested"}},
-                            {"fact_id": facts[1]["fact_id"], "domain_ids": [], "reason": "OWNER_UNKNOWN"},
-                            {"fact_id": "unknown", "domain_ids": ["d0001"], "reason": "KEEP_UNKNOWN"},
-                            {"fact_id": facts[0]["fact_id"], "domain_ids": ["../../outside"], "why": 9}]}}
-            store = EvidenceStore(run)
-            store.clear("final_owners", "decisions")
-            with store.connect() as db:
-                db.execute("DELETE FROM owners")
-            response["response_path"] = "raw.json"
-            apply_owners(store, response)
-            counts = publish(store)
-            self.assertEqual(counts["unresolved_facts"], 1)
-            for name in ("operations", "ownership"):
-                text = (run / f"domains/{name}.md").read_text(encoding="utf-8")
-                self.assertIn("17.5 m²", text)
-                self.assertNotIn("Two relevant owners", text)
-            self.assertEqual(load_json(run / "_internal/assignments.json")["final"],
-                             response["value"]["assignments"])
-            audit = (run / "unresolved.md").read_text(encoding="utf-8")
-            for value in ("OWNER_UNKNOWN", "KEEP_UNKNOWN", "nested", "../../outside"):
-                self.assertIn(value, audit)
-
-    def test_publication_failure_preserves_previous_commit_and_user_view(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            run = new_run(Path(tmp))
-            fake = FakeStages()
-            fake.run(run)
-            old = published(run)
-            original = (run / "domains/additional-use.md").read_bytes()
-            (run / "domains/additional-use.md").write_bytes(b"USER_EDIT\r\n")
-            fake.calls.clear()
-            with patch("ML.deep_research.layer2.backend.publish.atomic_text", side_effect=OSError):
+            original = (run / "README.md").read_bytes()
+            with patch("ML.deep_research.layer2.backend.publication.materialize", side_effect=OSError("offline write failure")):
                 with self.assertRaises(OSError):
                     fake.run(run)
-            self.assertEqual(published(run), old)
-            self.assertEqual((old / "domains/additional-use.md").read_bytes(), original)
-            self.assertEqual((run / "domains/additional-use.md").read_bytes(), b"USER_EDIT\r\n")
+            self.assertEqual((run / "README.md").read_bytes(), original)
+            self.assertEqual(len(fake.calls), 3)
             fake.run(run)
-            self.assertEqual(fake.calls, [])
-            self.assertEqual((run / "domains/additional-use.md").read_bytes(), original)
-            archives = list((run / "_internal/trace/presentation_history").rglob("additional-use.md"))
-            self.assertTrue(any(p.read_bytes() == b"USER_EDIT\r\n" for p in archives))
+            self.assertEqual(len(fake.calls), 3)
+            self.assertTrue((run / "domains/operations.md").is_file())
 
-    def test_filenames_and_unconventional_rendering(self):
-        definitions = [{"domain_id": f"d{i:04d}", "definition": {"name": name}}
-                       for i, name in enumerate(["CON", "Same", "same", "same-d0003", "../.env", "漢字"], 1)]
-        names = list(domain_names(definitions).values())
-        self.assertEqual(len(set(n.casefold() for n in names)), len(names))
-        self.assertNotIn("domains/con.md", names)
-        self.assertTrue(all(Path(n).parts[0] == "domains" and len(Path(n).parts) == 2 for n in names))
-        text = readable({"other": [{"fact": "KEEP\nEXACT", "value": False}, None, 5], "empty": {}})
-        for value in ("KEEP", "EXACT", "false", "null", "5", "{}"):
-            self.assertIn(value, text)
-
-    def test_research_projection_groups_without_rewriting_or_mutating_records(self):
-        definition = {"name": "Energy", "responsibilities": ["Research supply; preserve exclusions."],
-                      "domain_id": "d1234", "reason": "PRIVATE_REASON", "evidence_refs": ["PRIVATE_REF"]}
-        bodies = [
-            {"section": "Supply", "fact": "2021 certificate: 17.5 m²; §71a GEG. source ID is a meter label. Proposed, not installed.",
-             "means": "Capacity unknown—not a breach.", "applicability": "Proposed, not installed",
-             "source": "PRIVATE_SOURCE", "additional": {"source": "Nested substantive source", "unit": "kWh"}},
-            {"section": "Areas", "fact": "6,047 m²", "means": ""},
-            {"section": "Supply", "fact": "Contradictory: electricity vs gas", "means": ""},
-            {"section": "Areas", "fact": "7,704.08 m²", "means": ""},
-            {"section": {"unusual": [False, None]}, "fact": "ä 原文\nsecond line", "quantity": 0},
-            {}, [], None, False,
-            {"section": "", "means": 0, "applicability": False},
-        ]
-        facts = [{"body": body, "source": {"input_bom_bytes": 3, "start_byte": 42},
-                  "fact_id": "PRIVATE_ID", "response_path": "PRIVATE_PATH"} for body in bodies]
-        original = copy.deepcopy((definition, facts))
-        text = domain_markdown(definition, facts)
-        self.assertEqual((definition, facts), original)
-        for marker in ("d1234", "PRIVATE_", "input bom", "start byte", "### Fact"):
-            self.assertNotIn(marker, text)
-        for marker in ("17.5 m²", "§71a GEG", "source ID is a meter label",
-                       "Proposed, not installed", "Nested substantive source", "kWh", "6,047 m²", "7,704.08 m²",
-                       "ä 原文\n  second line", "false", "null", "{}", "[]", "**quantity:** 0"):
-            self.assertIn(marker, text)
-        for heading in ("Supply", "Areas", "Other supplied facts"):
-            self.assertEqual(text.count("## " + heading), 1)
-        self.assertLess(text.index("Contradictory:"), text.index("## Areas"))
-        self.assertLess(text.index("6,047"), text.index("7,704.08"))
-        self.assertNotIn("**means:**", text)
-        self.assertNotIn("**applicability:**", text)
-        self.assertNotIn("Capacity unknown—not a breach.", text)
-        self.assertIn("No recorded facts assigned", domain_markdown(definition, []))
-        self.assertIn("null", domain_markdown({"responsibilities": None}, []))
-
-    def test_streaming_and_memory_views_hide_only_exact_top_level_fields(self):
-        body = {"section": "Supply", "fact": "Proposed: applicability means unconfirmed—not installed.",
-                "means": "OMIT_MEANING", "applicability": "OMIT_STATUS", "source": "OMIT_SOURCE",
-                "extra": {"means": "KEEP_NESTED", "applicability": "KEEP_NESTED_STATUS"}}
-        original = copy.deepcopy(body)
-        domain = {"domain_id": "d0001", "definition": {"name": "Energy", "responsibilities": ["Check supply."]}}
+    def test_previous_view_bytes_survive_atomic_replace_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = EvidenceStore(Path(tmp))
-            fact = {"fact_id": "f1", "body": body}
-            store.put("ledger", "f1", fact)
-            store.put("facts", "f1", fact)
-            with store.connect() as db:
-                db.execute("INSERT INTO owners VALUES('f1','d0001')")
-            path = Path(tmp) / "energy.md"
-            write_domain(store, path, domain)
-            for text in (path.read_text(encoding="utf-8"), domain_markdown(domain["definition"], [fact])):
-                self.assertNotIn("OMIT_", text)
-                self.assertIn(body["fact"], text)
-                self.assertIn("KEEP_NESTED", text)
-                self.assertIn("KEEP_NESTED_STATUS", text)
-            self.assertEqual(store.get("ledger", "f1")["body"], original)
-            self.assertEqual(body, original)
+            run = new_run(Path(tmp))
+            fake = FakeStages()
+            fake.run(run)
+            before = (run / "domains/operations.md").read_bytes()
+            revision = Path(tmp) / "revision"
+            (revision / "domains").mkdir(parents=True)
+            (revision / "domains/operations.md").write_text("New view")
+            with patch.object(Path, "replace", side_effect=OSError("interrupted replace")):
+                with self.assertRaises(OSError):
+                    materialize(run, revision)
+            self.assertEqual((run / "domains/operations.md").read_bytes(), before)
+            self.assertTrue(any(p.read_bytes() == before for p in (run / "_internal/trace/presentation_history").rglob("operations.md")))
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_republication_removes_only_archived_obsolete_views(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeStages()
+            fake.run(run)
+            old_plan = (run / "domain_plan.md").read_bytes()
+            (run / "domain_plan.json").write_bytes(b'OLD RAW JSON\r\n')
+            old = (run / "domains/ownership.md").read_bytes()
+            row = load_json(run / "run.json")["jobs"]["design/000001"]
+            (run / row["response_path"]).unlink()
+            fake.outputs["design"] = domain_plan("Operations")
+            fake.run(run)
+            self.assertFalse((run / "domains/ownership.md").exists())
+            self.assertFalse((run / "domain_plan.json").exists())
+            history = run / "_internal/trace/presentation_history"
+            self.assertTrue(any(p.read_bytes() == b'OLD RAW JSON\r\n' for p in history.rglob("domain_plan.json")))
+            self.assertTrue(any(p.read_bytes() == old_plan for p in history.rglob("domain_plan.md")))
+            self.assertTrue(any(p.read_bytes() == old for p in (run / "_internal/trace/presentation_history").rglob("ownership.md")))

@@ -4,12 +4,12 @@ Layer 2 designs plugin-driven domains and organizes supplied evidence. Existing 
 real-estate risks and external influences using historical Layer 2 inputs. Python uses `compute` at
 `C:\src\anaconda3\envs\compute\python.exe`.
 For VS Code Docker development, follow the [Docker guide](docker/README.md): open the original
-project in its Dev Container and select `/usr/local/bin/python`. Layer 2 remains schema 6.
+project in its Dev Container and select `/usr/local/bin/python`. Layer 2 uses schema 9 on this branch.
 
 ## Structure
 
 - `ML/deep_research/layer2/` designs plugin-driven domains, reads original source windows,
-  distributes evidence and performs one paged review before versioned domain publication.
+  builds subject metadata, decides domains and distributes Markdown without a reviewer.
 - `ML/deep_research/layer3/` runs eight direct domain researchers sequentially. Each uses the two
   evidence tools and writes one domain report before property synthesis.
 - `ML/deep_research/layer4/` stores internal conditions, maps external-factor briefs directly from
@@ -50,88 +50,54 @@ researcher threads and thread-scoped `StateBackend` scratch. Each researcher rec
 `run_python`, model-writable host folders, and cross-property memory remain disabled. Web-search
 context remains low.
 
-## Layer 2 — schema 6
+## Layer 2 — schema 9
 
-Supply three independent UTF-8 Markdown inputs: factsheet, domain plugin and your own requirements.
-The application never invents requirements. The supplied real-estate plugin preserves the current
-eight baseline responsibilities; other plugins may define different rosters without Python changes.
+Supply original factsheet, selected industry plugin and user requirements. Review all inputs for
+public web-assisted planning; the current requirements have a confidential origin. Confirmation
+defaults to false and must be explicit before a new run is created.
 
-    .\run.ps1 -FactSheet 'C:\path\facts.md' -DomainPlugin '.\ML\deep_research\layer2\plugins\real_estate.md' -Requirements 'C:\path\requirements.md'
+    .\run.ps1 -FactSheet 'C:\path\facts.md' -DomainPlugin '.\ML\deep_research\layer2\plugins\real_estate.md' -Requirements 'C:\path\requirements.md' -Layer2WebSearchDepth high -Layer2WebSearchVerbosity medium -PublicInputConfirmed
     .\run.ps1 -Resume '.\runs\<fact-sheet>\L2_YYYYMMDD_HHMMSS_xxxx'
 
-Public Python: `from ML.deep_research.layer2 import create_run, run_all`; create the run with
-`create_run(factsheet, plugin, requirements, runs_root, reasoning_effort=...)`, then call `run_all(run_dir)`.
-The notebook exposes these paths and reasoning. Replace the placeholders in `inputs/requirement.md`
-before execution. Its `L2_DYNAMIC_RUN` variable does not feed Layer 3.
+Public Python uses `create_run(factsheet, plugin, requirements, runs_root,
+reasoning_effort=..., web_search_context_size=..., web_search_verbosity=...,
+public_input_confirmed=True)`, then `run_all(run_dir)`. The notebook exposes the same Layer 2
+reasoning, search-depth and verbosity controls plus default-false public-input confirmation.
 
-See the [Layer 2 workflow and file guide](ML/deep_research/layer2/README.md).
-Operational code is in `layer2/backend/`; AI code and six generic prompts are in `layer2/ML/`.
-Industry definitions live only in the selected plugin. The old predefined planner is a historical
-test fixture; it is not a new Layer 2 prompt.
+```text
+Factsheet → 50K/5K windows → sequential asset_metadata.md
+Metadata + plugin + requirements + optional native web search → internal JSON plan + domain_plan.md
+Original windows + metadata + domain plan → ID-keyed Markdown contributions
+Python → source-ordered domains/*.md; routing warnings link to the internal trace
+```
 
-Read facts receives no plugin or requirements. Planning and domain review receive both; sorting
-and final assignment use the resulting responsibilities. No web research happens in Layer 2.
+Only the designer can search. It extends baseline responsibilities or adds distinct domains where
+useful; there is no fixed final count. The real-estate plugin and requirements now allow financial,
+valuation, ESG/CapEx, alternative-use and local-market research alongside the original priorities.
+The designer uses web evidence for planning, not for inventing supplied asset facts.
 
-Flow: read every original source window → profile fragments and evidence inventory → initial
-domain catalogue → distribute ORIGINAL facts → ONE reviewer stage (observation pages, final
-catalogue, assignment pages) → publish recorded facts by domain. Profiles are navigation, not
-replacement evidence. Domains retain concise change reasons; review includes existing owners AND
-temporary Extra. A fact can belong to multiple domains.
+Domain JSON contains IDs, names and responsibilities, with no Boundaries. Distribution is an ID-to-
+Markdown JSON object. The web-enabled designer requests JSON through its prompt; only tool-free
+distribution binds native JSON-object mode. Neither adds a strict nested schema or repair loop.
+Names label files but IDs route them; duplicate/unusable values remain visible internally.
+An unusable plan stops dependent work without resending a completed response. Python copies facts,
+qualifications and topic sections without semantic deduplication or paraphrasing.
 
-Inputs, prompts, hashes and policies are frozen. Nominal windows are 60K tokens with 10K
-original-source overlap and 50K stride. Unicode-safe actual byte/token boundaries and any original
-BOM offset are recorded; headings do not move nominal boundaries. Native abatch_as_completed
-handles reading and distribution at frozen concurrency five by default, in batches of at most ten;
-planning/review pages are sequential. Original windows are sought by recorded byte ranges.
-Large source inputs are repacked before dispatch. The normal assembled-input target is 300K
-estimated tokens; exceptional 300K–350K inputs carry a logged reason. Mandatory or indivisible
-content that cannot fit fails operationally, never silently truncates. Accounting includes
-instructions, messages, tools, schema and a conservative reserve; provider usage is separate.
+Keep native distribution concurrency five, direct calls, source seeks, three transport retries,
+fresh messages, immediate saves, fingerprints/history and partial publication. No graph, reviewer,
+SQLite or extra synthesis. Four source windows still mean nine logical stage calls, not necessarily
+nine billed operations when hosted search is used. No application output-token cap.
+Account for messages, tools, format and framing against 300K/350K input policy; the designer also
+applies the 128K web-search limit. Oversized mandatory input fails safely without truncation.
 
-Reader/distributor graphs and new-run designers are tool-free. Choose domains receives complete
-paged understanding records, plugin, requirements and current definitions; it stays sequential
-and checkpointed. New runs freeze `design_tool_free: true`; older schema-6 runs retain their
-frozen designer behavior. Reviewer (and historical designer) graphs expose only native ls, glob,
-grep and read_file through CompositeBackend against a rebuildable, run-owned SQLite evidence index.
-StateBackend contains only small thread-local state, never a corpus copy. There is no host
-filesystem mount, shell, web, delegation, cross-run memory or automatic summarizer. SQLite saves
-retrieval sessions and lossless read-result pointers; original source and detailed evidence remain
-stored outside model context.
+Open README.md, asset_metadata.md, domain_plan.md, run.log and domains/. The exact JSON plan stays in its designer response trace. Inputs, raw responses, web sources,
+usage, routing observations and history stay under _internal/. There is no visible unresolved.md.
+Check-only is non-mutating. Historical schemas 2–8 are read-only; **schema 9 is not integrated with
+Layers 3/4**, whose implementations and notebook cells remain unchanged.
 
-All completed objects are saved using the permissive provider-native top-level JSON contract.
-No semantic validator, deduplication, grading, repair prompt or content retry is added. Unknown
-references and unusual response shapes remain visible; Python never invents missing assignments.
-Operationally failed or unreadable jobs resume their recorded checkpoint thread. Input fingerprints
-start fresh dependent jobs when recovered inputs change, preserving prior responses/publications.
-
-Run layout:
-
-- README.md and domain_plan.md: status, navigation, subject overview, definitions and change reasons.
-- domains/<readable-name>.md: domain responsibilities and preserved facts, not routine JSON dumps.
-- unresolved.md: complete unassigned/unprocessed material and response links, when present.
-- run.json and run.log: frozen metadata, execution status and safe operational events.
-- _internal/: input snapshots, one facts.jsonl ledger, domains.json and assignments.json.
-- _internal/trace/: raw responses, source manifest, detailed evidence, review observations,
-  retained publication revisions, usage.jsonl and checkpoints.sqlite3.
-
-The normal files are rebuildable views of preserved records; prior versions and replaced Markdown
-bytes are retained internally. No per-fact JSON files or per-domain JSON body copies are generated.
-Unknown fields/references are exposed without guessing their meaning, grading or content repair.
-Prompts ask for detailed evidence but a compact navigational profile, change-only review observations,
-and explicit ownership rows with reasons only for changed/disputed/unresolved assignments. Complete
-domain definitions are inlined when the fully counted review input fits; oversized rosters receive explicit
-fact-page × definition-page jobs. Original extraction is not repeated for each definition page.
-Storage consolidation itself does not reduce model tokens; prompt quality/cost needs a later live comparison.
-
-Execution status is separate from assignment coverage: a complete run may still have unresolved
-facts. “No Extra” means every RECORDED fact has an owner, not proof of complete source extraction.
-CLI --check-only is observational and makes no writes. The notebook prints only start/final status,
-run path and log path.
-
-**Schema 6 is not yet integrated with Layers 3/4.** No misleading legacy missions/ handoff is
-generated. Historical schema-2/3/4/5 Layer 2 artifacts remain untouched but cannot execute or run checks
-through the new Layer 2 CLI. Layers 3/4 and their historical input workflow remain unchanged.
-Offline tests prove orchestration, not model quality or extraction completeness.
+See the [Layer 2 workflow guide](ML/deep_research/layer2/README.md) and
+[fixed quality benchmark](ML/deep_research/layer2/docs/research_context_benchmark.md).
+Offline tests establish operational behavior, not perfect extraction or live search quality.
 
 ## Layer 3
 

@@ -1,7 +1,7 @@
-# Docker Python for plain_research
+# Docker Python for the shared research workspace
 
 Use the original project, Git, notebook, inputs and runs in VS Code, with Docker Python.
-Layer 2 stays schema 6; no V2 research code or prompts are imported.
+On `plain_research_v3`, Layer 2 now uses schema 9; Docker still runs the currently checked-out code.
 
 ## Open the original workspace
 
@@ -11,7 +11,7 @@ Layer 2 stays schema 6; no V2 research code or prompts are imported.
 3. Confirm **Dev Container: SedAI Docker** and select **SedAI Docker — Python 3.12**
    (interpreter `/usr/local/bin/python`) in the notebook.
 4. After a branch switch, wait for active research to finish and restart the notebook kernel.
-   A kernel holding imported V2 modules does not automatically reload schema-6 code.
+   A kernel holding modules from another branch does not automatically reload the checked-out code.
 
 Development mounts the entire original project read-write at `/app`. There is no second code
 copy or nested volume hiding runs, inputs or outputs. Edits and new development runs appear on
@@ -29,7 +29,7 @@ python -c "from ML.deep_research.layer2.backend.settings import LAYER2_SCHEMA_VE
 python -m pip check
 ```
 
-Expected: Linux, `/usr/local/bin/python`, successful imports and schema **6**.
+Expected on `plain_research_v3`: Linux, `/usr/local/bin/python`, successful imports and Layer 2 schema **8**.
 In a temporary notebook cell, run `%run -m docker.diagnose`; do not run research cells as a test.
 Saved Windows outputs are historical, not evidence of the active interpreter. Select the
 container kernel explicitly even if the notebook metadata still names `compute`.
@@ -83,6 +83,6 @@ git diff --check
 
 Validate Compose from the host with `docker compose config --quiet`, not printed expanded secrets.
 Tests cover the shared mount, interpreter and all three compilable notebook cells with portable paths.
-No model calls are required. The manual Windows scale harness is not ported or run here.
+No model calls are required. Historical schema-6 scale results do not measure the new Markdown workflow.
 Actual results and limitations are in the
 [Docker track](../railway-track/tracks/2026-09-10-plain-research-docker.md).

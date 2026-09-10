@@ -10,7 +10,10 @@ from .create_run import create_run, require_current
 from .fs import load_json, read_text
 from .report import run_checks
 from .runner import run_all
-from .settings import REPO_ROOT, RUNS_DIR
+from .settings import (
+    REPO_ROOT, RUNS_DIR, WEB_SEARCH_CONTEXT_SIZE, WEB_SEARCH_LEVELS,
+    WEB_SEARCH_VERBOSITY,
+)
 
 
 def load_dotenv_key(project_dir: Path = REPO_ROOT) -> None:
@@ -28,7 +31,7 @@ def load_dotenv_key(project_dir: Path = REPO_ROOT) -> None:
 
 
 def _require_current_run(parser: argparse.ArgumentParser, run_dir: Path) -> None:
-    """Input a CLI parser and run; stop CLI execution unless the run is schema 6."""
+    """Input a CLI parser and run; stop CLI execution unless the run is schema 9."""
     try:
         require_current(run_dir)
     except (OSError, ValueError) as exc:
@@ -48,13 +51,19 @@ def _print_summary(run_dir: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     """Input optional CLI arguments; create, resume or inspect one Layer 2 run."""
     parser = argparse.ArgumentParser(
-        description="Design plugin-driven domains and route original evidence (Layer 2 schema 6)."
+        description="Prepare metadata and ID-routed research Markdown (Layer 2 schema 9)."
     )
     parser.add_argument("fact_sheet", nargs="?", type=Path)
     parser.add_argument("--domain-plugin", type=Path)
     parser.add_argument("--requirements", type=Path)
-    parser.add_argument("--resume", type=Path, help="resume a schema-6 Layer 2 run")
-    parser.add_argument("--check-only", type=Path, help="inspect a schema-6 Layer 2 run")
+    parser.add_argument("--web-search-depth", choices=sorted(WEB_SEARCH_LEVELS),
+                        default=WEB_SEARCH_CONTEXT_SIZE)
+    parser.add_argument("--web-search-verbosity", choices=sorted(WEB_SEARCH_LEVELS),
+                        default=WEB_SEARCH_VERBOSITY)
+    parser.add_argument("--public-input-confirmed", action="store_true",
+                        help="confirm supplied context is suitable for public web-assisted planning")
+    parser.add_argument("--resume", type=Path, help="resume a schema-9 Layer 2 run")
+    parser.add_argument("--check-only", type=Path, help="inspect a schema-9 Layer 2 run")
     args = parser.parse_args(argv)
     load_dotenv_key()
     if args.check_only:
@@ -70,7 +79,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if not (args.fact_sheet and args.domain_plugin and args.requirements):
             parser.error("provide fact_sheet.md, --domain-plugin and --requirements, or --resume")
-        run_dir = create_run(args.fact_sheet, args.domain_plugin, args.requirements, RUNS_DIR)
+        run_dir = create_run(args.fact_sheet, args.domain_plugin, args.requirements, RUNS_DIR,
+                             web_search_context_size=args.web_search_depth,
+                             web_search_verbosity=args.web_search_verbosity,
+                             public_input_confirmed=args.public_input_confirmed)
         print(f"Created {run_dir}", flush=True)
     run_all(run_dir)
     _print_summary(run_dir)

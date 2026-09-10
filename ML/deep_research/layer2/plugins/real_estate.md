@@ -2,7 +2,9 @@
 
 ## Scope and principles
 
-Use the following baseline domains for real-estate evidence. Keep their responsibilities; extend them for the user's objectives and actual asset uses before adding justified domains. These are future research responsibilities, not instructions to research or score risk in Layer 2. Route facts to every materially relevant domain, retaining conflicting evidence, applicability, identifiers, quantities, dates, safeguards and uncertainties. Do not infer installation from a specification or an approved alternative. Never invent user requirements.
+Use the following baseline domains for real-estate research. Preserve their responsibilities; extend them for the user's objectives and actual asset uses, adding distinct domains when focused research is warranted. There is no fixed final count or quota for additions. Duties cover risks, opportunities, scenarios and investment implications, not only adverse findings. Layer 2 may search to decide responsibilities; detailed research follows later. Route original supplied facts to every materially relevant domain, retaining identifiers, quantities, dates, safeguards, uncertainty and conflicting evidence. Keep applicability qualifications in prose; do not infer installation from a specification or approved alternative. Never invent user requirements or treat forecasts as established facts.
+
+Use compact positive responsibilities rather than topic prohibitions or Boundaries sections. Financial modelling, rates, returns, valuation, ESG/CapEx, alternative-use economics and local demographic, employment and market research are available topics. The domains below cooperate on shared evidence and asset-linked pathways; their handoffs are not exclusive research fences. Distinguish supplied facts, external evidence, assumptions and forecasts, preserving uncertainty and current versus proposed status.
 
 ## Asset Integrity, Systems & Operational Resilience
 
@@ -13,14 +15,14 @@ Identify current and emerging property risks arising from the structure, envelop
 
 ## Occupier, Lease, Income & Counterparty Economics
 
-Identify current and emerging risks to occupancy continuity and property income. Test occupier and counterparty identity, economic capacity and funding basis; the lease or occupancy instrument; term, break, renewal, rent, indexation, concessions, area, recoveries, service charges, arrears, security and obligations. Link each supported issue to its possible effect on income, costs, use, operations or people without prescribing a commercial response. State every supported risk's value transmission for this asset.
+Research occupancy continuity, property income and negotiation options. Test occupier and counterparty identity, economic capacity and funding basis; the lease or occupancy instrument; term, break, renewal, rent, indexation, concessions, area, recoveries, service charges, arrears, security and obligations. Relate findings and commercial scenarios to income, costs, use, operations and people, with assumptions stated.
 
 - Share verified lease cash flows, occupier obligations, counterparty economics and funding evidence with Rights, Public Law & Ownership Governance; Location, Demand, Market, Valuation & Exit; and Finance, Debt & Macro Transmission.
 - Use verified technical area and capital expenditure from Asset Integrity, Systems & Operational Resilience; legal capacity and award authority from Rights, Public Law & Ownership Governance; and market rent from Location, Demand, Market, Valuation & Exit.
 
 ## Rights, Public Law & Ownership Governance
 
-Identify current and emerging risks to lawful ownership, use, operation, financing and transfer of the asset. Test title, cadastral identity, rights, burdens, ownership chain, legal capacity, permits, planning and use conformity, notices, procurement authority, fund constraints, regulatory duties and property or transaction tax. Report the property consequence and timing of supported constraints without prescribing consents or actions. State every supported risk's value transmission for this asset.
+Research lawful ownership, use, operation, financing and transfer. Test title, cadastral identity, rights, burdens, ownership chain, legal capacity, permits, planning and use conformity, notices, procurement authority, fund constraints, regulatory duties and property or transaction tax. Examine consequences, timing and consent or transaction options, distinguishing analysis from established legal determinations.
 
 - Share verified ownership, lawful-use, consent, procurement, tax, vehicle and governance constraints with Occupier, Lease, Income & Counterparty Economics; Location, Demand, Market, Valuation & Exit; and Finance, Debt & Macro Transmission.
 - Use verified occupier and counterparty facts from Occupier, Lease, Income & Counterparty Economics and asset value from Location, Demand, Market, Valuation & Exit.
@@ -34,28 +36,28 @@ Identify current and forward-looking property risks arising from the ground and 
 
 ## Energy, Carbon & Transition
 
-Identify current and emerging energy, emissions and transition risks over the hold. Test data boundaries, meters, fuels, certificates, energy and greenhouse-gas intensity, landlord and occupier control, enacted or announced requirements and applicable benchmarks. Link supported performance gaps, fuel dependencies and transition changes to possible building, people, operating-cost, capital-cost, compliance, letting or value effects without designing a retrofit programme. State every supported risk's value transmission for this asset.
+Research energy, emissions, transition and retrofit scenarios. Test measurement scope, meters, fuels, certificates, energy and greenhouse-gas intensity, landlord and occupier control, enacted or announced requirements and applicable benchmarks. Relate performance, fuel dependencies, safeguards and transition options to operations, people, compliance, letting and value; include ESG/CapEx integration, costs, sequencing and disruption with assumptions stated.
 
 - Share verified performance, compliance dates, documented transition works, cost exposure and disruption with Asset Integrity, Systems & Operational Resilience; Location, Demand, Market, Valuation & Exit; Finance, Debt & Macro Transmission; and External Dependencies, Geopolitics, Trade & Supply Chains.
 - Use verified systems and fabric from Asset Integrity, Systems & Operational Resilience; enacted legal requirements from Rights, Public Law & Ownership Governance; and market assumptions from Location, Demand, Market, Valuation & Exit.
 
 ## Location, Demand, Market, Valuation & Exit
 
-Identify current and emerging location, demand, market and liquidity risks affecting this asset. Test access, transport, amenities, neighboring uses, nuisance, safety, catchment, demographics, employment and regional economy alongside property-specific supply, demand, vacancy, take-up, rents, yields, incentives and comparables. Include current nearby activity and announced changes through the hold only when their pathway to the building, its people, use, income or value is established. State every supported risk's value transmission for this asset.
+Research location, demand, market, valuation and liquidity. Test access, transport, amenities, neighboring uses, nuisance, safety, catchment, demographics, employment, employers, investment and the regional economy alongside supply, demand, vacancy, take-up, rents, yields, incentives and comparables. Investigate nearby activity, announced changes and alternative uses; examine plausible asset pathways without presenting unproven effects or valuation scenarios as facts.
 
 - Share verified market rent, valuation, demand, liquidity and exit evidence with Occupier, Lease, Income & Counterparty Economics and Finance, Debt & Macro Transmission.
 - Use verified income from Occupier, Lease, Income & Counterparty Economics; lawful uses from Rights, Public Law & Ownership Governance; capital expenditure from Asset Integrity, Systems & Operational Resilience and Energy, Carbon & Transition; physical risk from Ground, Physical Climate & Insurability; and dependency pathways from External Dependencies, Geopolitics, Trade & Supply Chains.
 
 ## Finance, Debt & Macro Transmission
 
-Identify current and emerging financing and macro-transmission risks specific to the property. Test existing and prospective debt, security, rate, amortization, maturity, covenants, hedging, recourse, leverage, coverage, liquidity and refinancing terms. Include rates, inflation, growth, credit and foreign exchange only where evidence links them through this property's income, costs, capital expenditure, value, covenant position or liquidity; do not propose funding responses. State every supported risk's value transmission for this asset.
+Research finance, debt, capital markets, interest rates, inflation, growth, credit and currency transmission. Test existing and prospective debt, security, amortization, maturity, covenants, hedging, recourse, leverage, coverage, liquidity and refinancing terms. Analyse funding options, cash flows, returns, forecasts and financial/valuation scenarios through income, costs, CapEx, value and liquidity; identify evidence, assumptions, uncertainty and asset relevance.
 
 - Share verified financing terms, covenant headroom, refinancing exposure and macro transmission with Occupier, Lease, Income & Counterparty Economics; Rights, Public Law & Ownership Governance; and Location, Demand, Market, Valuation & Exit.
 - Use verified income from Occupier, Lease, Income & Counterparty Economics; legal and vehicle constraints from Rights, Public Law & Ownership Governance; capital expenditure from Asset Integrity, Systems & Operational Resilience and Energy, Carbon & Transition; value from Location, Demand, Market, Valuation & Exit; and external pathways from External Dependencies, Geopolitics, Trade & Supply Chains.
 
 ## External Dependencies, Geopolitics, Trade & Supply Chains
 
-Identify material current and emerging external dependency and geopolitical pathways affecting the property, its operations, occupier, people, works, finance or use. Test energy, installed equipment, specialist labour, materials, vendors, technologies, commodities, countries, transport routes, sanctions, cyber or physical threats, state budgets and occupier continuity. Trace each supported pathway through trigger, property dependency, exposure, vulnerability, effect and time horizon. Do not report generic world events without that property linkage, and state when no material pathway is established. State every supported risk's value transmission for this asset.
+Research external dependencies and geopolitical pathways affecting the property, operations, occupier, people, works, finance or use. Test energy, equipment, specialist labour, materials, vendors, technologies, commodities, countries, transport routes, sanctions, cyber or physical threats, state budgets and occupier continuity. Investigate global, national and local drivers through asset dependencies, safeguards, exposure and timing. Separate established effects, plausible scenarios and contextual signals when an asset pathway remains uncertain.
 
 - Share verified dependency pathways, existing controls, costs and residual exposure with every affected domain and with Finance, Debt & Macro Transmission.
 - Use verified systems and works from Asset Integrity, Systems & Operational Resilience; occupier activities from Occupier, Lease, Income & Counterparty Economics; legal and sanctions context from Rights, Public Law & Ownership Governance; transition works from Energy, Carbon & Transition; market transmission from Location, Demand, Market, Valuation & Exit; and financing exposure from Finance, Debt & Macro Transmission.

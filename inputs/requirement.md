@@ -4,6 +4,12 @@ Origin of this intent: scoping workshop of 31 July 2026 and the alignment docume
 *Pilot "The Covenant" — Alignment of Understanding and Pilot Scope* (SedAI AG, 04 August 2026),
 issued to ShapeInvest for review, correction and supplementation. Confidential.
 
+Scope update — 10 September 2026: the current user broadened the research topics below beyond
+the original workshop exclusions and deferred work. Those additions are current instructions,
+not claims about what the workshop approved. Review this confidential-origin document and the
+other inputs before confirming that they are suitable for public web-assisted domain planning;
+this update does not make private information public.
+
 This file states what the commissioning party needs to understand. It supplies intent, not
 evidence, and it does not prescribe a conclusion. Property facts, lease data and technical
 findings belong in the factsheet, not here.
@@ -24,8 +30,8 @@ findings belong in the factsheet, not here.
   is expected at several locations, so what raises or lowers the probability of a long-term
   agreement matters more than a marginal effect on value.
 - Respect the level of consideration: the acquisition must work as a complete package of twelve,
-  while the sale is property by property. Assess the deal singularly, without portfolio
-  allocation logic.
+  while the sale is property by property. Assess package-level dependencies alongside the
+  individual assets while retaining those acquisition and exit objectives.
 
 ## Priorities
 
@@ -43,28 +49,28 @@ In descending order of importance.
    statutory or legal site commitments, and the special economics of the building type.
 5. **Occupiers and their plans.** Who is actually in each property, and what they intend — new
    construction, consolidation, land transactions.
-6. **Alternative use from the occupier's perspective.** Location, sentiment and supporting
-   factors for repurposing options, qualitatively and without an economic-efficiency
-   calculation.
+6. **Alternative use from the occupier's perspective.** Location, sentiment, supporting
+   factors, economic feasibility and financial scenarios for repurposing options.
 7. **Political and programme signals bearing on quality of use.** Political support attaches
    primarily to the quality of use; environmental standards have been partly withdrawn by the
    current coalition. Read signals accordingly rather than assuming an ESG-driven mandate.
 
-## Exclusions
+## Expanded research responsibilities
 
-- No forecast of interest rates or return levels, and no capital-market prediction.
-- No economic-efficiency calculation for alternative uses.
-- No property valuation and no substitute for the investor's own financial model. Substantiate
-  assumptions with signals and name which value contribution is under pressure; the valuation
-  itself stays with the investor.
-- No legal, tax or construction advice.
-- No monetary risk quantification. Risk statements are relative weightings within this
-  portfolio, not euro amounts, and are not to be translated into euro values.
-- No buy, sell, hold or repricing recommendation.
-- Raised at the workshop but deliberately outside this pilot, to be handled separately: the
-  opacity of German market and transaction data; the segment structure of the local economy in
-  a micro-market; cluster risk from mono-dependency on a single employer or sector; and any
-  property search or selection platform.
+- Investigate interest rates, returns, capital markets, financing options, cash flows, property
+  valuation and financial modelling, including economic feasibility of alternative uses.
+- Integrate ESG, energy transition and CapEx needs, timing and investment sequencing with lease
+  negotiations, asset operations and the investor's valuation assumptions.
+- Research population, age structure, employment, employers, sector concentration, local and
+  regional investment, property supply/demand and market or transaction-data limitations.
+- Investigate legal, tax, construction and insurance implications, monetary exposures and
+  investment or negotiation options when relevant. Distinguish analysis and scenarios from
+  established facts or professionally certified advice; disclose assumptions and uncertainty.
+- Consider package-level dependencies and scheduling, parallel negotiations, and property
+  selection/search evidence where useful. Research scope is broad; this does not commission
+  development of a property-search platform.
+- Preserve the ranked priorities above. Add research domains when a distinct responsibility is
+  warranted; expand existing duties when that is clearer. No minimum number of additions is required.
 
 ## Geography
 
@@ -81,7 +87,7 @@ In descending order of importance.
 
 - Exit ideally after three years, realistically after five to six years.
 - Signals that mature inside that window carry decisive weight. Effects materially beyond it are
-  secondary for risk assessment and may be noted briefly rather than investigated.
+  secondary in priority but should be investigated when they materially change current decisions.
 - Anchor findings to dates that exist in this window: lease expiries and break dates, state
   budget cycles, legislative and programme dates. Date every signal.
 
@@ -93,7 +99,7 @@ In descending order of importance.
   authority), state space and site strategy, reform discussions and the government programme.
 - Then the occupying authority itself, and municipal planning or land records where a
   property-specific question requires them.
-- Federal sources only where they drive a state decision.
+- Include federal and wider sources where they inform state decisions or asset-linked context.
 - Prefer primary, dated, attributable records over commentary. Every signal must carry its
   source; a search snippet is a lead, not evidence.
 
@@ -105,13 +111,12 @@ In descending order of importance.
 - State plainly what could not be determined. For the two test properties in particular, record
   openly what was established independently and what was not, even where that falls short of the
   investor's own derivation.
-- Free-form Markdown prose is acceptable. No fixed schema, heading list or output template is
-  required.
+- Final research prose may use free-form Markdown. This does not override Layer 2's minimal
+  ID-based routing JSON; it describes the later research result, not a model-output validator.
 
-## Deferred to a later round
+## Integrated investment research
 
-Not part of this round. Do not attempt these now; where a Round 1 finding will feed one of them,
-say so and stop there.
+The following previously deferred topics are now included by the current user's instruction.
 
 - ESG and CapEx integration: target state, investment requirement and timelines from the
   technical due diligence and the ESG measures plan.

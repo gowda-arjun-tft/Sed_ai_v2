@@ -1,4 +1,4 @@
-"""Plugin-driven Layer 2 domain design, evidence routing and review."""
+"""Layer 2 subject metadata, plugin-driven domain design and Markdown preparation."""
 
 from .backend.create_run import create_run
 from .backend.runner import run_all

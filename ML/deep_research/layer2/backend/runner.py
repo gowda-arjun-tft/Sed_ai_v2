@@ -1,100 +1,141 @@
-"""Schema-6 six-stage execution over disk evidence and bounded jobs."""
-
-from __future__ import annotations
+"""Schema-9 direct workflow; file snapshots and stable IDs preserve routing and recovery."""
 
 import asyncio
+import json
 import os
+import time
+from itertools import islice
 from pathlib import Path
 from uuid import uuid4
 
-import aiosqlite
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-
-from ..ML.agent import Layer2Response
-from ..ML.context import dump
+from ..ML.harness import build_model
 from .create_run import require_current
-from .evidence import EvidenceStore
-from .fs import load_json, now_iso, read_text, sha256, write_json, storage_path
-from .projections import audit, load_ledger, write_arrays
-from .publish import publish
-from .run_log import log_failure, operational_logger
-from .stages import assign, distribute, plan_domains, review, understand
+from .fs import load_json, now_iso, sha256, storage_path, write_json
+from .jobs import run_jobs, saved_text
+from .publication import domain_definitions, publish
+from .run_log import log_failure, operational_logger, stage_log
 from .usage import summarize_usage
 
 
-async def execute(run: Path, logger) -> dict:
-    """Input a schema-6 run; execute finite phase jobs and publish every available result."""
-    record = require_current(run)
+class UnusableDomainPlanError(ValueError):
+    """No usable domain identities exist for distribution; the completed raw plan remains reusable."""
+
+
+def source_sections(run: Path, window: dict) -> dict[str, str]:
+    """Input a frozen source range; seek its exact UTF-8 overlap/new text without loading the corpus."""
+    start, boundary, end = (window[key] for key in ("start_byte", "new_start_byte", "end_byte"))
+    with (run / "_internal/inputs/fact_sheet.md").open("rb") as handle:
+        handle.seek(start + window["input_bom_bytes"])
+        raw = handle.read(end - start)
+    if len(raw) != end - start:
+        raise OSError("incomplete frozen source range")
+    return {"overlap_context": raw[:boundary - start].decode("utf-8"),
+            "new_content": raw[boundary - start:].decode("utf-8")}
+
+
+def verify_inputs(run: Path, record: dict) -> None:
+    """Input run metadata; reject changed frozen inputs before logging, writing or dispatch."""
     for name, info in record["inputs"].items():
         if sha256(run / "_internal/inputs" / name) != info["sha256"]:
             raise OSError("frozen input hash changed; create a new run")
     if sha256(run / "_internal/trace/source/manifest.json") != record["source_manifest_sha256"]:
         raise OSError("frozen source manifest changed; create a new run")
-    record["execution_id"] = uuid4().hex
-    write_json(run / "run.json", record)
-    store = EvidenceStore(run)
-    load_ledger(store)
-    store.clear("understanding", "needs_owners", "domains", "initial_domains", "dispositions", "comparisons")
-    with store.connect() as db:
-        db.execute("DELETE FROM paths")
-        db.commit()
-        # ponytail: retain this idle connection during tool execution to avoid last-close
-        # WAL cleanup racing new reads. No held transaction, global lock or shared cursor.
-        instructions = {name: read_text(run / "_internal/inputs" / f"{name}.md")
-                        for name in ("domain_plugin", "requirements")}
-        async with aiosqlite.connect(str(run / "_internal/trace/checkpoints.sqlite3")) as connection:
-            saver = AsyncSqliteSaver(connection, serde=JsonPlusSerializer(allowed_msgpack_modules=[Layer2Response]))
-            await understand(store, saver, logger)
-            # Instructions enter only after independent original-source understanding.
-            for label, text in instructions.items():
-                store.add_text(label, text)
-            await plan_domains(store, "design", store.rows("understanding"), instructions, saver, logger)
-            for domain in store.rows("domains"):
-                store.put("initial_domains", domain["domain_id"], domain)
-            write_arrays(run / "_internal/domains.json", initial=store.rows("initial_domains"), final=[])
-            await distribute(store, saver, logger)
-            await review(store, instructions, saver, logger)
-            await plan_domains(store, "catalogue", store.rows("observations"), instructions, saver, logger)
-            await assign(store, saver, logger)
-    latest = load_json(run / "run.json")
-    for key in list(latest["jobs"]):
-        entry = latest["jobs"][key]
-        if entry.get("execution_id") != record["execution_id"]:
-            write_json(run / "_internal/trace/responses" / key / entry["fingerprint"] / "job.json", entry)
-            del latest["jobs"][key]
-        elif entry["status"] == "failed":
-            audit(store, "operational_failure", job=key, error_type=entry["error_type"])
-    write_json(run / "run.json", latest)
-    coverage = publish(store)
-    logger.info("published domains=%d recorded_facts=%d unresolved_facts=%d",
-                coverage["domain_count"], coverage["recorded_facts"], coverage["unresolved_facts"])
-    return coverage
+
+
+async def execute(run: Path, previous: dict, logger) -> None:
+    """Input a validated run; build metadata sequentially, decide once, then distribute in bounded batches."""
+    record = load_json(run / "run.json")
+    model = build_model(record["reasoning_effort"])
+    windows = load_json(run / "_internal/trace/source/manifest.json")
+    metadata = ""
+    with stage_log(run, logger, "metadata", len(windows)):
+        for index, window in enumerate(windows):
+            result = await run_jobs(run, model, "metadata", [
+                {"previous_metadata": metadata, **source_sections(run, window)}
+            ], previous, logger, offset=index)
+            if not result:
+                return
+            metadata = saved_text(result[0])
+    with stage_log(run, logger, "design", 1):
+        result = await run_jobs(run, model, "design", [{
+            "asset_metadata": metadata,
+            "domain_plugin": saved_text(run / "_internal/inputs/domain_plugin.md"),
+            "requirements": saved_text(run / "_internal/inputs/requirements.md"),
+        }], previous, logger)
+        if not result:
+            return
+        plan = saved_text(result[0])
+        definitions, _ = domain_definitions(plan, result[0].relative_to(run).as_posix())
+        if not definitions:
+            raise UnusableDomainPlanError("saved domain plan has no usable routing identities")
+        plan = json.dumps({"domains": [{"domain_id": identifier, **definition}
+                                       for identifier, definition in definitions.items()]}, ensure_ascii=False)
+    with stage_log(run, logger, "distribution", len(windows)):
+        iterator, offset = iter(windows), 0
+        while batch := list(islice(iterator, record["chunking"]["max_concurrency"] * 2)):
+            await run_jobs(run, model, "distribution", [
+                {"asset_metadata": metadata, "domain_plan": plan, **source_sections(run, window)}
+                for window in batch
+            ], previous, logger, offset=offset)
+            offset += len(batch)
 
 
 def run_all(run_dir: Path) -> dict:
-    """Input a schema-6 run; synchronously execute/resume and return provider-reported usage."""
-    run_dir = storage_path(run_dir)
-    record = require_current(run_dir)
+    """Input a schema-9 run; execute/resume direct calls and publish available current-version Markdown."""
+    started = time.perf_counter()
+    run = storage_path(run_dir)
+    record = require_current(run)
+    verify_inputs(run, record)
+    if record.get("public_input_confirmed") is not True:
+        raise ValueError("Layer 2 web-assisted design requires frozen public-input confirmation")
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY is empty")
-    with operational_logger(run_dir) as logger:
-        logger.info("run_%s run_id=%s", "started" if record["status"] == "started" else "resumed",
-                    record["run_id"])
-        logger.info("frozen_policy chunking=%s context=%s", dump(record["chunking"]), dump(record["context_policy"]))
+    if record["chunking"]["max_concurrency"] < 1:
+        raise ValueError("max_concurrency must be positive")
+    previous = record["jobs"]
+    write_json(run / "_internal/trace/history" / uuid4().hex / "run.json", record)
+    record.update(jobs={}, status="running", current_stage="metadata", error_type="")
+    write_json(run / "run.json", record)
+    failure = None
+    with operational_logger(run) as logger:
+        logger.info("run_%s run_id=%s", "resumed" if previous else "started", record["run_id"])
+        logger.info("frozen_policy chunking=%s context=%s", record["chunking"], record["context_policy"])
+        logger.info("retry_policy provider_transport_retries=%d observed_transport_attempts=unavailable",
+                    record["provider_max_retries"])
         try:
-            coverage = asyncio.run(execute(run_dir, logger))
+            asyncio.run(execute(run, previous, logger))
         except Exception as exc:
-            record = load_json(run_dir / "run.json")
-            record.update(status="failed", error_type=type(exc).__name__, updated_at=now_iso())
-            write_json(run_dir / "run.json", record)
-            log_failure(logger, "run_failed", exc, stage=record.get("current_stage"))
-            raise
-        record = load_json(run_dir / "run.json")
-        failed = sum(job["status"] == "failed" for job in record["jobs"].values())
-        usage = summarize_usage(run_dir / "_internal/trace")
-        record.update(status="partial" if failed else "complete", current_stage=None,
-                      coverage=coverage, usage=usage, finished_at=now_iso(), error_type="")
-        write_json(run_dir / "run.json", record)
-        logger.info("run_%s failed_jobs=%d", record["status"], failed)
-        return usage
+            failure = exc
+            log_failure(logger, "run_failed", exc)
+        finally:
+            record = load_json(run / "run.json")
+            done = sum(job["status"] == "complete" for job in record["jobs"].values())
+            expected = record["source_windows"] * 2 + 1
+            distributed = any(job["status"] == "complete" and job["stage"] == "distribution"
+                              for job in record["jobs"].values())
+            status = "complete" if done == expected and not failure else "partial" if distributed else "failed"
+            record.update(status=status, usage=summarize_usage(run / "_internal/trace"),
+                          finished_at=now_iso(), error_type=type(failure).__name__ if failure else "")
+            write_json(run / "run.json", record)
+            publication_started = time.perf_counter()
+            try:
+                logger.info("publication_started")
+                record["publication"] = publish(run)
+                logger.info("publication_complete domains=%d routing_issues=%d",
+                            record["publication"]["domain_count"], record["publication"]["routing_issues"])
+                if record["publication"]["routing_issues"]:
+                    logger.warning("publication_observations count=%d details=_internal/trace/routing_issues.json",
+                                   record["publication"]["routing_issues"])
+            except Exception as exc:
+                failure = failure or exc
+                record.update(status="failed", error_type=type(failure).__name__)
+                log_failure(logger, "publication_failed", exc)
+            logger.info("publication_finished wall_seconds=%.3f", time.perf_counter() - publication_started)
+            record["finished_at"] = now_iso()
+            write_json(run / "run.json", record)
+            logger.info("run_%s completed_jobs=%d expected_jobs=%d reused_jobs=%d wall_seconds=%.3f",
+                        record["status"], done, expected,
+                        sum(job.get("reused", False) for job in record["jobs"].values()), time.perf_counter() - started)
+    if failure:
+        raise failure
+    return record["usage"]

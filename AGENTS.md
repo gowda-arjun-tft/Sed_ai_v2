@@ -2,12 +2,12 @@
 
 ## Project Structure & Module Organization
 
-`ML/deep_research/layer2/` designs plugin-driven domains, reads and distributes original source
-facts, then performs one paged reviewer stage. Its CLI is only an adapter;
-operations live in `layer2/backend/`, and AI code plus six generic prompts in `layer2/ML/`.
+`ML/deep_research/layer2/` builds cumulative subject metadata, decides plugin-driven domains once,
+then distributes original facts by stable domain IDs into Markdown through three direct-call stages. Its CLI is only an adapter;
+operations live in `layer2/backend/`, and AI code plus three generic prompts in `layer2/ML/`.
 Use package-level `create_run` and `run_all` as public Python entrypoints; the notebook is the UI.
 See `layer2/README.md` for the workflow. Industry definitions belong in the selected plugin,
-not generic prompts or Python. `inputs/requirement.md` is a user-editable placeholder template.
+not generic prompts or Python. `inputs/requirement.md` holds user objectives and the explicitly broadened research scope; review its confidential origin before public-input confirmation.
 Operational events go to each run's `run.log`. `ML/deep_research/layer3/` runs eight direct domain researchers
 sequentially, then one property synthesis. `ML/deep_research/layer4/` segregates each domain report
 through two tool-free calls, reuses the direct researcher for external influences, then synthesizes
@@ -15,13 +15,13 @@ the available external reports. Prompts sit below each layer; design notes are i
 `ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
 Group new runs as `runs/<parent>-<markdown-name>-<short-path-id>/L2_*` and place the derived `L3_*`
-beside its historical Layer 2 source. Layer 2 schema-2/3/4/5 artifacts are read-only. New Layer 2 runs
-use schema 6, not yet integrated with Layers 3/4; do not produce a legacy missions handoff.
+beside its historical Layer 2 source. Layer 2 schema-2/3/4/5/6/7/8 artifacts are read-only. New Layer 2 runs
+use schema 9, not yet integrated with Layers 3/4; do not produce a legacy missions handoff.
 
 ## Build, Test, and Development Commands
 
 For Docker development, follow [docker/README.md](docker/README.md). Use the shared Dev Container
-and `/usr/local/bin/python` for offline checks; preserve schema 6 and do not restart browser research.
+and `/usr/local/bin/python` for offline checks; preserve the Docker workflow and do not restart browser research.
 Do not run the same research job from two environments. After branch switches, finish active work
 before restarting the notebook kernel.
 
@@ -34,7 +34,7 @@ The original Windows workflow uses the `compute` interpreter:
 & 'C:\src\anaconda3\envs\compute\python.exe' -m pip check
 ```
 
-Run Layer 2 with `.\run.ps1 -FactSheet <facts.md> -DomainPlugin <plugin.md> -Requirements <requirements.md>` and Layer 3 with
+Run Layer 2 with `.\run.ps1 -FactSheet <facts.md> -DomainPlugin <plugin.md> -Requirements <requirements.md> -PublicInputConfirmed` and Layer 3 with
 `.\run.ps1 -Research <L2-run> -Online -PublicInputConfirmed`. Resume with `-Resume` or `-ResumeL3`.
 
 ## Coding Style & Testing
@@ -55,49 +55,62 @@ reasoning and low web-search context and verbosity; new runs may select supporte
 freeze those controls in `run.json`. Do not
 restate model, search, token, source, or report limits in prompts.
 
-Layer 2 schema 6 freezes factsheet, ordinary Markdown plugin, user requirements and prompts.
-The engine has no fixed domain count or real-estate-specific routing logic. Historical roster and
-input helpers live in Layer 3 settings and `legacy_input.py`; the old planner is a test fixture.
-Do not reintroduce them into Layer 2. Preserve shared model and operational helper behavior.
-Nominal source windows remain 60K tokens, 10K original-source overlap and 50K stride; record actual
-Unicode-safe boundaries without losing source characters. Source understanding and distribution
-are tool-free, using native abatch_as_completed with frozen concurrency five by default.
-Do not add a second semaphore/task scheduler. Review phases/pages run sequentially once.
+Layer 2 schema 9 freezes original inputs, prompts, Unicode-safe source ranges, public-input consent
+and model/search policies. No fixed domain count or industry roster lives in Python. Shared model,
+usage/filesystem helpers and Deep Agents settings used by Layers 3/4 remain unchanged.
 
-New schema-6 runs freeze design_tool_free=true. Choose domains has no tools or evidence backend;
-it receives every understanding page, plugin, requirements and current definitions explicitly.
-Keep it sequential and checkpointed. Reconciliation must include corresponding current definitions
-and earlier additions, with bounded pages rather than inaccessible pointers. Older schema-6 runs
-without this setting retain their frozen designer behavior; never convert existing runs implicitly.
-Reviewer and historical designer tools are only native ls/glob/grep/read_file on registered run-owned
-SQLite evidence through CompositeBackend; StateBackend holds small thread-local state. No host mount, shell, web, subagents, cross-run memory or model-writable host
-files. SQLite checkpoints and source pointers preserve retrieval state without automatic summarization.
-Assembled input targets 300K estimated tokens with logged exceptional tolerance through 350K.
-Count instructions, messages, evidence, tools and response metadata on all turns. Page/offload first;
-never silently truncate. Unfit mandatory/indivisible inputs fail operationally, not on output quality.
+Keep three direct-call stages, without a graph, reviewer or additional synthesis. Metadata receives
+only each original window and preceding complete metadata; no plugin, requirements or tools.
+Decide domains once from complete metadata, plugin and requirements. Only that call may use native
+provider-hosted web_search (auto), to clarify missing research responsibilities. New runs freeze
+independently selected low/medium/high search depth and response verbosity; both default to medium.
+Preserve baseline duties, extend them or add distinct domains when warranted; no fixed quota.
+Web evidence informs duties, never fabricated subject facts. Metadata remains Markdown.
 
-Use ProviderStrategy only for a permissive top-level JSON object and three transient transport
-retries. Save all returned objects without semantic grading, deduplication, repair or content retry.
-Store immutable fact bodies separately from ownership. Review all recorded facts, not only Extra;
-retain unknown/unusable references in the audit. Execution status and assignment coverage are separate.
-Coverage does not prove exhaustive source extraction. Input fingerprints preserve historical response
-versions/publications when recovery changes downstream input. Schema-2/3/4/5 resume/check is rejected
-without mutation. Layer 2 must not create a misleading eight-domain handoff to Layers 3/4.
+Designer JSON is prompt-requested only: never bind response_format or text.format alongside web_search.
+Plan JSON contains domains with domain_id, name and compact responsibilities. No Boundaries or
+strict nested schema. Distribution reads original windows plus complete metadata/plan and returns
+ID-keyed Markdown strings using native JSON-object mode. No tools there. Native bind passes
+response_format directly; never introduce strict Pydantic validation or a custom tool loop.
+Public-input confirmation is required before creating a run; notebook defaults False, CLI exposes
+--public-input-confirmed and PowerShell uses -PublicInputConfirmed. Resume uses frozen consent.
 
-Publish readable README/domain_plan/domain Markdown views plus unresolved.md when needed. Keep one
-immutable facts.jsonl ledger, domain/ownership JSON and snapshots under _internal/, with raw responses,
-publication history, usage and checkpoints under _internal/trace/. Retain replaced views before refresh.
-Expose unprocessed values without guessing field meanings or retrying completed objects. Prompts request
-change-only review observations and concise ownership rows; every supplied fact still receives review.
-Inline complete domain definitions only when accounted input fits; otherwise schedule every required
-definition-page comparison. Do not substitute ranked retrieval for exhaustive scheduled coverage.
-Source-only understanding receives neither plugin nor requirements. Planning/domain review receive both;
-sorting and assignment use domain responsibilities. Read original source by manifest seeks in bounded
-native batches of at most twice concurrency. Planning/review jobs use fresh contexts per page and stable
-checkpoint threads on resume. Archive complete older exchanges before pointer eviction, without summaries.
-Original snapshots/raw responses/ledger are authoritative; the SQLite evidence index is rebuildable.
-Avoid corpus-sized checkpoint state and fingerprints. There is no application output-token limit;
-page oversized completed values for downstream jobs, preserving their parent IDs and locations.
+Use 50K-token windows, 5K original-source overlap and 45K stride; preserve Unicode/BOM source bytes
+and stop at source end without redundant tail. Metadata is sequential; distribution uses bounded
+native abatch_as_completed at frozen concurrency five. Source-order assembly, not completion order.
+Count actual messages, tool definitions, format metadata and framing: 300K target / 350K ceiling,
+bounded by model capacity; designer also respects 128K native web-search context limit. Provider
+manages its hidden search turns. Unfit mandatory context stops safely without truncation or added
+summarization/reconciliation. Keep three provider transport retries and no application output cap.
+
+Save raw completions before parsing, including malformed/empty/unconventional text. Freeze IDs from
+the saved plan. Parse JSON object members without losing duplicates; append repeated contributions
+for a known ID, preserve ambiguous definitions/unknown IDs/unprocessed values internally. No alias
+guessing, paraphrasing, semantic deduplication or keyword stripping. A structurally unusable plan
+blocks dependent distribution but remains saved and reusable, not a prompt-repair trigger.
+Other unusual output or absent domain/window members do not cause coverage failures or retries.
+
+Visible outputs: README.md, asset_metadata.md, domain_plan.md, domains/*.md, run.json and run.log.
+Render the domain plan's names/responsibilities from saved definitions; keep exact JSON in the existing
+designer response trace, not a duplicate root file. Archive older views before an authorized republication.
+No visible unresolved.md; full routing observations stay in _internal/trace/routing_issues.json
+with a README warning/link. Keep designer native web actions, sources, annotations and usage in its
+provider_message.json, never in run.log. Log counts/identifiers/durations and safe frames; API errors
+may include HTTP status, bounded diagnostic identifiers and recognized diagnostics, never arbitrary payloads.
+Log stage/job progress, reuse, queue/handling times, publication and total wall duration. One cancellable
+30-second progress task observes pending/queued calls without scheduling work or claiming model progress.
+Provider-internal retry attempts remain unavailable unless observed; never infer them from job attempts.
+Keep model usage separate from local input estimates. No new SQLite, fact ledger or ownership table.
+
+Reuse completed raw responses on resume, recover missing/operationally failed jobs only, and
+fingerprint actual dependencies and native options. Preserve response and publication history.
+Metadata/design failure stops dependent work; successful distribution siblings still publish.
+Archive old view bytes before atomic refresh. Historical schemas 2–8 reject execution/check before
+mutation. Check-only remains observational. Schema 9 is not integrated with Layers 3/4; never emit
+a misleading legacy missions handoff or change those layers/cells without separate authorization.
+Preserve distinct research-driving facts with scope, conditions, actors, exceptions and dates.
+Concision may remove genuinely repeated wording, not unique meaning. Metadata does not substitute
+for original-source distribution; routing coverage is not proof of complete extraction.
 
 ## Model-Output Freedom
 

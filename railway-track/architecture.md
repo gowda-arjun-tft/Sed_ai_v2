@@ -2,86 +2,106 @@
 
 ## System Overview
 
-The current implemented architecture and layer boundaries are documented in [AGENTS.md](../AGENTS.md) and [README.md](../README.md).
+Current architecture and boundaries are documented in [AGENTS.md](../AGENTS.md), [README.md](../README.md)
+and the [Layer 2 workflow guide](../ML/deep_research/layer2/README.md). Earlier audits and tracks
+remain historical records, not the current execution contract.
 
 ## Components
 
-Layer 2 schema 6 reads original evidence, designs plugin-driven domains, distributes facts and performs one paged review. Its dynamic outputs are not yet integrated with Layers 3/4. The unchanged downstream layers continue using historical inputs: Layer 3 runs eight direct domain researchers and a synthesis; Layer 4 performs segregation, external research and synthesis.
-The repository-scoped Railway Track skill maintains concise durable project context for authorized meaningful changes.
-Claude development guidance lives in `CLAUDE.md` and the dated `CLAUDE_HANDOVER.md` at the project
-root. The user's Windows personal Claude skills contain exact Codex copies of Deep Agents Builder
-and Prompt Framework; these external personal files are not bundled into the Docker environment.
-Layer 2 operations live in `backend/`, while AI construction, input accounting and six generic prompts
-live in `ML/`. Industry definitions belong to the selected plugin; the editable requirements template
-is `inputs/requirement.md`. The public Python entrypoints are package-level `create_run` and `run_all`.
-See the [Layer 2 file guide and workflow](../ML/deep_research/layer2/README.md).
-Historical roster/parser/rendering ownership is in Layer 3; the obsolete planner is only a test fixture.
+Layer 2 schema 9 has three direct chat-model stages: cumulative asset metadata, one web-assisted
+domain decision and original-source distribution by stable domain ID. There is no Layer 2 graph,
+reviewer, custom tool loop, fact-ID projection or additional synthesis. Shared model construction
+and Deep Agents configuration remain unchanged for Layers 3/4.
+
+Operations/recovery/publication live in layer2/backend; messages, local request options/accounting
+and three generic prompts live in layer2/ML. The plugin supplies baseline industry responsibilities;
+requirements set priorities and the user-approved broader research scope. Python has no fixed roster.
+Public entrypoints remain create_run and run_all, with explicit public-input confirmation for new runs.
+
+Unchanged Layer 3 runs eight direct researchers plus synthesis using historical inputs; Layer 4
+performs segregation, external research and synthesis. Dynamic schema-9 outputs are not integrated
+with those layers. Their tools, checkpoints and settings are unchanged.
+
+Railway Track stores durable authorized-work history. Claude guidance lives in CLAUDE.md and the
+dated CLAUDE_HANDOVER.md; personal skills are not bundled into Docker.
 
 ## Data and Storage
 
-Run metadata, outputs, sources, usage, logs, and checkpoints are stored under local run folders as described in [README.md](../README.md).
-Layer 2 freezes factsheet/plugin/requirements and prompts, preserves immutable fact bodies, stores ownership separately, and versions responses and publications. SQLite checkpoints hold read-only retrieval sessions; input fingerprints isolate changed dependent work.
-Its public views are README.md, domain_plan.md, readable domains/*.md and unresolved.md when needed.
-Domain research views contain responsibilities and section-grouped facts. Separate top-level means
-and applicability fields, technical provenance and ownership explanations stay in internal records.
-The publisher changes presentation only, without paraphrasing or deduplicating model content.
-One canonical facts.jsonl ledger, definitions, assignments and input snapshots live in _internal/;
-raw responses, evidence, revision history, usage and SQLite checkpoints live in _internal/trace/.
-The rebuildable evidence.sqlite3 stores immutable virtual-page versions outside checkpoints; literal
-search scans exact text and supports exhaustive traversal through shards. Full older message/tool groups
-are archived by session before eviction. Fact bodies are streamed from the canonical ledger; active
-facts and ownership use references. Publications are streamed one domain at a time.
-One idle evidence connection spans stage execution without a held transaction, avoiding last-close
-WAL cleanup during concurrent tool access. Native read operations have three attempts for SQLite
-BUSY/PROTOCOL only, fresh query-only connections (5s busy timeout), and 0.25s/0.5s backoff. Writes,
-initialization, history indexing and checkpoints are not retried by this mechanism. Safe run.log
-diagnostics record context, codes, durations and traceback frames without model/error payloads.
-Replaced visible Markdown is archived before refreshing. Unprocessed values are exposed, never repaired.
-Historical schema-2/3/4/5 execution and checks are rejected without mutation or migration.
-Railway Track current-truth records, change history, and outcome checkpoints are stored under this directory.
+Runs freeze original input bytes, three prompt snapshots/hashes, source ranges, model/input/search
+policies and consent. Visible views are README.md, asset_metadata.md, domain_plan.md, domains/*.md,
+run.json and run.log. Domain plan JSON requests domain_id, name and responsibilities; distribution
+JSON maps the exact IDs to Markdown. No strict nested schema or content validator is applied.
+The domain-plan Markdown renders usable names and responsibilities without routing IDs; raw plan JSON
+remains in the existing designer response trace. No extra model call or duplicate root JSON is needed.
+
+Raw responses, completion metadata, usage, source manifest and history remain under _internal/.
+Only designer responses retain a full provider_message.json for native web actions/sources/citations
+and available usage. Malformed completed JSON is still saved verbatim, not repaired. JSON duplicate
+members are preserved; ambiguous/unprocessed values appear in the internal routing_issues.json with
+a README warning/link. No visible unresolved.md, SQLite, evidence index, fact ledger or ownership table.
+
+Python routes by ID and copies Markdown text in source order, without paraphrasing or semantic
+deduplication. Only usable definitions reach distribution; ambiguous definitions are not guessed.
+The distribution prompt prioritizes complete rules/consequences and scoped figures before compression;
+its examples and combined metadata/domain evaluation contract are documented in the Layer 2 guide and benchmark.
+This changes instructions, not runtime stages or demonstrated extraction accuracy.
+Replaced views and diagnostics are archived before atomic per-file refresh. Interrupted publication
+rebuilds from saved responses; historical schemas 2–8 cannot execute/check through the new runner.
 
 ## External Services
 
-The pipeline uses OpenAI models; only Layers 3/4 perform web research, through the interfaces documented in [README.md](../README.md).
+The same fixed OpenAI model, selected reasoning, three transport retries and store=False remain.
+The domain designer alone binds native Responses API web_search (auto). New runs freeze independently
+selected low/medium/high search depth and response verbosity; both default to medium.
+Provider-hosted search actions require no application agent loop or separate L3 researcher.
+Metadata is tool-free Markdown. The designer requests JSON through its prompt without API format
+enforcement, because web search cannot use JSON mode; tool-free distribution retains JSON-object mode.
+There is no application output-token ceiling.
 
 ## Deployment
 
-The plain_research branch provides Docker infrastructure with pinned Linux dependencies and a
-VS Code Dev Container mounting the original repository at /app. Development follows the checked-out
-branch and uses /usr/local/bin/python; Layer 2 research behavior remains schema 6. Browser/CLI
-containers retain separate volume-backed research state and image-backed application code.
-See the [Docker guide](../docker/README.md) for branch, kernel and storage boundaries.
+The VS Code Dev Container mounts the original checkout read-write at /app and uses
+/usr/local/bin/python. It follows the checked-out branch, currently plain_research_v3.
+Browser containers retain separate volume-backed state and image-backed code. No restart or
+dependency change is part of this task; see the [Docker guide](../docker/README.md).
 
 ## Security
 
-Secrets, URL validation, tool isolation, and model-output boundaries are governed by [AGENTS.md](../AGENTS.md).
-Layer 2 new-run design is tool-free, with no evidence backend, while remaining sequential and
-SQLite-checkpointed. The frozen design_tool_free setting defaults to the original tool-enabled
-behavior for older schema-6 runs. Review and historical design expose only native read tools
-over registered SQLite evidence via CompositeBackend, with only small StateBackend thread state,
-without a host mount or model writes. Every dispatch estimates complete input against the 300K
-target/350K maximum; old reviewer read bodies remain retrievable rather than summarized.
+New Layer 2 runs require public_input_confirmed=True before any directory or model call.
+The notebook defaults False; CLI and PowerShell require explicit confirmation. Resume uses frozen
+consent. The confidential-origin requirements must be reviewed/sanitized before opt-in.
+Only the designer may search, to clarify responsibilities, not to establish new supplied asset facts.
+No shell, host-file tool, delegation or application-managed web fetch is introduced.
+
+Fresh messages carry only the explicit stage inputs. Local accounting includes messages, tool and
+format definitions plus framing: 300K target / 350K ceiling, bounded by model capacity; the designer
+also applies the documented 128K web-search context ceiling. Provider manages hidden search turns.
+Oversized mandatory input fails without truncation, automatic summary or reconciliation.
+
+Safe operational logs contain counts, identifiers, durations, local estimates and traceback frames
+without source lines, locals, facts, queries, URLs, credentials or exception payloads. API failures
+include HTTP status, bounded code/parameter/request identifiers and the recognized web-search/JSON-mode
+diagnostic, not arbitrary error messages. Detailed provider
+traces and usage remain internal. Check-only makes no mutations or model calls.
+The existing run.log records stage counts/wall times, native dispatch and local queue/handling times,
+raw-response saves, reuse, publication and total run duration. A single cancellable batch progress task
+reports waiting/queued jobs every 30 seconds; it neither schedules calls nor observes hidden provider
+progress. Transport-attempt counts are unavailable unless observed, separate from job attempts.
 
 ## Key Flows
 
-Layer 2: source understanding -> domain design -> original-source distribution -> observation pages -> final catalogue -> assignment pages -> publication. Independent source jobs use native batching; reviewer pages are awaited sequentially without constraining checkpoint-internal concurrency. See [README.md](../README.md) for interfaces and the separate historical Layer 3/4 workflow.
-Understanding prompts keep profiles navigational and request detailed same-subject/topic evidence
-groups with fact, relationships, contradictions and supplied provenance-ID lists. Qualifications
-remain in fact rather than a separate applicability field; the contract is prompt-owned and applies
-through new-run snapshots. See the Layer 2 guide for the evidence-field rules. Review reports changes only;
-assignment prompts request explicit ownership rows with reasons only for changed/disputed/unresolved
-placements. Initial owners are supplied for comparison. Complete catalogues are inlined only when
-accounted review inputs fit the normal target; otherwise finite jobs compare every required fact/proposal page with every definition page.
-Source reading receives only original evidence; planning/domain review use plugin and requirements.
-Distribution and final assignment use derived responsibilities. The original source is tokenized once
-for its manifest, then accessed by byte-range seeks and bounded native batches (at most 2 × concurrency).
-Large-roster distribution extracts once and schedules ownership-only comparisons. Planning/finalization
-apply model-authored explicit updates in source order; unchanged definitions persist automatically.
-New-run design receives all scheduled understanding JSON evidence, plugin, requirements and current
-definitions explicitly. Large-roster reconciliation carries the corresponding current definitions
-and earlier additions in bounded requests; unknown references are audited without content retries.
-Checkpoint recovery is independent of tool availability. No historical run is converted automatically.
-Distribution requests concise facts and useful topic labels, with qualifications inside fact rather
-than separate means or applicability fields;
-design/catalogue request concise duties with rationale kept separate. These changes use the existing
-three stage prompts and new-run snapshots, not semantic response schemas. Schema 6 adds bounded job modes, not new agent stages.
+Original factsheet → 50K-token windows / 5K overlap → sequential complete metadata updates →
+one designer from metadata/plugin/requirements, with optional native search → settled ID definitions →
+original-source distribution → Python source-order Markdown publication.
+
+Tokenize once in preparation, seek original byte ranges in both source-reading stages. Metadata
+receives neither plugin nor requirements. Distribution uses bounded native abatch_as_completed,
+concurrency five and batches at most twice concurrency. Every completion saves immediately.
+Fingerprints cover actual inputs/native options/frozen settings, preserving older response versions
+when upstream recovery changes inputs. Completed unconventional output remains reusable.
+
+A metadata failure stops its chain; failed or structurally unusable design stops distribution.
+An unusable completed plan stays saved and is not called again for repair. Failed distribution
+siblings do not block available publication. Empty/missing distribution members and unprocessed
+content are observations, not quality failures or retry triggers. No preservation claim equates
+routing coverage with source extraction completeness.

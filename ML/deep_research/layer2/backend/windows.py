@@ -1,4 +1,4 @@
-"""Original-source windows and bounded Unicode-safe pages."""
+"""Original-source windows with Unicode-safe boundaries."""
 
 from __future__ import annotations
 
@@ -66,24 +66,3 @@ def source_windows(
         if end == len(ids):
             break
     return result
-
-
-def text_pages(text: str, budget: int = 8_000) -> list[str]:
-    """Input text and token allowance; return complete nonoverlapping character-safe pages."""
-    if budget < 1:
-        raise ValueError("page token allowance must be positive")
-    pages = []
-    while text:
-        lo, hi = 1, min(len(text), budget * 8)
-        best = 0
-        while lo <= hi:
-            mid = (lo + hi) // 2
-            if token_count(text[:mid]) <= budget:
-                best, lo = mid, mid + 1
-            else:
-                hi = mid - 1
-        if not best:
-            raise ValueError("one source character exceeds page token allowance")
-        pages.append(text[:best])
-        text = text[best:]
-    return pages
