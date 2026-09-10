@@ -48,7 +48,7 @@ researcher threads and thread-scoped `StateBackend` scratch. Each researcher rec
 `run_python`, model-writable host folders, and cross-property memory remain disabled. Web-search
 context remains low.
 
-## Layer 2 — schema 6
+## Layer 2 — schema 7
 
 Supply three independent UTF-8 Markdown inputs: factsheet, domain plugin and your own requirements.
 The application never invents requirements. The supplied real-estate plugin preserves the current
@@ -67,12 +67,13 @@ Operational code is in `layer2/backend/`; AI code and six generic prompts are in
 Industry definitions live only in the selected plugin. The old predefined planner is a historical
 test fixture; it is not a new Layer 2 prompt.
 
-Read facts receives no plugin or requirements. Planning and domain review receive both; sorting
+Read facts receives no plugin or requirements. Planning and domain review receive both; initial
 and final assignment use the resulting responsibilities. No web research happens in Layer 2.
 
 Flow: read every original source window → profile fragments and evidence inventory → initial
-domain catalogue → distribute ORIGINAL facts → ONE reviewer stage (observation pages, final
-catalogue, assignment pages) → publish recorded facts by domain. Profiles are navigation, not
+domain catalogue → assign preserved fact IDs → ONE correction review → accepted domain changes
+and scoped ownership updates → publish recorded facts by domain. Original extraction runs once;
+profiles are navigation, not
 replacement evidence. Domains retain concise change reasons; review includes existing owners AND
 temporary Extra. A fact can belong to multiple domains.
 
@@ -86,10 +87,9 @@ estimated tokens; exceptional 300K–350K inputs carry a logged reason. Mandator
 content that cannot fit fails operationally, never silently truncates. Accounting includes
 instructions, messages, tools, schema and a conservative reserve; provider usage is separate.
 
-Reader/distributor graphs and new-run designers are tool-free. Choose domains receives complete
-paged understanding records, plugin, requirements and current definitions; it stays sequential
-and checkpointed. New runs freeze `design_tool_free: true`; older schema-6 runs retain their
-frozen designer behavior. Reviewer (and historical designer) graphs expose only native ls, glob,
+Reader/initial-assignment graphs and designers are tool-free. Choose domains receives complete
+paged understanding text, plugin, requirements and current definitions; it stays sequential
+and checkpointed. Evidence is labelled text, not another escaped JSON dump. Reviewer graphs expose only native ls, glob,
 grep and read_file through CompositeBackend against a rebuildable, run-owned SQLite evidence index.
 StateBackend contains only small thread-local state, never a corpus copy. There is no host
 filesystem mount, shell, web, delegation, cross-run memory or automatic summarizer. SQLite saves
@@ -108,7 +108,7 @@ Run layout:
 - domains/<readable-name>.md: domain responsibilities and preserved facts, not routine JSON dumps.
 - unresolved.md: complete unassigned/unprocessed material and response links, when present.
 - run.json and run.log: frozen metadata, execution status and safe operational events.
-- _internal/: input snapshots, one facts.jsonl ledger, domains.json and assignments.json.
+- _internal/: input snapshots, one facts.jsonl ledger, domains.json (with membership IDs) and assignments.json.
 - _internal/trace/: raw responses, source manifest, detailed evidence, review observations,
   retained publication revisions, usage.jsonl and checkpoints.sqlite3.
 
@@ -118,7 +118,12 @@ Unknown fields/references are exposed without guessing their meaning, grading or
 Prompts ask for detailed evidence but a compact navigational profile, change-only review observations,
 and explicit ownership rows with reasons only for changed/disputed/unresolved assignments. Complete
 domain definitions are inlined when the fully counted review input fits; oversized rosters receive explicit
-fact-page × definition-page jobs. Original extraction is not repeated for each definition page.
+fact-page × definition-page jobs. Original extraction is not repeated after understanding.
+Python assigns stable IDs from the run, source job, saved response version and entry position;
+re-paging and reassignment never change the evidence body. All assigned entries appear in Markdown,
+without technical IDs or sources. Review patches can explicitly add/remove owners; unchanged
+ownership carries forward. Accepted new/changed responsibilities receive one scoped pass over all
+earlier evidence. Unchanged scopes are not reassigned; no-proposal reviews skip finalization.
 Storage consolidation itself does not reduce model tokens; prompt quality/cost needs a later live comparison.
 
 Execution status is separate from assignment coverage: a complete run may still have unresolved
@@ -126,8 +131,8 @@ facts. “No Extra” means every RECORDED fact has an owner, not proof of compl
 CLI --check-only is observational and makes no writes. The notebook prints only start/final status,
 run path and log path.
 
-**Schema 6 is not yet integrated with Layers 3/4.** No misleading legacy missions/ handoff is
-generated. Historical schema-2/3/4/5 Layer 2 artifacts remain untouched but cannot execute or run checks
+**Schema 7 is not yet integrated with Layers 3/4.** No misleading legacy missions/ handoff is
+generated. Historical schema-2/3/4/5/6 Layer 2 artifacts remain untouched but cannot execute or run checks
 through the new Layer 2 CLI. Layers 3/4 and their historical input workflow remain unchanged.
 Offline tests prove orchestration, not model quality or extraction completeness.
 

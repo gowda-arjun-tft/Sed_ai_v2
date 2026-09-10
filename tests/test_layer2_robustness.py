@@ -7,10 +7,13 @@ from unittest.mock import patch
 
 from langchain_core.runnables import RunnableLambda
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
+from ML.deep_research.layer2.backend.fs import load_json, read_text, write_json
 from ML.deep_research.layer2.backend.jobs import run_jobs
 from ML.deep_research.layer2.backend.evidence import EvidenceStore
 from ML.deep_research.layer2.backend.projections import apply_domains
+from ML.deep_research.layer2.ML.agent import Layer2Response, read_only_filesystem
+from ML.deep_research.layer2.ML.context import estimate
+from ML.deep_research.layer2.backend.settings import stage_uses_tools
 from tests.layer2_fixtures import read_ledger
 from ML.deep_research.layer2.backend.run_log import operational_logger
 from ML.deep_research.layer2.backend.windows import source_windows
@@ -47,23 +50,43 @@ class RunnerTests(unittest.TestCase):
                 facts = read_ledger(run / "_internal/facts.jsonl")
                 assignments = load_json(run / "_internal/assignments.json")["final"]
                 self.assertEqual([f["fact_id"] for f in facts], [a["fact_id"] for a in assignments])
-                self.assertTrue(all(a["domain_ids"] == [final[-1]["domain_id"]] for a in assignments))
+                self.assertTrue(all(final[-1]["domain_id"] in a["domain_ids"] for a in assignments))
+                self.assertIn("d0001", assignments[0]["domain_ids"])
                 report = (run / "domains/additional-use.md").read_text(encoding="utf-8")
                 self.assertIn("17.5 m²", report)
                 self.assertIn("Approved, not operating", report)
                 self.assertNotIn("**applicability:**", report)
                 self.assertNotIn("**means:**", report)
-                self.assertEqual(facts[1]["body"]["applicability"], "Approved alternative")
+                self.assertEqual(facts[1]["body"]["fact"], "Approved, not operating")
                 self.assertFalse(list((run / "domains").glob("*.json")))
                 self.assertEqual(len(facts), 2)
                 self.assertEqual(load_json(run / "run.json")["coverage"]["unresolved_facts"], 0)
                 self.assertEqual(len(fake.calls[-3][1]["facts"]), 2)  # existing owner AND Extra
                 self.assertEqual(fake.calls[-3][1]["domain_definitions"], initial)
-                self.assertEqual(fake.calls[-1][1]["domain_definitions"], final)
-                self.assertEqual([f["initial_assignment"]["domain_ids"] for f in fake.calls[-1][1]["facts"]],
+                self.assertEqual(fake.calls[-1][1]["domain_definitions"],
+                                 [{k: v for k, v in final[-1].items() if k != "fact_ids"}])
+                self.assertEqual([f["initial_assignment"] for f in fake.calls[-1][1]["facts"]],
                                  [["d0001"], []])
-                self.assertEqual([f["body"] for f in fake.calls[-1][1]["facts"]], [f["body"] for f in facts])
-                self.assertEqual(fake.calls[0][1]["new_content"], fake.calls[2][1]["new_content"])
+                for stage, payload, _ in fake.calls[1:]:
+                    self.assertNotIn("new_content", payload)
+                self.assertIn("Fact: Approved, not operating", fake.messages[-1][1])
+                metadata = load_json(run / "run.json")
+                for stage, message in fake.messages:
+                    expected = estimate([{"role": "user", "content": message}],
+                                        read_text(run / "_internal/inputs/prompts" / f"{stage}.md"),
+                                        read_only_filesystem().tools if stage_uses_tools(stage) else (),
+                                        Layer2Response.model_json_schema(), metadata["context_policy"]["framing_reserve"])
+                    self.assertEqual(metadata["jobs"][stage + "/000001"]["input_estimate"],
+                                     expected)
+                store = EvidenceStore(run)
+                self.assertEqual(store.count("initial_decisions"), 0)
+                self.assertEqual(store.count("understanding"), 0)
+                version = metadata["jobs"]["observations/000001"]["evidence_version"]
+                preserved = list(store.documents(version, "/responses/understanding/"))
+                self.assertEqual(json.loads(preserved[0][1]), load_json(run / facts[0]["response_path"]))
+                self.assertTrue(list(store.documents(version, "/facts/")))
+                self.assertTrue(list(store.documents(version, "/domain_definitions/")))
+                self.assertFalse(list(store.documents(version, "/understanding/")))
 
     def test_unusual_objects_are_saved_without_retry_or_status_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -72,7 +95,7 @@ class RunnerTests(unittest.TestCase):
             fake.unusual.add("assignments")
             fake.run(run)
             self.assertEqual(load_json(run / "run.json")["status"], "complete")
-            self.assertEqual(load_json(run / "run.json")["coverage"]["unresolved_facts"], 2)
+            self.assertEqual(load_json(run / "run.json")["coverage"]["unresolved_facts"], 1)
             self.assertIn("unprocessed_response_fields", (run / "unresolved.md").read_text())
             fake.calls.clear()
             fake.run(run)
@@ -108,12 +131,13 @@ class RunnerTests(unittest.TestCase):
             write_json(run / "run.json", record)
             fake = FakeStages()
             fake.delay = .01
-            fake.fail.add(("distribution", "s000002"))
+            fake.fail.add(("understanding", "s000002"))
             fake.run(run)
             manifest = load_json(run / "_internal/trace/source/manifest.json")
-            for stage in ["understanding", "distribution"]:
+            for stage in ["understanding"]:
                 self.assertEqual(sorted(d["source"]["source_id"] for s, d, _ in fake.calls if s == stage),
                                  [w["source_id"] for w in manifest])
+            self.assertTrue(all("source" not in d for s, d, _ in fake.calls if s == "distribution"))
             self.assertEqual(fake.peak, 2)
             self.assertGreater(load_json(run / "run.json")["coverage"]["recorded_facts"], 0)
             self.assertEqual(load_json(run / "run.json")["status"], "partial")

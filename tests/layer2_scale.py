@@ -58,16 +58,13 @@ def metrics():
 
 async def generate(model, messages, **kwargs):
     """Input a native model dispatch; return compact synthetic JSON without using a provider."""
-    data = json.loads(next(m.content for m in reversed(messages) if m.type == "human"))
+    data = json.JSONDecoder().raw_decode(next(m.content for m in reversed(messages) if m.type == "human"))[0]
     if "source" in data and "mode" not in data:
         value = {"profile": "Operating subject; original source available by pointer.",
                  "evidence": [{"fact": "Synthetic navigation entry", "source": data["source"]["source_id"]}]}
     elif "subject" in data:
         value = {"domains": [{"name": "Operations", "responsibilities": ["Recorded conditions"]}]
                  if not data["domain_definitions"] else []}
-    elif "source" in data:
-        value = {"facts": [{"body": {"section": "Recorded conditions", "fact": "Synthetic source-window fact",
-                                      "source": data["source"]["source_id"]}, "domain_ids": ["d0001"]}]}
     elif "observations" in data:
         value = {"domains": [], "dispositions": []}
     elif "domain_plugin" in data:

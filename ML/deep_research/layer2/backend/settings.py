@@ -13,7 +13,7 @@ REASONING_EFFORTS = frozenset({"low", "medium", "high", "max"})
 MODEL_INPUT_TOKEN_LIMIT = 1_050_000
 PROVIDER_MAX_RETRIES = 3
 
-LAYER2_SCHEMA_VERSION = 6
+LAYER2_SCHEMA_VERSION = 7
 CHUNK_STRATEGY = "fixed_token_windows"
 CHUNK_INPUT_PARTITIONING = "overlap_context_v1"
 CHUNK_SIZE_TOKENS = 60_000
@@ -33,13 +33,11 @@ CONTEXT_RESERVE = 8_000
 STAGES = ("understanding", "design", "distribution", "observations", "catalogue", "assignments")
 # Editable names follow execution order; frozen snapshot/job names remain stable for resume.
 PROMPT_FILES = dict(zip(STAGES, (
-    "01_read_facts.md", "02_choose_domains.md", "03_sort_facts.md",
-    "04_review_domains.md", "05_finalize_domains.md", "06_assign_facts.md",
+    "01_read_facts.md", "02_choose_domains.md", "03_assign_facts.md",
+    "04_review_assignments.md", "05_finalize_domains.md", "06_update_assignments.md",
 )))
 
 
-def stage_uses_tools(record: dict, stage: str) -> bool:
-    """Input frozen run/stage; return read-tool availability for graphs and input packing."""
-    return stage not in {"understanding", "distribution"} and not (
-        stage == "design" and record.get("design_tool_free", False)
-    )
+def stage_uses_tools(stage: str) -> bool:
+    """Input stage; return read-tool availability for graphs and input packing."""
+    return stage not in {"understanding", "design", "distribution"}

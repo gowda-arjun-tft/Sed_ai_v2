@@ -8,9 +8,9 @@ The domain plugin defines scope and baseline responsibilities; requirements defi
 
 ## Supplied inputs and page scope
 
-Use only the supplied understanding response JSON (profile and detailed evidence), domain plugin, requirements and current domain_definitions. Comparison results in reconcile mode are provisional decisions about that supplied information, not additional evidence. There are no tools, file retrieval, web access, task delegation or approval loop. Do not infer missing details or claim to have inspected information outside this request.
+Use only the supplied understanding text (profile and detailed evidence with stable fact IDs), domain plugin, requirements and current domain_definitions. The text preserves understanding values; it is not another summary. Source bookkeeping is retained internally. Comparison results in reconcile mode are provisional decisions about that supplied information, not additional evidence. There are no tools, file retrieval, web access, task delegation or approval loop. Do not infer missing details or claim to have inspected information outside this request. Decide domains before assignment; do not assign or repeat fact bodies here.
 
-Work on every explicitly supplied record in this job. All other understanding pages are scheduled separately. A parent_record_id with record_fragment is an exact paged serialization, not a complete record or a summary. Use the parent ID and fragment location; preserve uncertainty when a decision requires context absent from this page. Supporting record IDs belong in evidence_refs. Profiles are navigation, not substitutes for evidence.
+Work on every explicitly supplied record in this job. All other understanding pages are scheduled separately. A continuation marker identifies one part of the same parent record, not an independent fact. Definition/comparison record_fragment values are exact paged serialization. Use the parent ID and fragment location; preserve uncertainty when a decision requires context absent from this page. Supporting record IDs belong in evidence_refs. Profiles are navigation, not substitutes for evidence.
 
 ## Output
 

@@ -61,6 +61,16 @@ def materialize(run, revision):
         (run / name).unlink()  # Exact previous bytes are recoverable in the archive.
 
 
+def domain_records(store):
+    """Input final ownership; yield one domain definition and its source-ordered membership IDs."""
+    for domain in store.rows("domains"):
+        with store.connect() as db:
+            identities = [row[0] for row in db.execute(
+                "SELECT f.id FROM current_facts f JOIN owners o ON f.id=o.fact_id "
+                "WHERE o.domain_id=? ORDER BY f.seq", (domain["domain_id"],))]
+        yield {**domain, "fact_ids": identities}
+
+
 def publish(store):
     """Input preserved indexed records; stream a committed publication and return observational counts."""
     run, unowned = store.run, 0
@@ -104,12 +114,14 @@ def publish(store):
             handle.write(f"- [{domain['definition'].get('name', domain['domain_id'])}]({names[domain['domain_id']]})\n")
         if store.count("audit"):
             handle.write("\n[Unassigned and unprocessed material](unresolved.md)\n")
-        handle.write("\nSchema 6 is not yet integrated with Layers 3/4. Preserved evidence and recovery records are in `_internal/`.\n")
-    write_arrays(root / "records.json", domains=store.rows("domains"), assignments=store.rows("decisions"), audit=store.rows("audit"))
-    write_arrays(run / "_internal/domains.json", initial=store.rows("initial_domains"), final=store.rows("domains"),
+        handle.write("\nSchema 7 is not yet integrated with Layers 3/4. Preserved evidence and recovery records are in `_internal/`.\n")
+    write_arrays(root / "records.json", domains=domain_records(store), assignments=store.rows("final_owners"),
+                 decisions=store.rows("decisions"), audit=store.rows("audit"))
+    write_arrays(run / "_internal/domains.json", initial=store.rows("initial_domains"), final=domain_records(store),
                  dispositions=store.rows("dispositions"))
     write_arrays(run / "_internal/assignments.json", initial=store.rows("initial_owners"),
-                 final=store.rows("decisions"), active_fact_ids=(f["fact_id"] for f in store.rows("facts")))
+                 final=store.rows("final_owners"), decisions=store.rows("decisions"),
+                 active_fact_ids=(f["fact_id"] for f in store.rows("facts")))
     write_json(run / "_internal/trace/publication.json", {"path": root.relative_to(run).as_posix()})
     materialize(run, root)
     return coverage

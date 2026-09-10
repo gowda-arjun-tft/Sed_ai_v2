@@ -1,4 +1,4 @@
-"""Schema-6 six-stage execution over disk evidence and bounded jobs."""
+"""Schema-7 extract-once execution with bounded ownership corrections."""
 
 from __future__ import annotations
 
@@ -19,12 +19,12 @@ from .fs import load_json, now_iso, read_text, sha256, write_json, storage_path
 from .projections import audit, load_ledger, write_arrays
 from .publish import publish
 from .run_log import log_failure, operational_logger
-from .stages import assign, distribute, plan_domains, review, understand
+from .stages import assign, distribute, plan_domains, planning_inputs, review, understand
 from .usage import summarize_usage
 
 
 async def execute(run: Path, logger) -> dict:
-    """Input a schema-6 run; execute finite phase jobs and publish every available result."""
+    """Input a schema-7 run; execute finite phase jobs and publish every available result."""
     record = require_current(run)
     for name, info in record["inputs"].items():
         if sha256(run / "_internal/inputs" / name) != info["sha256"]:
@@ -35,7 +35,7 @@ async def execute(run: Path, logger) -> dict:
     write_json(run / "run.json", record)
     store = EvidenceStore(run)
     load_ledger(store)
-    store.clear("understanding", "needs_owners", "domains", "initial_domains", "dispositions", "comparisons")
+    store.clear("domains", "initial_domains", "comparisons", "changed_domains")
     with store.connect() as db:
         db.execute("DELETE FROM paths")
         db.commit()
@@ -49,13 +49,14 @@ async def execute(run: Path, logger) -> dict:
             # Instructions enter only after independent original-source understanding.
             for label, text in instructions.items():
                 store.add_text(label, text)
-            await plan_domains(store, "design", store.rows("understanding"), instructions, saver, logger)
+            await plan_domains(store, "design", planning_inputs(store), instructions, saver, logger)
             for domain in store.rows("domains"):
                 store.put("initial_domains", domain["domain_id"], domain)
             write_arrays(run / "_internal/domains.json", initial=store.rows("initial_domains"), final=[])
             await distribute(store, saver, logger)
             await review(store, instructions, saver, logger)
-            await plan_domains(store, "catalogue", store.rows("observations"), instructions, saver, logger)
+            if store.count("observations"):
+                await plan_domains(store, "catalogue", store.rows("observations"), instructions, saver, logger)
             await assign(store, saver, logger)
     latest = load_json(run / "run.json")
     for key in list(latest["jobs"]):
@@ -64,7 +65,7 @@ async def execute(run: Path, logger) -> dict:
             write_json(run / "_internal/trace/responses" / key / entry["fingerprint"] / "job.json", entry)
             del latest["jobs"][key]
         elif entry["status"] == "failed":
-            audit(store, "operational_failure", job=key, error_type=entry["error_type"])
+            audit(store, "operational_failure", job=key, error_type=entry["error_type"], scope=entry.get("scope"))
     write_json(run / "run.json", latest)
     coverage = publish(store)
     logger.info("published domains=%d recorded_facts=%d unresolved_facts=%d",
@@ -73,7 +74,7 @@ async def execute(run: Path, logger) -> dict:
 
 
 def run_all(run_dir: Path) -> dict:
-    """Input a schema-6 run; synchronously execute/resume and return provider-reported usage."""
+    """Input a schema-7 run; synchronously execute/resume and return provider-reported usage."""
     run_dir = storage_path(run_dir)
     record = require_current(run_dir)
     if not os.getenv("OPENAI_API_KEY"):

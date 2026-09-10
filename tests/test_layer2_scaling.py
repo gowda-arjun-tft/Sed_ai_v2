@@ -11,7 +11,8 @@ from ML.deep_research.layer2.ML.evidence_backend import EvidenceBackend
 from ML.deep_research.layer2.backend.fs import load_json, write_json, storage_path
 from ML.deep_research.layer2.backend.jobs import iter_jobs
 from ML.deep_research.layer2.backend.packing import record_pages
-from ML.deep_research.layer2.backend.projections import apply_domains, apply_owners, ingest_facts
+from ML.deep_research.layer2.backend.projections import apply_domains
+from ML.deep_research.layer2.backend.ownership import apply_owners
 from ML.deep_research.layer2.backend.run_log import operational_logger
 from ML.deep_research.layer2.backend.stages import plan_domains
 from tests.layer2_fixtures import FakeStages, new_run, read_ledger
@@ -66,7 +67,7 @@ class ScalingTests(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT count(*) FROM blobs").fetchone()[0], blobs)
 
     def test_large_values_are_linked_fragments_not_truncated_or_output_retried(self):
-        original = {"fact": {"fact_id": "f1", "body": "αβ😀 " * 1000}, "initial_assignment": {"domain_ids": []}}
+        original = {"fact_id": "f1", "body": "αβ😀 " * 1000, "initial_assignment": {"domain_ids": []}}
         pages = list(record_pages([original], budget=300))
         self.assertGreater(len(pages), 10)
         self.assertEqual({p[0]["parent_record_id"] for p in pages}, {"f1"})
@@ -163,22 +164,22 @@ class ScalingTests(unittest.TestCase):
             fake = FakeStages()
             from ML.deep_research.layer2.backend.stages import complete_definitions
 
-            def scoped(store, stage, payload):
+            def scoped(store, stage, payload, **kwargs):
                 if stage in {"distribution", "observations", "assignments"}:
                     return None
-                return complete_definitions(store, stage, payload)
+                return complete_definitions(store, stage, payload, **kwargs)
 
-            def pages(store, **kwargs):
-                return ([d] for d in store.rows("domains"))
+            def pages(store, collection="domains", **kwargs):
+                return ([d] for d in store.rows(collection))
 
             with patch("ML.deep_research.layer2.backend.stages.complete_definitions", side_effect=scoped), patch(
                 "ML.deep_research.layer2.backend.stages.definition_pages", side_effect=pages,
             ):
                 fake.run(run)
             distribution = [p for s, p, _ in fake.calls if s == "distribution"]
-            self.assertEqual(sum("source" in p for p in distribution), 1)
+            self.assertEqual(sum("source" in p for p in distribution), 0)
             self.assertEqual(sum(p["mode"] == "ownership" for p in distribution), 2)
-            for stage, count in [("observations", 2), ("assignments", 3)]:
+            for stage, count in [("observations", 2), ("assignments", 1)]:
                 self.assertEqual(sum(s == stage for s, *_ in fake.calls), count)
             facts = read_ledger(run / "_internal/facts.jsonl")
             self.assertEqual(len(facts), 2)

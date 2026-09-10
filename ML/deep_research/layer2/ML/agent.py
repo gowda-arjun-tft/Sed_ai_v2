@@ -45,7 +45,7 @@ def create_stage_agent(run_dir: Path, stage: str, checkpointer=None):
     configure_harness()
     record = load_json(run_dir / "run.json")
     prompt = read_text(run_dir / "_internal" / "inputs" / "prompts" / f"{stage}.md")
-    retrieval = stage_uses_tools(record, stage)
+    retrieval = stage_uses_tools(stage)
     backend = CompositeBackend(default=StateBackend(), routes={
         "/evidence/": EvidenceBackend(run_dir),
         "/history/": EvidenceBackend(run_dir, history=True),

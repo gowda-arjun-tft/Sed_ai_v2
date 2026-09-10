@@ -51,8 +51,8 @@ def observe_response(store, response, fields):
 
 def load_ledger(store):
     """Input run index; rebuild immutable ledger lookup one JSON line at a time."""
-    store.clear("ledger", "facts", "initial_owners", "final_owners", "decisions", "initial_decisions",
-                "audit", "observations", "subject", "dispositions")
+    store.clear("ledger", "facts", "initial_owners", "final_owners", "decisions",
+                "audit", "observations", "subject", "dispositions", "planning", "patch_votes", "replacement_votes")
     with store.connect() as db:
         db.execute("DELETE FROM owners")
     path = store.run / "_internal/facts.jsonl"
@@ -67,38 +67,22 @@ def load_ledger(store):
 
 
 def ingest_facts(store, response):
-    """Input one source response; preserve each body once and separate initial ownership."""
-    observe_response(store, response, {"facts": list})
-    rows = response["value"].get("facts", [])
+    """Input one understanding response; identify immutable evidence without interpreting its content."""
+    rows = response["value"].get("evidence", [])
     if not isinstance(rows, list):
         return
+    version = text_hash(json.dumps([store.run.name, response["job"], response["value"]],
+                                   ensure_ascii=False, sort_keys=True))
     for i, row in enumerate(rows, 1):
-        identity = f"f-{response['fingerprint'][:20]}-{i:06d}"
-        fact = {"fact_id": identity, "body": row.get("body", row) if isinstance(row, dict) else row,
+        identity = f"f-{version[:20]}-{i:06d}"
+        fact = {"fact_id": identity, "body": row,
                 "source": response["payload"]["source"], "response_path": response["response_path"]}
         old = store.get("ledger", identity)
         if old is not None and old != fact:
             raise OSError("immutable fact ID collision or changed stored fact")
         store.put("ledger", identity, fact)
         store.put("facts", identity, fact)
-        domains = row.get("domain_ids", []) if isinstance(row, dict) else []
-        if not isinstance(domains, list):
-            audit(store, "unusable_initial_owners", value=domains, fact_id=identity,
-                  response_path=response["response_path"])
-            domains = []
-        valid = []
-        for domain in domains:
-            if isinstance(domain, str) and store.get("domains", domain) is not None:
-                valid.append(domain)
-            else:
-                audit(store, "unknown_initial_owner", value=domain, fact_id=identity,
-                      response_path=response["response_path"])
-        store.put("initial_owners", identity, {"fact_id": identity, "domain_ids": valid})
-        if isinstance(row, dict) and "body" in row:
-            extra = {k: v for k, v in row.items() if k not in {"body", "domain_ids"}}
-            if extra:
-                audit(store, "unprocessed_fact_fields", fact_id=identity, value=extra,
-                      response_path=response["response_path"])
+        store.put("planning", identity, {"fact_id": identity})
 
 
 def save_ledger(store):
@@ -141,43 +125,3 @@ def apply_domains(store, response):
                     audit(store, "conflicting_dispositions", previous=previous, value=row,
                           response_path=response["response_path"])
                 store.put("dispositions", identity, row)
-
-
-def apply_owners(store, response, *, initial=False):
-    """Input ownership rows; combine explicit IDs and expose unknown references without grading."""
-    observe_response(store, response, {"assignments": list})
-    rows = response["value"].get("assignments", [])
-    if not isinstance(rows, list):
-        return
-    supplied = {f.get("fact_id") for f in response.get("payload", {}).get("facts", [])
-                if isinstance(f, dict) and isinstance(f.get("fact_id"), str)}
-    returned = {r.get("fact_id") for r in rows if isinstance(r, dict) and isinstance(r.get("fact_id"), str)}
-    if supplied - returned:
-        audit(store, "unresolved_comparison", fact_ids=sorted(supplied - returned),
-              definition_page=response.get("payload", {}).get("domain_page"),
-              response_path=response["response_path"])
-    collection = "initial_owners" if initial else "final_owners"
-    for i, row in enumerate(rows):
-        store.put("initial_decisions" if initial else "decisions", response["fingerprint"] + str(i), row)
-        identity = row.get("fact_id") if isinstance(row, dict) else None
-        domains = row.get("domain_ids") if isinstance(row, dict) else None
-        if not isinstance(identity, str) or store.get("facts", identity) is None or not isinstance(domains, list):
-            audit(store, "unusable_assignments", value=row, response_path=response["response_path"])
-            continue
-        valid = []
-        for domain in domains:
-            if isinstance(domain, str) and store.get("domains", domain) is not None:
-                valid.append(domain)
-            else:
-                audit(store, "unknown_domain", value=row, response_path=response["response_path"])
-        prior = store.get(collection, identity) or {"fact_id": identity, "domain_ids": []}
-        prior["domain_ids"] = list(dict.fromkeys(prior["domain_ids"] + valid))
-        store.put(collection, identity, prior)
-        if not initial:
-            with store.connect() as db:
-                db.executemany("INSERT OR IGNORE INTO owners VALUES(?,?)", [(identity, d) for d in valid])
-        if not domains and row.get("reason"):
-            audit(store, "unresolved_ownership_decision", value=row, response_path=response["response_path"])
-        extras = {k: v for k, v in row.items() if k not in {"fact_id", "domain_ids", "reason"}}
-        if extras:
-            audit(store, "unprocessed_assignment_fields", value=extras, response_path=response["response_path"])

@@ -6,15 +6,30 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer2.backend.publication import domain_markdown, domain_names, readable
+from ML.deep_research.layer2.backend.publication import domain_names, readable
 from ML.deep_research.layer2.backend.publish import publish, write_domain
 from ML.deep_research.layer2.backend.evidence import EvidenceStore
-from ML.deep_research.layer2.backend.projections import ingest_facts, save_ledger, apply_owners, apply_domains
+from ML.deep_research.layer2.backend.projections import ingest_facts, save_ledger, apply_domains
+from ML.deep_research.layer2.backend.ownership import apply_owners, expect_replacements, commit_replacements
 from tests.layer2_fixtures import read_ledger
 from tests.layer2_fixtures import FakeStages, new_run, published
 
 
 class PublicationTests(unittest.TestCase):
+    def render_domain(self, definition, facts):
+        """Exercise the production streaming publisher using disposable immutable records."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = EvidenceStore(Path(tmp))
+            for i, fact in enumerate(facts):
+                identity = f"f{i}"
+                store.put("ledger", identity, {**fact, "fact_id": identity})
+                store.put("facts", identity, fact)
+                with store.connect() as db:
+                    db.execute("INSERT INTO owners VALUES(?,?)", (identity, "d0001"))
+            path = Path(tmp) / "domain.md"
+            write_domain(store, path, {"domain_id": "d0001", "definition": definition})
+            return path.read_text(encoding="utf-8")
+
     def test_unconventional_domains_do_not_hide_usable_dispositions(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = EvidenceStore(new_run(Path(tmp)))
@@ -36,7 +51,7 @@ class PublicationTests(unittest.TestCase):
             self.assertTrue((run / "_internal/trace/checkpoints.sqlite3").exists())
             facts = read_ledger(run / "_internal/facts.jsonl")
             raw = load_json(run / facts[0]["response_path"])
-            self.assertEqual([r["body"] for r in facts], [r["body"] for r in raw["facts"]])
+            self.assertEqual([r["body"] for r in facts], raw["evidence"])
             self.assertFalse((run / "facts").exists())
             self.assertFalse(list(run.glob("domains/**/*.json")))
             report = run / "domains/additional-use.md"
@@ -54,10 +69,9 @@ class PublicationTests(unittest.TestCase):
     def test_ledger_retains_generations_and_rejects_conflict_without_overwrite(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))
-            row = {"job": "distribution/000001", "fingerprint": "a" * 64,
+            row = {"job": "understanding/000001", "fingerprint": "a" * 64,
                    "payload": {"source": {"source_id": "s1", "start_byte": 0}},
-                   "value": {"facts": [{"body": {"fact": "ä\n原文", "unknown": [None, False, 3]},
-                                         "domain_ids": []}]}}
+                   "value": {"evidence": [{"fact": "ä\n原文", "unknown": [None, False, 3]}]}}
             store = EvidenceStore(run)
             row["response_path"] = "raw.json"
             ingest_facts(store, row)
@@ -69,16 +83,17 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual((run / "_internal/facts.jsonl").read_bytes(), before)
             with patch("ML.deep_research.layer2.backend.projections.atomic_text", side_effect=OSError):
                 with self.assertRaises(OSError):
-                    ingest_facts(store, {**row, "fingerprint": "b" * 64})
+                    ingest_facts(store, {**row, "job": "understanding/000002"})
                     save_ledger(store)
             self.assertEqual((run / "_internal/facts.jsonl").read_bytes(), before)
-            ingest_facts(store, {**row, "fingerprint": "b" * 64})
+            ingest_facts(store, {**row, "job": "understanding/000002"})
             save_ledger(store)
             ledger = read_ledger(run / "_internal/facts.jsonl")
             self.assertEqual(ledger[0], original[0])
             self.assertEqual(len(ledger), 2)
             before = (run / "_internal/facts.jsonl").read_bytes()
-            row["value"]["facts"][0]["body"] = "changed"
+            # Same saved content identity cannot overwrite a conflicting ledger body.
+            store.put("ledger", original[0]["fact_id"], {**original[0], "body": "corrupt"})
             with self.assertRaisesRegex(OSError, "immutable"):
                 ingest_facts(store, row)
             self.assertEqual((run / "_internal/facts.jsonl").read_bytes(), before)
@@ -141,18 +156,21 @@ class PublicationTests(unittest.TestCase):
                             {"fact_id": "unknown", "domain_ids": ["d0001"], "reason": "KEEP_UNKNOWN"},
                             {"fact_id": facts[0]["fact_id"], "domain_ids": ["../../outside"], "why": 9}]}}
             store = EvidenceStore(run)
-            store.clear("final_owners", "decisions")
+            store.clear("final_owners", "decisions", "replacement_votes")
             with store.connect() as db:
                 db.execute("DELETE FROM owners")
             response["response_path"] = "raw.json"
+            response["payload"] = {"facts": facts, "final_domain_ids": ["d0001", "d0002"]}
+            expect_replacements(store, response["payload"])
             apply_owners(store, response)
+            commit_replacements(store)
             counts = publish(store)
             self.assertEqual(counts["unresolved_facts"], 1)
             for name in ("operations", "ownership"):
                 text = (run / f"domains/{name}.md").read_text(encoding="utf-8")
                 self.assertIn("17.5 m²", text)
                 self.assertNotIn("Two relevant owners", text)
-            self.assertEqual(load_json(run / "_internal/assignments.json")["final"],
+            self.assertEqual(load_json(run / "_internal/assignments.json")["decisions"],
                              response["value"]["assignments"])
             audit = (run / "unresolved.md").read_text(encoding="utf-8")
             for value in ("OWNER_UNKNOWN", "KEEP_UNKNOWN", "nested", "../../outside"):
@@ -207,7 +225,7 @@ class PublicationTests(unittest.TestCase):
         facts = [{"body": body, "source": {"input_bom_bytes": 3, "start_byte": 42},
                   "fact_id": "PRIVATE_ID", "response_path": "PRIVATE_PATH"} for body in bodies]
         original = copy.deepcopy((definition, facts))
-        text = domain_markdown(definition, facts)
+        text = self.render_domain(definition, facts)
         self.assertEqual((definition, facts), original)
         for marker in ("d1234", "PRIVATE_", "input bom", "start byte", "### Fact"):
             self.assertNotIn(marker, text)
@@ -215,17 +233,17 @@ class PublicationTests(unittest.TestCase):
                        "Proposed, not installed", "Nested substantive source", "kWh", "6,047 m²", "7,704.08 m²",
                        "ä 原文\n  second line", "false", "null", "{}", "[]", "**quantity:** 0"):
             self.assertIn(marker, text)
-        for heading in ("Supply", "Areas", "Other supplied facts"):
+        for heading in ("Supply", "Areas", "Supplied facts"):
             self.assertEqual(text.count("## " + heading), 1)
         self.assertLess(text.index("Contradictory:"), text.index("## Areas"))
         self.assertLess(text.index("6,047"), text.index("7,704.08"))
         self.assertNotIn("**means:**", text)
         self.assertNotIn("**applicability:**", text)
         self.assertNotIn("Capacity unknown—not a breach.", text)
-        self.assertIn("No recorded facts assigned", domain_markdown(definition, []))
-        self.assertIn("null", domain_markdown({"responsibilities": None}, []))
+        self.assertIn("No recorded facts assigned", self.render_domain(definition, []))
+        self.assertIn("null", self.render_domain({"responsibilities": None}, []))
 
-    def test_streaming_and_memory_views_hide_only_exact_top_level_fields(self):
+    def test_streaming_view_hides_only_exact_top_level_fields(self):
         body = {"section": "Supply", "fact": "Proposed: applicability means unconfirmed—not installed.",
                 "means": "OMIT_MEANING", "applicability": "OMIT_STATUS", "source": "OMIT_SOURCE",
                 "extra": {"means": "KEEP_NESTED", "applicability": "KEEP_NESTED_STATUS"}}
@@ -240,11 +258,11 @@ class PublicationTests(unittest.TestCase):
                 db.execute("INSERT INTO owners VALUES('f1','d0001')")
             path = Path(tmp) / "energy.md"
             write_domain(store, path, domain)
-            for text in (path.read_text(encoding="utf-8"), domain_markdown(domain["definition"], [fact])):
-                self.assertNotIn("OMIT_", text)
-                self.assertIn(body["fact"], text)
-                self.assertIn("KEEP_NESTED", text)
-                self.assertIn("KEEP_NESTED_STATUS", text)
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("OMIT_", text)
+            self.assertIn(body["fact"], text)
+            self.assertIn("KEEP_NESTED", text)
+            self.assertIn("KEEP_NESTED_STATUS", text)
             self.assertEqual(store.get("ledger", "f1")["body"], original)
             self.assertEqual(body, original)
 

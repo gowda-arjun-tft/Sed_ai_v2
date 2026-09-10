@@ -7,12 +7,14 @@ from itertools import islice
 from pathlib import Path
 from uuid import uuid4
 
-from ..ML.agent import Layer2Response, create_stage_agent, read_only_filesystem, response_value
-from ..ML.context import dump, estimate
+from ..ML.agent import create_stage_agent, response_value
+from ..ML.context import dump
 from .fs import load_json, now_iso, read_text, text_hash, write_json, storage_path
 from .usage import UsageCallback
 from .settings import stage_uses_tools
 from .run_log import log_failure
+from .evidence_text import message_text
+from .packing import input_tokens
 
 
 def saved_object(path: Path):
@@ -47,15 +49,13 @@ async def run_jobs(run: Path, stage: str, payloads, version,
     record = load_json(run / "run.json")
     prompt = read_text(run / "_internal" / "inputs" / "prompts" / f"{stage}.md")
     policy = record["context_policy"]
-    retrieval = stage_uses_tools(record, stage)
+    retrieval = stage_uses_tools(stage)
     checkpointed = stage not in {"understanding", "distribution"}
     concurrency = 1 if checkpointed else int(record["chunking"]["max_concurrency"])
     if concurrency < 1:
         raise ValueError("max_concurrency must be positive")
     inputs, configs, pending, results = [], [], [], {}
     frozen = {k: record[k] for k in ("model", "reasoning_effort", "context_policy", "chunking")}
-    if stage == "design" and "design_tool_free" in record:
-        frozen["design_tool_free"] = record["design_tool_free"]
     for index, payload in enumerate(payloads):
         key = f"{prefix or stage}/{index + offset + 1:06d}"
         signature = payload
@@ -72,7 +72,9 @@ async def run_jobs(run: Path, stage: str, payloads, version,
             "thread_id": str(uuid4()), "attempt": 0, "status": "pending",
         }
         entry.update(fingerprint=fingerprint, response_path=relative, stage=stage,
-                     execution_id=record.get("execution_id"), evidence_version=version)
+                     execution_id=record.get("execution_id"), evidence_version=version,
+                     scope={"fact_ids": [f["fact_id"] for f in payload.get("facts", []) if "fact_id" in f],
+                            "domain_ids": payload.get("final_domain_ids", [])})
         value = saved_object(run / relative)
         record["jobs"][key] = entry
         if value is not None:
@@ -87,11 +89,9 @@ async def run_jobs(run: Path, stage: str, payloads, version,
                   "callbacks": [UsageCallback(run / "_internal/trace", entry["thread_id"])]}
         if not checkpointed:
             config["max_concurrency"] = concurrency
-        message = {"role": "user", "content": dump(payload)}
+        message = {"role": "user", "content": message_text(payload)}
         # Full final schema/tool accounting is repeated by InputBudget on every turn.
-        tools = read_only_filesystem().tools if retrieval else ()
-        count = estimate([message], prompt, tools, response_schema=Layer2Response.model_json_schema(),
-                         reserve=policy["framing_reserve"])
+        count = input_tokens(run, stage, payload)
         entry["input_estimate"] = count
         if count > policy["maximum_tokens"]:
             entry.update(status="failed", error_type="InputSizeError")
@@ -145,7 +145,6 @@ async def run_jobs(run: Path, stage: str, payloads, version,
                     record["jobs"][key].update(status="failed", error_type=type(exc).__name__,
                                                updated_at=now_iso())
                     logger.error("job_failed job=%s error_type=%s", key, type(exc).__name__)
-            write_json(run / "run.json", record)
     write_json(run / "run.json", record)
     return [results[i] for i in sorted(results)]
 

@@ -2,8 +2,8 @@
 
 ## Project Structure & Module Organization
 
-`ML/deep_research/layer2/` designs plugin-driven domains, reads and distributes original source
-facts, then performs one paged reviewer stage. Its CLI is only an adapter;
+`ML/deep_research/layer2/` extracts original evidence once, designs plugin-driven domains,
+assigns stable fact IDs and performs one paged correction review. Its CLI is only an adapter;
 operations live in `layer2/backend/`, and AI code plus six generic prompts in `layer2/ML/`.
 Use package-level `create_run` and `run_all` as public Python entrypoints; the notebook is the UI.
 See `layer2/README.md` for the workflow. Industry definitions belong in the selected plugin,
@@ -15,8 +15,8 @@ the available external reports. Prompts sit below each layer; design notes are i
 `ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
 Group new runs as `runs/<parent>-<markdown-name>-<short-path-id>/L2_*` and place the derived `L3_*`
-beside its historical Layer 2 source. Layer 2 schema-2/3/4/5 artifacts are read-only. New Layer 2 runs
-use schema 6, not yet integrated with Layers 3/4; do not produce a legacy missions handoff.
+beside its historical Layer 2 source. Layer 2 schema-2/3/4/5/6 artifacts are read-only. New Layer 2 runs
+use schema 7, not yet integrated with Layers 3/4; do not produce a legacy missions handoff.
 
 ## Build, Test, and Development Commands
 
@@ -50,7 +50,7 @@ reasoning and low web-search context and verbosity; new runs may select supporte
 freeze those controls in `run.json`. Do not
 restate model, search, token, source, or report limits in prompts.
 
-Layer 2 schema 6 freezes factsheet, ordinary Markdown plugin, user requirements and prompts.
+Layer 2 schema 7 freezes factsheet, ordinary Markdown plugin, user requirements and prompts.
 The engine has no fixed domain count or real-estate-specific routing logic. Historical roster and
 input helpers live in Layer 3 settings and `legacy_input.py`; the old planner is a test fixture.
 Do not reintroduce them into Layer 2. Preserve shared model and operational helper behavior.
@@ -59,12 +59,12 @@ Unicode-safe boundaries without losing source characters. Source understanding a
 are tool-free, using native abatch_as_completed with frozen concurrency five by default.
 Do not add a second semaphore/task scheduler. Review phases/pages run sequentially once.
 
-New schema-6 runs freeze design_tool_free=true. Choose domains has no tools or evidence backend;
-it receives every understanding page, plugin, requirements and current definitions explicitly.
+Choose domains has no tools or evidence backend;
+it receives every understanding evidence page as labelled text, plugin, requirements and current definitions explicitly.
 Keep it sequential and checkpointed. Reconciliation must include corresponding current definitions
-and earlier additions, with bounded pages rather than inaccessible pointers. Older schema-6 runs
-without this setting retain their frozen designer behavior; never convert existing runs implicitly.
-Reviewer and historical designer tools are only native ls/glob/grep/read_file on registered run-owned
+and earlier additions, with bounded pages rather than inaccessible pointers. Historical runners and
+designer capability branches are not retained; never convert existing runs implicitly.
+Reviewer tools are only native ls/glob/grep/read_file on registered run-owned
 SQLite evidence through CompositeBackend; StateBackend holds small thread-local state. No host mount, shell, web, subagents, cross-run memory or model-writable host
 files. SQLite checkpoints and source pointers preserve retrieval state without automatic summarization.
 Assembled input targets 300K estimated tokens with logged exceptional tolerance through 350K.
@@ -76,7 +76,7 @@ retries. Save all returned objects without semantic grading, deduplication, repa
 Store immutable fact bodies separately from ownership. Review all recorded facts, not only Extra;
 retain unknown/unusable references in the audit. Execution status and assignment coverage are separate.
 Coverage does not prove exhaustive source extraction. Input fingerprints preserve historical response
-versions/publications when recovery changes downstream input. Schema-2/3/4/5 resume/check is rejected
+versions/publications when recovery changes downstream input. Schema-2/3/4/5/6 resume/check is rejected
 without mutation. Layer 2 must not create a misleading eight-domain handoff to Layers 3/4.
 
 Publish readable README/domain_plan/domain Markdown views plus unresolved.md when needed. Keep one
@@ -87,12 +87,25 @@ change-only review observations and concise ownership rows; every supplied fact 
 Inline complete domain definitions only when accounted input fits; otherwise schedule every required
 definition-page comparison. Do not substitute ranked retrieval for exhaustive scheduled coverage.
 Source-only understanding receives neither plugin nor requirements. Planning/domain review receive both;
-sorting and assignment use domain responsibilities. Read original source by manifest seeks in bounded
+initial assignment and scoped updates use domain responsibilities. Read original source only during
+understanding, by manifest seeks in bounded
 native batches of at most twice concurrency. Planning/review jobs use fresh contexts per page and stable
 checkpoint threads on resume. Archive complete older exchanges before pointer eviction, without summaries.
 Original snapshots/raw responses/ledger are authoritative; the SQLite evidence index is rebuildable.
 Avoid corpus-sized checkpoint state and fingerprints. There is no application output-token limit;
 page oversized completed values for downstream jobs, preserving their parent IDs and locations.
+
+Understanding evidence entries are the immutable fact ledger. Application-owned IDs distinguish run,
+source job, saved response content version and entry position; re-paging/renaming/reassignment retain
+IDs. Preserve identical entries separately and retain old versions. Assign settled domains by IDs,
+not by extracting source again. Compact model evidence omits source bookkeeping but preserves labelled
+facts, relationships, contradictions and supplemental values; count the exact dispatched message.
+Review every recorded fact once, return explicit add/remove ownership operations and separate domain
+proposals. Preserve unchanged owners and audit conflicting/unknown operations without repair. Skip
+finalization without proposals. Revisit all evidence only for accepted new/changed responsibilities;
+missing decisions never remove owners and incomplete comparison coverage remains visible. Final domain
+JSON membership is derived from one ownership mapping. Publish every assigned entry without another
+selection or rewrite, hiding technical IDs and separate means/applicability/source fields in Markdown.
 
 ## Model-Output Freedom
 

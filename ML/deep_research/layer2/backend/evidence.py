@@ -45,9 +45,9 @@ class EvidenceStore:
                     seq INTEGER PRIMARY KEY, collection TEXT, id TEXT, body TEXT,
                     UNIQUE(collection,id));
                 CREATE INDEX IF NOT EXISTS records_order ON records(collection,seq);
-                CREATE TABLE IF NOT EXISTS active_facts (id TEXT PRIMARY KEY);
+                CREATE TABLE IF NOT EXISTS active_facts (seq INTEGER PRIMARY KEY, id TEXT UNIQUE);
                 CREATE VIEW IF NOT EXISTS current_facts AS
-                    SELECT r.seq,r.id,r.body FROM records r JOIN active_facts a ON a.id=r.id
+                    SELECT a.seq,r.id,r.body FROM records r JOIN active_facts a ON a.id=r.id
                     WHERE r.collection='ledger';
                 CREATE TABLE IF NOT EXISTS owners (
                     fact_id TEXT, domain_id TEXT, PRIMARY KEY(domain_id,fact_id));
@@ -81,7 +81,7 @@ class EvidenceStore:
         """Input a projection key/value; store a JSON value for ordered bounded retrieval."""
         with self.connect() as db:
             if collection == "facts":
-                db.execute("INSERT OR IGNORE INTO active_facts VALUES(?)", (str(identity),))
+                db.execute("INSERT OR IGNORE INTO active_facts(id) VALUES(?)", (str(identity),))
                 return
             body = json.dumps(value, ensure_ascii=False)
             db.execute("INSERT INTO records(collection,id,body) VALUES(?,?,?) "
@@ -134,7 +134,6 @@ class EvidenceStore:
                 digest = text_hash(body)
                 db.execute("INSERT OR IGNORE INTO blobs VALUES(?,?)", (digest, body))
                 db.execute("INSERT OR REPLACE INTO paths VALUES(?,?)", (name, digest))
-        return ["/evidence" + name for name in names]
 
     def add_records(self, label, records):
         """Input ordered records; index each separately, retaining arbitrary JSON and identifiers."""
@@ -213,10 +212,8 @@ class EvidenceStore:
                                (thread, f"/{path.stem}/{i + 1:06d}.txt", digest))
                 db.execute("INSERT INTO history_files VALUES(?,?)", (thread, path.stem))
 
-    def history(self, thread, prefix="/", *, names_only=False, refresh=True):
+    def history(self, thread, prefix="/", *, names_only=False):
         """Input app thread/prefix; yield scoped indexed pages or path metadata without corpus reads."""
-        if refresh:
-            self.index_history(thread)
         with self.connect(read_only=True) as db:
             columns = "p.path" if names_only else "p.path,b.body"
             join = "" if names_only else "JOIN blobs b ON p.hash=b.hash"

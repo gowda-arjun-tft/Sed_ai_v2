@@ -6,7 +6,7 @@ The current implemented architecture and layer boundaries are documented in [AGE
 
 ## Components
 
-Layer 2 schema 6 reads original evidence, designs plugin-driven domains, distributes facts and performs one paged review. Its dynamic outputs are not yet integrated with Layers 3/4. The unchanged downstream layers continue using historical inputs: Layer 3 runs eight direct domain researchers and a synthesis; Layer 4 performs segregation, external research and synthesis.
+Layer 2 schema 7 extracts evidence once, designs plugin-driven domains, assigns fact IDs and performs one paged correction review. Its dynamic outputs are not yet integrated with Layers 3/4. The unchanged downstream layers continue using historical inputs: Layer 3 runs eight direct domain researchers and a synthesis; Layer 4 performs segregation, external research and synthesis.
 The repository-scoped Railway Track skill maintains concise durable project context for authorized meaningful changes.
 Layer 2 operations live in `backend/`, while AI construction, input accounting and six generic prompts
 live in `ML/`. Industry definitions belong to the selected plugin; the editable requirements template
@@ -28,13 +28,16 @@ The rebuildable evidence.sqlite3 stores immutable virtual-page versions outside 
 search scans exact text and supports exhaustive traversal through shards. Full older message/tool groups
 are archived by session before eviction. Fact bodies are streamed from the canonical ledger; active
 facts and ownership use references. Publications are streamed one domain at a time.
+Understanding retrieval uses raw-response pages and indexed ledger facts, without a duplicate
+understanding projection. Tool-free planning skips retrieval snapshots; current definitions are
+indexed when review starts. Unchanged-domain assignment stages skip indexing, retaining audits.
 One idle evidence connection spans stage execution without a held transaction, avoiding last-close
 WAL cleanup during concurrent tool access. Native read operations have three attempts for SQLite
 BUSY/PROTOCOL only, fresh query-only connections (5s busy timeout), and 0.25s/0.5s backoff. Writes,
 initialization, history indexing and checkpoints are not retried by this mechanism. Safe run.log
 diagnostics record context, codes, durations and traceback frames without model/error payloads.
 Replaced visible Markdown is archived before refreshing. Unprocessed values are exposed, never repaired.
-Historical schema-2/3/4/5 execution and checks are rejected without mutation or migration.
+Historical schema-2/3/4/5/6 execution and checks are rejected without mutation or migration.
 Railway Track current-truth records, change history, and outcome checkpoints are stored under this directory.
 
 ## External Services
@@ -49,32 +52,40 @@ Not established.
 
 Secrets, URL validation, tool isolation, and model-output boundaries are governed by [AGENTS.md](../AGENTS.md).
 Layer 2 new-run design is tool-free, with no evidence backend, while remaining sequential and
-SQLite-checkpointed. The frozen design_tool_free setting defaults to the original tool-enabled
-behavior for older schema-6 runs. Review and historical design expose only native read tools
+SQLite-checkpointed. Historical designer capability branches are removed. Review exposes only native read tools
 over registered SQLite evidence via CompositeBackend, with only small StateBackend thread state,
 without a host mount or model writes. Every dispatch estimates complete input against the 300K
 target/350K maximum; old reviewer read bodies remain retrievable rather than summarized.
 
 ## Key Flows
 
-Layer 2: source understanding -> domain design -> original-source distribution -> observation pages -> final catalogue -> assignment pages -> publication. Independent source jobs use native batching; reviewer pages are awaited sequentially without constraining checkpoint-internal concurrency. See [README.md](../README.md) for interfaces and the separate historical Layer 3/4 workflow.
+Layer 2: source understanding -> immutable evidence IDs -> domain design -> initial ID assignment -> correction review -> accepted domain changes -> scoped ownership updates -> publication. Independent reading/assignment jobs use native batching; reviewer pages are awaited sequentially without constraining checkpoint-internal concurrency. See [README.md](../README.md) for interfaces and the separate historical Layer 3/4 workflow.
 Understanding prompts keep profiles navigational and request detailed same-subject/topic evidence
 groups with fact, relationships, contradictions and supplied provenance-ID lists. Qualifications
 remain in fact rather than a separate applicability field; the contract is prompt-owned and applies
-through new-run snapshots. See the Layer 2 guide for the evidence-field rules. Review reports changes only;
-assignment prompts request explicit ownership rows with reasons only for changed/disputed/unresolved
+through new-run snapshots. See the Layer 2 guide for the evidence-field rules.
+prompts retain rules with exceptions/actors, distinguish comparable contradictions from scoped differences,
+and separate independently useful topics. Ownership requires a specific supported responsibility;
+review retrieval is need-driven without reducing scheduled coverage. The fixed manual benchmark is
+outside the production pipeline, and real-model quality gains remain unverified.
+Review reports changes only; assignment prompts request explicit ownership rows with reasons only for changed/disputed/unresolved
 placements. Initial owners are supplied for comparison. Complete catalogues are inlined only when
 accounted review inputs fit the normal target; otherwise finite jobs compare every required fact/proposal page with every definition page.
 Source reading receives only original evidence; planning/domain review use plugin and requirements.
 Distribution and final assignment use derived responsibilities. The original source is tokenized once
 for its manifest, then accessed by byte-range seeks and bounded native batches (at most 2 × concurrency).
-Large-roster distribution extracts once and schedules ownership-only comparisons. Planning/finalization
+Extraction happens only during understanding. Large rosters use preserved evidence for ownership-only comparisons. Planning/finalization
 apply model-authored explicit updates in source order; unchanged definitions persist automatically.
-New-run design receives all scheduled understanding JSON evidence, plugin, requirements and current
+New-run design receives all scheduled labelled understanding evidence, plugin, requirements and current
 definitions explicitly. Large-roster reconciliation carries the corresponding current definitions
 and earlier additions in bounded requests; unknown references are audited without content retries.
 Checkpoint recovery is independent of tool availability. No historical run is converted automatically.
-Distribution requests concise facts and useful topic labels, with qualifications inside fact rather
-than separate means or applicability fields;
-design/catalogue request concise duties with rationale kept separate. These changes use the existing
-three stage prompts and new-run snapshots, not semantic response schemas. Schema 6 adds bounded job modes, not new agent stages.
+Application fact IDs include run, source job, saved response content version and entry position.
+Raw bodies and historical generations remain unchanged; active evidence is ordered by source.
+One ownership mapping drives final domain JSON membership and clean Markdown, with no duplicate bodies.
+Compact inputs retain labelled facts/relationships/contradictions and supplemental values; source
+bookkeeping stays internal. Dispatch and token accounting use the same text, without an escaped evidence dump.
+Reviewer add/remove operations carry unchanged ownership forward and expose conflicts. No proposals means
+no finalization call. Accepted new/changed responsibilities trigger one all-evidence pass only for those
+scopes. Missing decisions cannot remove owners; partial positive matches remain publishable with coverage
+warnings. All assigned entries appear in Markdown without another selection, rewrite or source extraction.

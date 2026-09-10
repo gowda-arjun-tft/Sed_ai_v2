@@ -41,31 +41,15 @@ def domain_names(definitions: list) -> dict:
     return names
 
 
-def domain_markdown(definition: dict, facts: list) -> str:
-    """Input a domain definition and assigned records; return research prose without audit metadata."""
-    blocks = [f"# {definition.get('name', 'Unnamed domain')}", "## Research responsibilities"]
-    duties = definition.get("responsibilities", [])
-    if isinstance(duties, list):
-        blocks.append("\n".join("- " + readable(duty).replace("\n", "\n  ") for duty in duties))
-    else:
-        blocks.append(readable(duties))
-    groups = {}
-    for record in facts:
-        heading, text = fact_markdown(record["body"])
-        groups.setdefault(heading, []).append(text)
-    for heading, entries in groups.items():
-        blocks.extend([f"## {heading}", "\n\n".join(entries)])
-    if not facts:
-        blocks.append("No recorded facts assigned. This is not evidence that no relevant facts exist.")
-    return "\n\n".join(blocks) + "\n"
 def fact_markdown(body):
     """Input one immutable body; return its section and research prose without bookkeeping."""
     section = body.get("section") if isinstance(body, dict) else None
     usable = isinstance(section, str) and section.strip() and "\n" not in section and "\r" not in section
-    heading = section.strip() if usable else "Other supplied facts"
+    heading = section.strip() if usable else "Supplied facts"
     if isinstance(body, dict):
         details = {key: value for key, value in body.items()
                    if key not in {"source", "means", "applicability"}
+                   and not (key in {"relationships", "contradictions"} and value in ([], "", None))
                    and not (key == "section" and usable)}
         if "fact" in details:
             text = "- " + readable(details.pop("fact")).replace("\n", "\n  ")

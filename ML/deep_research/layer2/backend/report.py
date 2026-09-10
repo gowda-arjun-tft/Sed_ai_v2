@@ -1,4 +1,4 @@
-"""Observational schema-6 serialization, persistence and assignment diagnostics."""
+"""Observational schema-7 serialization, persistence and assignment diagnostics."""
 
 from pathlib import Path
 
@@ -8,7 +8,7 @@ from .jobs import saved_object
 
 
 def run_checks(run_dir: Path) -> list[tuple[int, str, bool, str]]:
-    """Input a schema-6 run; return technical observations without writes or model calls."""
+    """Input a schema-7 run; return technical observations without writes or model calls."""
     run_dir = storage_path(run_dir)
     record = require_current(run_dir)
     inputs_ok = all((run_dir / "_internal/inputs" / name).is_file()

@@ -102,10 +102,9 @@ class HarnessTests(unittest.TestCase):
                          "private chain-of-thought", "No web research"]:
                 self.assertIn(text, prompt)
         self.assertIn("complete cross-boundary fact", prompts["understanding"])
-        self.assertIn("ALL initial owners", prompts["assignments"])
         self.assertIn("not only Extra", prompts["assignments"])
         self.assertIn("stable domain_id", prompts["catalogue"])
-        self.assertIn("ORIGINAL source", prompts["distribution"])
+        self.assertIn("Original-source extraction is already complete", prompts["distribution"])
         self.assertIn("baseline responsibilities only from that plugin", prompts["design"])
         self.assertIn("no implicit industry or fixed roster", prompts["design"])
         self.assertIn("No review observations or final catalogue exist", prompts["design"])
@@ -115,7 +114,7 @@ class HarnessTests(unittest.TestCase):
         self.assertNotIn('"mission":', "".join(prompts.values()))
         self.assertIn("Put unique factual detail in evidence", prompts["understanding"])
         self.assertIn("not replace evidence extraction", prompts["understanding"])
-        self.assertIn('Return {"observations": []}', prompts["observations"])
+        self.assertIn('Return {"observations": [], "corrections": [], "issues": []}', prompts["observations"])
         self.assertIn("Inspect every supplied fact", prompts["observations"])
         self.assertIn("Do not restate correct unchanged placements", prompts["observations"])
         self.assertIn("one explicit entry for every supplied fact", prompts["assignments"])
@@ -125,9 +124,8 @@ class HarnessTests(unittest.TestCase):
         for stage in ("observations", "assignments"):
             self.assertIn("definition", prompts[stage])
             self.assertIn("page", prompts[stage])
-        for text in ("concise factual wording", "every unique detail", "alternative figures",
-                     "not exclusively in source", "Do not return separate means or applicability fields",
-                     "qualifications within fact", "complete fact when new_content"):
+        for text in ("Do not extract again", "one explicit entry for every supplied fact",
+                     "There are no tools", "Do not repeat fact bodies"):
             self.assertIn(text, prompts["distribution"])
         self.assertNotIn('"means":', prompts["distribution"])
         self.assertNotIn('"applicability":', prompts["distribution"])
@@ -135,6 +133,20 @@ class HarnessTests(unittest.TestCase):
             self.assertIn("concise research duties and boundaries", prompts[stage])
             self.assertIn("Do not repeat asset inventories", prompts[stage])
             self.assertIn("reason and evidence_refs", prompts[stage])
+        for stage in ("distribution", "observations", "assignments"):
+            for rule in ("supports a specific domain responsibility", "not merely an imaginable connection",
+                         "legitimate multi-domain ownership", "qualifications and exceptions",
+                         "Fewer owners or shorter output are not goals",
+                         "Do not split, rewrite or discard immutable evidence"):
+                self.assertIn(rule, prompts[stage])
+        for stage in ("observations", "catalogue", "assignments"):
+            for rule in ("Retrieve only when a specific missing detail", "necessary for the current decision",
+                         "Do not browse directories or reread supplied material",
+                         "exhaust their read_file pages", "every explicitly supplied record",
+                         "not a complete record or a summary"):
+                self.assertIn(rule, prompts[stage])
+        self.assertIn("suspected extraction omissions in issues", prompts["observations"])
+        self.assertIn("Do not replace or add fact bodies", prompts["observations"])
 
     def test_prompt_changes_only_reach_new_snapshots(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -146,7 +158,7 @@ class HarnessTests(unittest.TestCase):
                 snapshots = {name: (old / "_internal/inputs/prompts" / (name + ".md")).read_bytes()
                              for name in STAGES}
                 old_metadata = (old / "run.json").read_bytes()
-                for stage in ("understanding", "design", "catalogue", "distribution"):
+                for stage in ("understanding", "distribution", "observations", "catalogue", "assignments"):
                     path = prompts / PROMPT_FILES[stage]
                     path.write_text(path.read_text(encoding="utf-8") + "\nNew test revision.\n", encoding="utf-8")
                 new = new_run(root)
@@ -159,6 +171,7 @@ class HarnessTests(unittest.TestCase):
                 fresh = new / "_internal/inputs" / name
                 self.assertEqual(fresh.read_bytes(), (prompts / PROMPT_FILES[stage]).read_bytes())
                 self.assertEqual(metadata["inputs"][name]["sha256"], sha256(fresh))
+                self.assertEqual(fresh.read_bytes() == snapshots[stage], stage == "design")
 
     def test_read_facts_groups_detail_with_four_prompt_owned_fields(self):
         prompt = (PROMPTS_DIR / PROMPT_FILES["understanding"]).read_text(encoding="utf-8")
@@ -169,12 +182,16 @@ class HarnessTests(unittest.TestCase):
         for instruction in (
             "same subject and topic", "Keep unrelated subjects separate",
             "Reduce repeated structure, not factual detail", "do not target an entry count or word limit",
-            "respective periods, scopes or versions", "not a separate applicability field",
+            "measurement scope and version", "not a separate applicability field",
             "add information beyond fact", "otherwise []", "without resolving them",
             "do not automatically constitute contradictions", "copied exactly as a list",
             "Use [] when none are supplied", "Never invent IDs", "only if present in the source",
             "filenames, source-window references, offsets or commentary",
             "within these four fields", "substantive document dates and references",
+            "conditions, exceptions and responsible party", "general obligation must not replace",
+            "separate independently useful topics", "Routine operational instructions and contractual",
+            "comparable scope and time", "payment remaining under reservation",
+            "complete a cut-off ID by guessing", "without plugin, requirements or tools",
         ):
             self.assertIn(instruction, prompt)
         self.assertNotIn("source locators", prompt)
@@ -189,7 +206,10 @@ class HarnessTests(unittest.TestCase):
                 "relationships": ["The annex proposal identifies Bâtiment A as its host building."],
                 "contradictions": ["The two 2006 records disagree on area; the cause is unresolved."],
                 "source": ["91cb80fc", "aa1760d4"],
-            }, {"fact": "Ownership is unconfirmed.", "relationships": [],
+            }, {"fact": "The operator pays for routine repairs, except the supplier pays for manufacturing defects. "
+                        "The 2025 fee increase is requested; payments remain under reservation pending signature.",
+                "relationships": [], "contradictions": [], "source": ["aa1760d4"]},
+                {"fact": "Ownership is unconfirmed.", "relationships": [],
                 "contradictions": [], "source": []}],
         }
         for response in (grouped, {}, {"unexpected": {"values": [None, "漢字", 17]}}):
@@ -216,10 +236,26 @@ class HarnessTests(unittest.TestCase):
                 self.assertEqual(sum(stage == "understanding" for stage, _, _ in fake.calls), 1)
                 raw = next((run / "_internal/trace/responses/understanding").rglob("response.json"))
                 self.assertEqual(json.loads(raw.read_text(encoding="utf-8")), response)
-                stored = list(EvidenceStore(run).rows("understanding"))
-                self.assertEqual([row["value"] for row in stored], [response])
-                design = next(data for stage, data, _ in fake.calls if stage == "design")
-                self.assertEqual([row["value"] for row in design["subject"]], [response])
+                store = EvidenceStore(run)
+                stored = list(store.documents(store.snapshot(), "/responses/understanding/"))
+                self.assertEqual([json.loads(body) for _, body in stored], [response])
+                self.assertEqual(store.count("understanding"), 0)
+                from tests.layer2_fixtures import read_ledger
+                facts = read_ledger(run / "_internal/facts.jsonl")
+                self.assertEqual([f["body"] for f in facts], response.get("evidence", []))
+                design = "\n".join(text for stage, text in fake.messages if stage == "design")
+                for fact in facts:
+                    self.assertIn(fact["fact_id"], design)
+                    self.assertIn(fact["body"]["fact"], design)
+                markdown = "\n".join(p.read_text(encoding="utf-8") for p in (run / "domains").glob("*.md"))
+                for fact in facts:
+                    self.assertIn(fact["body"]["fact"], markdown)
+                    for field in ("relationships", "contradictions"):
+                        for detail in fact["body"][field]:
+                            self.assertIn(detail, design)
+                            self.assertIn(detail, markdown)
+                    self.assertNotIn(fact["fact_id"], markdown)
+                self.assertNotIn("aa1760d4", markdown)
                 record = json.loads((run / "run.json").read_text(encoding="utf-8"))
                 self.assertEqual(record["status"], "complete")
                 self.assertTrue(all(job["attempt"] == 1 for job in record["jobs"].values()))

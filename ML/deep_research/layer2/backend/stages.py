@@ -4,18 +4,20 @@ from itertools import chain, islice
 
 from .jobs import iter_jobs, run_jobs
 from .packing import definition_pages, fits, input_tokens, page_budget, record_pages, source_payloads
-from .projections import apply_domains, apply_owners, audit, ingest_facts, observe_response, save_ledger
+from .projections import apply_domains, audit, ingest_facts, observe_response, save_ledger
+from .ownership import apply_owners, apply_corrections, commit_replacements, expect_replacements, owners, set_owners
+from .evidence_text import evidence_pages
 from .fs import load_json
 from .windows import token_count
 from ..ML.context import dump
 
 
-def complete_definitions(store, stage, payload):
+def complete_definitions(store, stage, payload, *, collection="domains"):
     """Input current registry and payload; return all definitions only when the full request fits."""
     definitions = []
     count = input_tokens(store.run, stage, {**payload, "domain_definitions": []})
     target = load_json(store.run / "run.json")["context_policy"]["target_tokens"]
-    for row in store.rows("domains"):
+    for row in store.rows(collection):
         count += token_count(dump(dump(row))) + 32
         if count > target:
             return None
@@ -25,15 +27,17 @@ def complete_definitions(store, stage, payload):
 
 async def plan_domains(store, stage, records, instructions, saver, logger):
     """Input subject/observation records; apply one finite source-ordered planning pass."""
-    supplied_only = stage == "design" and load_json(store.run / "run.json").get("design_tool_free", False)
+    supplied_only = stage == "design"
     base = dict(instructions) if supplied_only else {**instructions, "evidence_files": ["/evidence/"]}
     key = "subject" if stage == "design" else "observations"
     budget = page_budget(store.run, stage, base)
-    pages = iter(record_pages(records, budget))
+    pages = iter(evidence_pages(records, budget) if supplied_only else record_pages(records, budget))
     first = next(pages, [])
     for index, page in enumerate(chain([first], pages), 1):
-        store.add_records("domain_definitions", store.rows("domains"))
-        version = store.snapshot()
+        version = ""
+        if not supplied_only:
+            store.add_records("domain_definitions", store.rows("domains"))
+            version = store.snapshot()
         payload = {**base, key: page, "mode": "update", "group": index}
         definitions = complete_definitions(store, stage, payload)
         if definitions is not None:
@@ -62,8 +66,9 @@ async def plan_domains(store, stage, records, instructions, saver, logger):
                            ({**payload, "mode": "reconcile", "comparisons": matches}
                             for matches in record_pages(store.rows("comparisons"), budget)))
         for number, reconciliation in enumerate(reconciliations):
-            store.add_records("domain_definitions", store.rows("domains"))
-            version = store.snapshot()
+            if not supplied_only:
+                store.add_records("domain_definitions", store.rows("domains"))
+                version = store.snapshot()
             responses = await run_jobs(store.run, stage, [reconciliation], version, saver, logger,
                                        prefix=f"{stage}/reconcile-{index:06d}", offset=number)
             for response in responses:
@@ -102,27 +107,37 @@ def designer_reconciliations(store, payload, budget):
                        "domain_page": number}
 
 
-def ownership_payloads(store, stage, records, instructions=None):
+def ownership_payloads(store, stage, records, instructions=None, *, collection="domains"):
     """Input fact stream; schedule every required fact-page/definition-page combination."""
-    base = {**(instructions or {}), "evidence_files": ["/evidence/"], "mode": "ownership"}
+    base = {**(instructions or {}), "mode": "ownership"}
+    if stage != "distribution":
+        base["evidence_files"] = ["/evidence/"]
     budget = page_budget(store.run, stage, base)
-    for page_index, facts in enumerate(record_pages(records, budget), 1):
+    for page_index, facts in enumerate(evidence_pages(records, budget), 1):
         payload = {**base, "facts": facts, "fact_page": page_index}
-        definitions = complete_definitions(store, stage, payload)
-        pages = [definitions] if definitions is not None else definition_pages(store, budget=budget)
+        definitions = complete_definitions(store, stage, payload, collection=collection)
+        pages = [definitions] if definitions is not None else definition_pages(store, collection, budget=budget)
         for domain_index, domains in enumerate(pages, 1):
-            yield {**payload, "domain_definitions": domains, "domain_page": domain_index,
+            job = {**payload, "domain_definitions": domains, "domain_page": domain_index,
                    "definition_scope": "complete" if definitions is not None else "page",
-                   "final_domain_ids": [d["domain_id"] for d in domains if "domain_id" in d]}
+                   "final_domain_ids": list(dict.fromkeys(d["domain_id"] for d in domains if "domain_id" in d))}
+            if stage == "assignments":
+                expect_replacements(store, job)
+            yield job
 
 
-def fact_inputs(store, *, review=False, extracted_only=False):
-    """Input index; stream fact bodies with initial ownership without collecting all facts."""
+def fact_inputs(store):
+    """Input index; stream immutable bodies and current/initial IDs without source bookkeeping."""
     for fact in store.rows("facts"):
-        if extracted_only and not store.get("needs_owners", fact["fact_id"]):
-            continue
-        owner = store.get("initial_owners", fact["fact_id"])
-        yield {"fact": fact, "initial_assignment": owner} if review else {**fact, "initial_assignment": owner}
+        yield {"fact_id": fact["fact_id"], "body": fact["body"],
+               "initial_assignment": owners(store, fact["fact_id"], initial=True),
+               "current_assignment": owners(store, fact["fact_id"])}
+
+
+def planning_inputs(store):
+    """Input ordered navigation/reference records; resolve each evidence body only when its page needs it."""
+    for row in store.rows("planning"):
+        yield store.get("facts", row["fact_id"]) if "fact_id" in row else row
 
 
 async def understand(store, saver, logger):
@@ -132,14 +147,17 @@ async def understand(store, saver, logger):
         observe_response(store, response, {"profile": str, "evidence": list})
         identity, value = response["fingerprint"], response["value"]
         store.put("subject", identity, {"profile": value.get("profile", value), "source": response["payload"]["source"]})
-        store.put("understanding", identity, {"evidence_id": identity, "value": value,
-                                              "source": response["payload"]["source"]})
-    store.add_records("understanding", store.rows("understanding"))
+        navigation = {k: v for k, v in value.items() if k != "evidence" or not isinstance(v, list)}
+        if navigation or not value:
+            store.put("planning", identity, {"evidence_id": identity, "body": navigation})
+        ingest_facts(store, response)
+    save_ledger(store)
+    store.add_records("facts", store.rows("facts"))
 
 
 def indexed_source(store):
     """Input run; register every source window before dispatch, including operationally failed jobs."""
-    iterator = iter(source_payloads(store.run, {}, "understanding"))
+    iterator = iter(source_payloads(store.run))
     payload, index = next(iterator, None), 1
     while payload is not None:
         following = next(iterator, None)
@@ -150,40 +168,27 @@ def indexed_source(store):
         payload, index = following, index + 1
 
 
-def distribution_payloads(store):
-    """Input registry and original source; extract once, inline complete definitions when they fit."""
-    for payload in source_payloads(store.run, {}, "distribution"):
-        definitions = complete_definitions(store, "distribution", payload)
-        if definitions is None:
-            yield {**payload, "mode": "extract"}
-        else:
-            yield {**payload, "mode": "extract_and_assign", "domain_definitions": definitions}
-
-
 async def distribute(store, saver, logger):
-    """Input source/registry; preserve extracted facts, then match oversized rosters without re-extraction."""
-    async for response in iter_jobs(store.run, "distribution", distribution_payloads(store), "", saver, logger):
-        ingest_facts(store, response)
-        if response["payload"]["mode"] == "extract":
-            rows = response["value"].get("facts", [])
-            if isinstance(rows, list):
-                for i in range(1, len(rows) + 1):
-                    store.put("needs_owners", f"f-{response['fingerprint'][:20]}-{i:06d}", True)
-    save_ledger(store)
-    if store.count("needs_owners"):
-        payloads = ownership_payloads(store, "distribution", fact_inputs(store, extracted_only=True))
-        async for response in iter_jobs(store.run, "distribution", payloads, "", saver, logger,
-                                        prefix="distribution/owners"):
-            apply_owners(store, response, initial=True)
-    store.add_records("facts", store.rows("facts"))
+    """Input preserved facts/settled registry; assign IDs once without another original-source read."""
+    payloads = ownership_payloads(store, "distribution", fact_inputs(store))
+    async for response in iter_jobs(store.run, "distribution", payloads, "", saver, logger):
+        apply_owners(store, response, initial=True)
+    for fact in store.rows("facts"):
+        set_owners(store, fact["fact_id"], owners(store, fact["fact_id"], initial=True))
 
 
 async def review(store, instructions, saver, logger):
     """Input all facts; schedule observation pages including initial owners and Extra."""
+    store.add_records("domain_definitions", store.rows("domains"))
     version = store.snapshot()
-    payloads = ownership_payloads(store, "observations", fact_inputs(store, review=True), instructions)
+    payloads = ownership_payloads(store, "observations", fact_inputs(store), instructions)
     async for response in iter_jobs(store.run, "observations", payloads, version, saver, logger):
-        observe_response(store, response, {"observations": list})
+        observe_response(store, response, {"observations": list, "corrections": list, "issues": list})
+        apply_corrections(store, response)
+        issues = response["value"].get("issues", [])
+        if isinstance(issues, list):
+            for issue in issues:
+                audit(store, "review_issue", value=issue, response_path=response["response_path"])
         rows = response["value"].get("observations", [])
         if isinstance(rows, list):
             for index, body in enumerate(rows, 1):
@@ -194,12 +199,19 @@ async def review(store, instructions, saver, logger):
 
 
 async def assign(store, saver, logger):
-    """Input final domains; schedule final ownership pages and retain every explicit matching owner."""
-    store.add_records("domain_definitions", store.rows("domains"))
-    version = store.snapshot()
-    payloads = ownership_payloads(store, "assignments", fact_inputs(store))
-    async for response in iter_jobs(store.run, "assignments", payloads, version, saver, logger):
-        apply_owners(store, response)
+    """Input accepted changed scopes; reconsider all evidence once, preserving untouched ownership."""
+    store.clear("changed_domains")
+    for domain in store.rows("domains"):
+        previous = store.get("initial_domains", domain["domain_id"])
+        if previous is None or previous["definition"].get("responsibilities") != domain["definition"].get("responsibilities"):
+            store.put("changed_domains", domain["domain_id"], domain)
+    if store.count("changed_domains"):
+        store.add_records("domain_definitions", store.rows("domains"))
+        version = store.snapshot()
+        payloads = ownership_payloads(store, "assignments", fact_inputs(store), collection="changed_domains")
+        async for response in iter_jobs(store.run, "assignments", payloads, version, saver, logger):
+            apply_owners(store, response)
+        commit_replacements(store)
     for proposal in store.rows("observations"):
         if store.get("dispositions", proposal["proposal_id"]) is None:
             audit(store, "unresolved_proposal", proposal=proposal, response_path=proposal["response_path"])

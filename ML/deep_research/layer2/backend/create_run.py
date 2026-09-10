@@ -1,4 +1,4 @@
-"""Create schema-6 runs after input preflight and one source-tokenization pass."""
+"""Create schema-7 runs after input preflight and one source-tokenization pass."""
 
 import hashlib
 import secrets
@@ -17,12 +17,12 @@ from .windows import source_windows
 
 
 def require_current(run_dir: Path) -> dict:
-    """Input a run path; return schema-6 metadata or reject historical execution unchanged."""
+    """Input a run path; return schema-7 metadata or reject historical execution unchanged."""
     from .fs import load_json
 
     record = load_json(run_dir / "run.json")
     if not isinstance(record, dict) or record.get("schema_version") != LAYER2_SCHEMA_VERSION:
-        raise ValueError("Layer 2 schema 6 is required; schema 2/3/4/5 runs are read-only history")
+        raise ValueError("Layer 2 schema 7 is required; schema 2/3/4/5/6 runs are read-only history")
     return record
 
 
@@ -30,7 +30,7 @@ def create_run(
     fact_sheet: Path, domain_plugin: Path, requirements: Path, runs_dir: Path,
     *, reasoning_effort: str = REASONING_EFFORT,
 ) -> Path:
-    """Input three user paths and root; return a frozen schema-6 run without model calls."""
+    """Input three user paths and root; return a frozen schema-7 run without model calls."""
     if reasoning_effort not in REASONING_EFFORTS:
         raise ValueError(f"unsupported reasoning effort: {reasoning_effort}")
     paths = {"fact_sheet.md": fact_sheet, "domain_plugin.md": domain_plugin,
@@ -66,10 +66,7 @@ def create_run(
     bom_bytes = 3 if snapshots["fact_sheet.md"].startswith(b"\xef\xbb\xbf") else 0
     for window in windows:
         window["input_bom_bytes"] = bom_bytes
-    write_json(run / "_internal" / "trace" / "source" / "manifest.json", [
-        {k: v for k, v in window.items() if k not in {"overlap_context", "new_content"}}
-        for window in windows
-    ])
+    write_json(run / "_internal" / "trace" / "source" / "manifest.json", windows)
     write_json(run / "run.json", {
         "schema_version": LAYER2_SCHEMA_VERSION, "run_id": run.name,
         "run_group": group.name, "status": "started", "started_at": now_iso(),
@@ -84,8 +81,8 @@ def create_run(
         "context_policy": {"target_tokens": CONTEXT_TARGET, "maximum_tokens": CONTEXT_MAXIMUM,
                            "framing_reserve": CONTEXT_RESERVE, "count_kind": "local_estimate",
                            "history": "retrievable_pointers", "summarization": False},
-        "jobs": {}, "downstream_integrated": False, "design_tool_free": True,
+        "jobs": {}, "downstream_integrated": False,
     })
     atomic_write_text(run / "README.md",
-                      "# Layer 2 schema 6\n\nStatus: started.\n\nNot yet integrated with Layers 3/4.\n")
+                      "# Layer 2 schema 7\n\nStatus: started.\n\nNot yet integrated with Layers 3/4.\n")
     return run

@@ -16,6 +16,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from ML.deep_research.layer2.ML.agent import Layer2Response, create_stage_agent
 from ML.deep_research.layer2.ML.context import dump, estimate
 from ML.deep_research.layer2.backend.evidence import EvidenceStore
+from ML.deep_research.layer2.backend.evidence_text import evidence_text
 from ML.deep_research.layer2.backend.fs import load_json, read_text, text_hash, write_json
 from ML.deep_research.layer2.backend.jobs import run_jobs
 from ML.deep_research.layer2.backend.packing import input_tokens
@@ -32,8 +33,8 @@ class DesignerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}):
             run = new_run(Path(tmp))
             record = load_json(run / "run.json")
-            self.assertEqual(record["schema_version"], 6)
-            self.assertIs(record["design_tool_free"], True)
+            self.assertEqual(record["schema_version"], 7)
+            self.assertNotIn("design_tool_free", record)
             saver = object()
             with patch("ML.deep_research.layer2.ML.agent.EvidenceBackend", side_effect=AssertionError("retrieval")), patch(
                 "ML.deep_research.layer2.ML.agent.create_deep_agent",
@@ -49,15 +50,11 @@ class DesignerTests(unittest.TestCase):
             expected = estimate([{"role": "user", "content": dump(payload)}], prompt, (),
                                 Layer2Response.model_json_schema(), record["context_policy"]["framing_reserve"])
             self.assertEqual(input_tokens(run, "design", payload), expected)
-            record.pop("design_tool_free")
-            write_json(run / "run.json", record)
             before = (run / "run.json").read_bytes()
-            self.assertTrue(stage_uses_tools(record, "design"))
+            self.assertFalse(stage_uses_tools("design"))
             graph = create_stage_agent(run, "design")
-            bound = graph.nodes["tools"].bound
-            self.assertEqual(set(getattr(bound, "tools_by_name", getattr(bound, "_tools_by_name", {}))),
-                             {"ls", "glob", "grep", "read_file"})
-            self.assertGreater(input_tokens(run, "design", payload), expected)
+            self.assertNotIn("tools", graph.nodes)
+            self.assertEqual(input_tokens(run, "design", payload), expected)
             self.assertEqual((run / "run.json").read_bytes(), before)
 
     def test_supplied_only_prompt_and_page_updates(self):
@@ -82,10 +79,14 @@ class DesignerTests(unittest.TestCase):
 
             with patch("ML.deep_research.layer2.backend.stages.page_budget", return_value=1800), patch(
                 "ML.deep_research.layer2.backend.stages.run_jobs", side_effect=batch,
+            ), patch.object(store, "add_records", side_effect=AssertionError("designer indexing")), patch.object(
+                store, "snapshot", side_effect=AssertionError("designer snapshot"),
             ):
                 asyncio.run(plan_domains(store, "design", iter(records),
                                         {"domain_plugin": "Baseline", "requirements": "Priorities"}, None, None))
-            self.assertEqual([r for p in seen for r in p["subject"]], records)
+            for record in records:
+                text = "".join(r["text"] for p in seen for r in p["subject"] if r["evidence_id"] == record["evidence_id"])
+                self.assertEqual(text, evidence_text(record))
             self.assertGreater(len(seen), 1)
             for p in seen:
                 self.assertNotIn("evidence_files", p)
@@ -181,28 +182,16 @@ class DesignerTests(unittest.TestCase):
             self.assertEqual(summarize_usage(run / "_internal/trace")["model_calls"], 2)
         self.assertEqual([p["page"] for p in received], [1, 2, 1])
 
-    def test_old_fingerprint_and_fresh_capability_attribution(self):
+    def test_fresh_tool_free_resume_retains_job_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))
             fake = FakeStages()
             fake.run(run)
             record = load_json(run / "run.json")
             entry = record["jobs"]["design/000001"]
-            payload = next(p for stage, p, _ in fake.calls if stage == "design")
-            prompt = read_text(run / "_internal/inputs/prompts/design.md")
-            frozen = {k: record[k] for k in ("model", "reasoning_effort", "context_policy", "chunking")}
-            self.assertEqual(entry["fingerprint"], text_hash(dump([
-                prompt, {**frozen, "design_tool_free": True}, payload, ""])))
-            record.pop("design_tool_free")
-            write_json(run / "run.json", record)
             fake.calls.clear()
             fake.run(run)
-            legacy = load_json(run / "run.json")["jobs"]["design/000001"]
-            payload = next(p for stage, p, _ in fake.calls if stage == "design")
-            self.assertIn("evidence_files", payload)
-            self.assertEqual(legacy["fingerprint"], text_hash(dump([
-                prompt, frozen, payload, legacy["evidence_version"]])))
-            self.assertNotEqual(entry["thread_id"], legacy["thread_id"])
-            fake.calls.clear()
-            fake.run(run)
+            resumed = load_json(run / "run.json")["jobs"]["design/000001"]
+            self.assertEqual(entry["thread_id"], resumed["thread_id"])
+            self.assertEqual(entry["fingerprint"], resumed["fingerprint"])
             self.assertEqual(fake.calls, [])

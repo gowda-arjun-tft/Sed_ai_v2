@@ -88,7 +88,7 @@ class EvidenceBackend(BackendProtocol):
         """Input virtual prefix; stream the invocation's approved evidence or history."""
         version, thread = self.scope()
         if self.history_only:
-            yield from self.store.history(thread, prefix, refresh=False)
+            yield from self.store.history(thread, prefix)
         else:
             yield from self.store.documents(version, prefix)
 
@@ -111,7 +111,7 @@ class EvidenceBackend(BackendProtocol):
         """Input directory; enumerate index metadata, or this session's bounded history pages."""
         version, thread = self.scope()
         if self.history_only:
-            yield from self.store.history(thread, prefix, names_only=True, refresh=False)
+            yield from self.store.history(thread, prefix, names_only=True)
         else:
             yield from self.store.names(version, prefix)
 
