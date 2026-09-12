@@ -15,7 +15,7 @@ from ML.deep_research.layer3.llm import (
     create_synthesis_harness,
     final_text,
 )
-from ML.deep_research.layer3.pipeline.create_run import create_run
+from tests.historical_layer3 import create_run
 from ML.deep_research.layer3.settings import DOMAIN_NAMES
 from tests.common import create_complete_run
 

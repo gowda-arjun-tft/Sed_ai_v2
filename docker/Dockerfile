@@ -55,6 +55,8 @@ CMD ["jupyter", "lab", \
 # VS Code mounts the original project; the browser notebook service remains untouched.
 FROM runtime AS development
 USER root
+RUN mkdir -p /var/lib/sedai/research-checkpoints \
+ && chown appuser:appuser /var/lib/sedai/research-checkpoints
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git \
  && rm -rf /var/lib/apt/lists/* \

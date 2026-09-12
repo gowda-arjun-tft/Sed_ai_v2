@@ -1,246 +1,136 @@
-from __future__ import annotations
+"""Freeze dynamic Layer 2 Markdown and settings for Layer 3 preparation and research."""
 
+import hashlib
 import secrets
-import shutil
-import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
 from ML.deep_research.layer2.backend.fs import (
-    load_json,
-    now_iso,
-    run_group_name,
-    sha256,
-    write_json,
+    atomic_write_text, load_json, now_iso, sha256, storage_path, write_json,
 )
+from ML.deep_research.layer2.backend.publication import domain_names
 from ML.deep_research.layer2.backend.settings import REASONING_EFFORTS
-from ML.deep_research.layer3.legacy_input import write_mission_markdown
-
-from ..mission import stage_thread_id
 from ..settings import (
-    CHECKPOINT_PACKAGE_VERSION,
-    CONTEXT_POLICY_VERSION,
-    CONTEXT_SOFT_TARGET_TOKENS,
-    DEEPAGENTS_VERSION,
-    DOMAIN_NAMES,
-    EMERGENCY_EVICTION_KEEP_TOOL_RESULTS,
-    EMERGENCY_EVICTION_TRIGGER_TOKENS,
-    EVICTION_EXCLUDE_TOOLS,
-    EVICTION_KEEP_TOOL_RESULTS,
-    EVICTION_TRIGGER_TOKENS,
-    FETCH_TIMEOUT_SECONDS,
-    HARNESS_NAME,
-    MAX_SOURCE_BYTES,
-    MODEL_INPUT_TOKEN_LIMIT,
-    MODEL_MAX_RETRIES,
-    MODEL_NAME,
-    MODEL_TIMEOUT_SECONDS,
-    PROMPTS_DIR,
-    REASONING_EFFORT,
-    RUN_PREFIX,
-    SCHEMA_VERSION,
-    SKILL_PATH,
-    SUMMARY_KEEP_TOKENS,
-    SUMMARY_TRIGGER_TOKENS,
-    SUMMARY_TRIM_TOKENS,
-    WEB_SEARCH_CONTEXT_SIZE,
-    WEB_SEARCH_LEVELS,
-    WEB_SEARCH_VERBOSITY,
+    HARNESS_NAME, MODEL_INPUT_TOKEN_LIMIT, MODEL_MAX_RETRIES, MODEL_NAME,
+    MODEL_TIMEOUT_SECONDS, PROMPTS_DIR, SCHEMA_VERSION, SOURCE_CONCURRENCY,
+    SOURCE_REASONING_EFFORT, SOURCE_SEARCH_DEPTH, SOURCE_SEARCH_VERBOSITY,
+    SOURCE_SUGGESTION_PATH, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS,
 )
+from ..document_records import UPLOAD_POLICY
 
 
-def _load_l2(run_dir: Path) -> tuple[dict, Path, list[Path]]:
-    metadata_path = run_dir / "run.json"
-    metadata = load_json(metadata_path)
-    planner = run_dir / "inputs" / "planner_prompt.md"
-    mission_dir = run_dir / "missions"
-    missions = sorted(mission_dir.glob("*.json"))
-    return metadata, planner, missions
+def local_path(run: Path, relative: str) -> Path:
+    """Resolve a recorded relative path inside this run, rejecting escape paths."""
+    path = (run / relative).resolve()
+    if Path(relative).is_absolute() or not path.is_relative_to(run.resolve()):
+        raise ValueError("recorded path escapes the Layer 3 run")
+    return path
 
 
-def _new_run_dir(runs_dir: Path, l2_run: Path, source: dict) -> tuple[str, Path]:
-    if l2_run.parent.parent.resolve() == runs_dir.resolve():
-        group_dir = l2_run.parent
-    else:
-        source_path = source.get("fact_sheet", {}).get("source_path")
-        group_dir = runs_dir / run_group_name(Path(source_path) if source_path else l2_run)
-    group_dir.mkdir(parents=True, exist_ok=True)
-    while True:
-        run_id = (
-            f"{RUN_PREFIX}_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"
-        )
-        run_dir = group_dir / run_id
-        try:
-            run_dir.mkdir()
-            return run_id, run_dir
-        except FileExistsError:
-            pass
+def require_current(run: Path) -> dict:
+    """Read source-discovery metadata; reject historical execution before any mutation."""
+    record = load_json(run / "run.json")
+    if record.get("schema_version") != SCHEMA_VERSION or record.get("harness") != HARNESS_NAME:
+        raise ValueError("Historical Layer 3 runs are read-only; start a fresh Layer 3 source run")
+    return record
 
 
-def _copy_prompts(run_dir: Path) -> tuple[str, dict[str, str]]:
-    target = run_dir / "inputs" / "prompts"
-    target.mkdir(parents=True)
-    skill_copy = target / "SKILL.md"
-    shutil.copy2(SKILL_PATH, skill_copy)
-    for source in sorted(PROMPTS_DIR.rglob("*.md")):
-        relative = source.relative_to(PROMPTS_DIR)
-        destination = target / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-    prompt_hashes = {
-        str(path.relative_to(target)).replace("\\", "/"): sha256(path)
-        for path in sorted(target.rglob("*.md"))
-        if path.name != "SKILL.md"
-    }
-    return sha256(skill_copy), prompt_hashes
+def verify_inputs(run: Path, record: dict) -> None:
+    """Verify frozen bytes and consent before dispatch or response reuse."""
+    if not record.get("public_input_confirmed"):
+        raise ValueError("Layer 3 requires public-input confirmation")
+    for relative, item in record["inputs"].items():
+        if sha256(local_path(run, relative)) != item["sha256"]:
+            raise ValueError("Frozen Layer 3 input changed; create a fresh source run")
+    for domain in record["domains"]:
+        if domain["input_path"] not in record["inputs"]:
+            raise ValueError("Domain input is absent from the frozen input manifest")
+        local_path(run, domain["output_path"])
 
 
 def create_run(
     l2_run: Path,
     runs_dir: Path,
     *,
+    source_suggestion: Path = SOURCE_SUGGESTION_PATH,
     public_input_confirmed: bool = False,
-    reasoning_effort: str = REASONING_EFFORT,
-    web_search_context_size: str = WEB_SEARCH_CONTEXT_SIZE,
-    web_search_verbosity: str = WEB_SEARCH_VERBOSITY,
+    reasoning_effort: str = SOURCE_REASONING_EFFORT,
+    web_search_context_size: str = SOURCE_SEARCH_DEPTH,
+    web_search_verbosity: str = SOURCE_SEARCH_VERBOSITY,
+    research_reasoning_effort: str = "max",
+    research_instruction: Path = RESEARCH_INSTRUCTION_PATH,
 ) -> Path:
-    if reasoning_effort not in REASONING_EFFORTS:
-        raise ValueError(f"unsupported reasoning effort: {reasoning_effort}")
-    if web_search_context_size not in WEB_SEARCH_LEVELS:
-        raise ValueError(f"unsupported web-search context size: {web_search_context_size}")
-    if web_search_verbosity not in WEB_SEARCH_LEVELS:
-        raise ValueError(f"unsupported web-search verbosity: {web_search_verbosity}")
-    l2_run = l2_run.resolve()
-    source, planner, missions = _load_l2(l2_run)
+    """Create beside completed schema-9 Layer 2; read all inputs before creating a directory."""
     if not public_input_confirmed:
-        raise ValueError("online research requires public-input confirmation")
-    run_id, run_dir = _new_run_dir(runs_dir, l2_run, source)
-    mission_dir = run_dir / "inputs" / "missions"
-    mission_md_dir = run_dir / "inputs" / "mission_md"
-    for path in (
-        mission_dir,
-        mission_md_dir,
-        run_dir / "domains",
-        run_dir / "research",
-        run_dir / "sources" / "raw",
-        run_dir / "sources" / "text",
-    ):
-        path.mkdir(parents=True, exist_ok=True)
-    planner_copy = run_dir / "inputs" / "planner_prompt.md"
-    shutil.copy2(planner, planner_copy)
-    for mission in missions:
-        target = mission_dir / mission.name
-        shutil.copy2(mission, target)
-        markdown = l2_run / "mission_md" / f"{mission.stem}.md"
-        markdown_target = mission_md_dir / markdown.name
-        if markdown.is_file():
-            shutil.copy2(markdown, markdown_target)
-        else:
-            write_mission_markdown(markdown_target, load_json(mission))
-    skill_hash, prompt_hashes = _copy_prompts(run_dir)
-    for name in ("index.jsonl", "queries.jsonl"):
-        (run_dir / "sources" / name).touch()
-    (run_dir / "usage.jsonl").touch()
-    sqlite3.connect(run_dir / "checkpoints.sqlite3").close()
-    started = now_iso()
-    write_json(
-        run_dir / "run.json",
-        {
-            "schema_version": SCHEMA_VERSION,
-            "harness": HARNESS_NAME,
-            "run_id": run_id,
-            "run_group": run_dir.parent.name,
-            "status": "created",
-            "started_at": started,
-            "updated_at": started,
-            "source_l2": {
-                "run_id": source.get("run_id"),
-                "path": str(l2_run),
-                "status": source.get("status"),
-                "checks": source.get("checks") or {},
-                "facts": source.get("facts") or {},
-            },
-            "skill": {"path": "inputs/prompts/SKILL.md", "sha256": skill_hash},
-            "prompt_hashes": prompt_hashes,
-            "provider": "online",
-            "public_input_confirmed": True,
-            "model": MODEL_NAME,
-            "reasoning_effort": reasoning_effort,
-            "web_search": {
-                "context_size": web_search_context_size,
-                "verbosity": web_search_verbosity,
-            },
-            "model_context_window_tokens": MODEL_INPUT_TOKEN_LIMIT,
-            "deepagents_version": DEEPAGENTS_VERSION,
-            "checkpoint_package_version": CHECKPOINT_PACKAGE_VERSION,
-            "limits": {
-                "model_and_search_timeout_seconds": MODEL_TIMEOUT_SECONDS,
-                "transient_retries": MODEL_MAX_RETRIES,
-                "fetch_timeout_seconds": FETCH_TIMEOUT_SECONDS,
-                "maximum_source_bytes": MAX_SOURCE_BYTES,
-            },
-            # Applied to the looping domain researcher only. These shape
-            # context size, never model content.
-            "context_management": {
-                "policy_version": CONTEXT_POLICY_VERSION,
-                "applies_to": "domain_researcher",
-                "soft_target_tokens": CONTEXT_SOFT_TARGET_TOKENS,
-                "eviction_trigger_tokens": EVICTION_TRIGGER_TOKENS,
-                "eviction_keep_tool_results": EVICTION_KEEP_TOOL_RESULTS,
-                "eviction_exempt_tools": list(EVICTION_EXCLUDE_TOOLS),
-                "emergency_eviction_trigger_tokens": (
-                    EMERGENCY_EVICTION_TRIGGER_TOKENS
-                ),
-                "emergency_eviction_keep_tool_results": (
-                    EMERGENCY_EVICTION_KEEP_TOOL_RESULTS
-                ),
-                "summary_trigger_tokens": SUMMARY_TRIGGER_TOKENS,
-                "summary_keep_tokens": SUMMARY_KEEP_TOKENS,
-                "summary_trim_tokens": SUMMARY_TRIM_TOKENS,
-            },
-            "usage": {
-                "api_calls": 0,
-                "model_calls": 0,
-                "summarization_calls": 0,
-                "web_search_calls": 0,
-                "over_soft_target_calls": 0,
-                "compacted_source_results": 0,
-                "events": 0,
-                "input_tokens": 0,
-                "cached_input_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "output_tokens": 0,
-                "reasoning_output_tokens": 0,
-                "total_tokens": 0,
-            },
-            "domains": list(DOMAIN_NAMES),
-            "execution": _execution(run_id, started),
-        },
-    )
-    return run_dir
+        raise ValueError("Layer 3 requires public-input confirmation")
+    from ..research_run import RESEARCH_PROMPTS, research_policy
 
-
-def _record(run_id: str, stage: str, actor: str, batch: int, started: str) -> dict:
-    return {
-        "stage": stage,
-        "actor": actor,
-        "batch": batch,
-        "thread_id": stage_thread_id(run_id, stage, actor, batch, 1),
-        "attempt": 1,
-        "status": "pending",
-        "error": "",
-        "output_path": "",
-        "model_turns": 0,
-        "elapsed_seconds": 0.0,
-        "updated_at": started,
+    research = research_policy(research_reasoning_effort)
+    if reasoning_effort not in REASONING_EFFORTS:
+        raise ValueError("unsupported reasoning effort")
+    if web_search_context_size not in WEB_SEARCH_LEVELS or web_search_verbosity not in WEB_SEARCH_LEVELS:
+        raise ValueError("unsupported web-search depth or verbosity")
+    l2_run = storage_path(l2_run)
+    source = load_json(l2_run / "run.json")
+    if source.get("schema_version") != 9 or source.get("status") != "complete":
+        raise ValueError("Source discovery requires a completed Layer 2 schema-9 run")
+    files = sorted((l2_run / "domains").glob("*.md"))
+    if not files:
+        raise ValueError("Layer 2 has no domain Markdown files")
+    domains = [{"key": f"source_finder/{index:06d}", "source_file": f"domains/{path.name}",
+                "input_path": f"_internal/inputs/domains/{index:06d}.md"}
+               for index, path in enumerate(files, 1)]
+    names = domain_names({item["key"]: {"name": path.stem}
+                          for item, path in zip(domains, files, strict=True)})
+    paths = {"_internal/inputs/asset_metadata.md": local_path(l2_run, "asset_metadata.md"),
+             "_internal/inputs/source_suggestion.md": storage_path(source_suggestion),
+             "_internal/inputs/user_research_instruction.md": storage_path(research_instruction),
+             "_internal/inputs/prompts/source_finder.md": PROMPTS_DIR / "source_finder.md"}
+    paths.update({f"_internal/inputs/prompts/{name}.md": PROMPTS_DIR / f"{name}.md"
+                  for name in RESEARCH_PROMPTS})
+    for item in domains:
+        paths[item["input_path"]] = local_path(l2_run, item["source_file"])
+        item["output_path"] = names[item["key"]].replace("domains/", "sources/", 1)[:-3] + ".json"
+    snapshots, inputs = {}, {}
+    for relative, path in paths.items():
+        raw = path.read_bytes()
+        if not raw.decode("utf-8-sig").strip():
+            raise ValueError(f"Required Markdown input is empty: {path.name}")
+        snapshots[relative] = raw
+        inputs[relative] = {"source_path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+                            "bytes": len(raw)}
+    # The public runs_dir argument remains accepted; the selected Layer 2 owns colocation.
+    while True:
+        run = l2_run.parent / f"L3_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"
+        try:
+            run.mkdir()
+            break
+        except FileExistsError:
+            continue
+    for relative, raw in snapshots.items():
+        target = run / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    (run / "_internal/trace").mkdir(parents=True)
+    (run / "sources").mkdir()
+    record = {
+        "schema_version": SCHEMA_VERSION, "harness": HARNESS_NAME, "run_id": run.name,
+        "status": "created", "started_at": now_iso(), "updated_at": now_iso(),
+        "source_l2": {"run_id": source.get("run_id"), "path": str(l2_run),
+                      "status": source["status"], "checks": source.get("checks") or {},
+                      "facts": source.get("facts") or {}},
+        "inputs": inputs, "domains": domains, "public_input_confirmed": True,
+        "model": MODEL_NAME, "reasoning_effort": reasoning_effort,
+        "provider_max_retries": MODEL_MAX_RETRIES, "timeout_seconds": MODEL_TIMEOUT_SECONDS,
+        "max_concurrency": SOURCE_CONCURRENCY, "model_input_token_limit": MODEL_INPUT_TOKEN_LIMIT,
+        "web_search": {"context_size": web_search_context_size, "verbosity": web_search_verbosity,
+                       "tool_choice": {"type": "web_search"}, "input_token_limit": 128_000},
+        "context_policy": {"target_tokens": 300_000, "maximum_tokens": 350_000,
+                           "framing_reserve": 8_000, "count_kind": "local_estimate"},
+        "jobs": {}, "document_uploads": {"policy": dict(UPLOAD_POLICY), "status": "pending"},
+        "research": research,
     }
-
-
-def _execution(run_id: str, started: str) -> dict:
-    return {
-        "domains": {
-            name: _record(run_id, "researcher", name, 0, started)
-            for name in DOMAIN_NAMES
-        },
-        "final": _record(run_id, "synthesis", "property-synthesis", 0, started),
-    }
+    verify_inputs(run, record)
+    write_json(run / "run.json", record)
+    atomic_write_text(run / "README.md", "# Layer 3 research\n\nStatus: created. Source preparation precedes domain research.\n")
+    return run

@@ -125,8 +125,7 @@ def create_complete_run(root: Path) -> Path:
 
 def create_complete_l3_run(root: Path) -> Path:
     """A complete permissive Layer 3 run assembled without model or web calls."""
-    from ML.deep_research.layer3.pipeline.create_run import create_run as create_l3_run
-    from ML.deep_research.layer3.pipeline.run_checks import run_checks
+    from tests.historical_layer3 import create_run as create_l3_run
     from ML.deep_research.layer3.settings import DOMAIN_NAMES
 
     l2_run = create_complete_run(root)
@@ -160,8 +159,6 @@ def create_complete_l3_run(root: Path) -> Path:
     )
     run["status"] = "complete"
     write_json(l3_run / "run.json", run)
-    checks = run_checks(l3_run)
-    assert sum(ok for _, _, ok, _ in checks) == len(checks)
     return l3_run
 
 

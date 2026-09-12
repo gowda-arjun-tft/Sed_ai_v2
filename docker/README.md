@@ -35,7 +35,8 @@ Saved Windows outputs are historical, not evidence of the active interpreter. Se
 container kernel explicitly even if the notebook metadata still names `compute`.
 
 Then edit Layer 2 controls and run its cell when ready. All three notebook cells remain, but
-dynamic Layer 2 outputs are not integrated with Layers 3/4. Existing schema and frozen-path
+dynamic Layer 2 schema-9 outputs feed the new Layer 3 source preparation/research workflow;
+Layer 4 remains disabled for these runs. Existing schema and frozen-path
 restrictions apply: browsing old runs does not authorize conversion or resume.
 
 ## Builds and separate browser research
@@ -73,6 +74,52 @@ Docker-managed volumes; disposable tests do not guarantee every concurrent workl
 Historical runs are not migrated, resumed or rewritten by setup.
 
 ## Offline verification
+
+### Research checkpoint volume
+
+Persistent Layer 3 research requires the development service's named volume
+`sedai-research-checkpoints`, mounted at `/var/lib/sedai/research-checkpoints`, with
+`SEDAI_RESEARCH_CHECKPOINT_DIR` set to that path. It does **not** cover `/app`, source,
+runs or outputs. New image directories give the existing non-root appuser ownership.
+The original browser container/service mounts are unchanged.
+
+After finishing active development work, rebuild/recreate **only development** to add this mount:
+
+```bash
+docker compose --profile dev build dev
+docker compose --profile dev up -d --no-deps dev
+```
+
+Never perform this while its notebook/terminal is running research. Reopen the project in its Dev
+Container, reload the saved notebook (preserve unsaved edits first), and restart only an idle kernel.
+Do not execute cells automatically. Run research commands in this container, not Windows Conda.
+The optional runtime-only `cli` service is not configured for the new research checkpoints; use
+`docker compose exec -T dev /usr/local/bin/python -m ML.deep_research.layer3 ...` instead.
+
+Preflight requires a writable dedicated Linux mount before any paid phase; there is no Windows or
+`/app` SQLite fallback. Each domain receives its own database and stable checkpoint thread. Volume
+contents survive container recreation, but deliberately deleting the volume prevents unfinished
+research from resuming even though project reports/evidence still exist. Restore the volume backup
+or explicitly create a new linked run; never silently restart missing threads. Deleting local data
+does not delete uploaded OpenAI files. Do not delete volumes as part of ordinary setup or cleanup.
+
+Docker was absent from PATH but was found under the user's Docker Desktop installation. During
+implementation the idle development service alone was rebuilt/recreated, and the dedicated mount,
+Linux interpreter, installed Deep Agents 0.7.7 and writable SQLite preflight were verified.
+The browser container's ID and start time remained unchanged; no research was executed.
+VS Code may need to reconnect after recreation. Reload the saved notebook and select a fresh
+Docker kernel; do not overwrite newer disk content with an old unsaved editor buffer.
+The host `run.ps1` research actions delegate to the development container and translate project paths;
+legacy preparation/upload-only actions retain their existing Windows interpreter behavior.
+
+Research capability version 2 runs one domain at a time with execution-owned HTTP clients and
+a durable 80-logical-call allowance per domain. The counter stays with project-side retained work;
+the same checkpoint thread and counter are required for resume. Do not delete either to reset a run.
+New linked runs can import existing notes from a disposable copy of the parent database/WAL; this
+does not resume the parent's thread or change its SQLite files. Missing notes are reported explicitly.
+The editable `inputs/user_research_instruction.md` is frozen on creation. Reload the saved notebook
+after preserving unsaved edits, and restart only an idle kernel to load the revised controls/code.
+No container rebuild or restart is required for these source changes.
 
 ```bash
 python -m unittest discover -s tests -v

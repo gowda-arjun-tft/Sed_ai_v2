@@ -1,56 +1,36 @@
-"""Optional operational report; never grades or blocks model output."""
-
-from __future__ import annotations
+"""Non-mutating operational observations for source-discovery runs."""
 
 from pathlib import Path
 
-from ML.deep_research.layer2.backend.fs import atomic_write_text, load_json, slug
-
-from ..settings import DOMAIN_NAMES, SCHEMA_VERSION
-
+from .create_run import local_path, require_current
+from ..source_publication import is_json
+from ML.deep_research.layer2.backend.jobs import saved_text
 
 Check = tuple[int, str, bool, str]
 
 
 def run_checks(run_dir: Path) -> list[Check]:
-    run = load_json(run_dir / "run.json")
-    checks: list[Check] = []
-
-    def add(label: str, ok: bool, detail: str = "") -> None:
-        checks.append((len(checks) + 1, label, bool(ok), detail))
-
-    add("Run metadata uses the current schema", run.get("schema_version") == SCHEMA_VERSION)
-    domains = run.get("execution", {}).get("domains", {})
-    add(
-        "All eight domain invocations have a terminal record",
-        all(domains.get(name, {}).get("status") in {"complete", "failed"} for name in DOMAIN_NAMES),
-    )
-    available = [
-        name
-        for name in DOMAIN_NAMES
-        if (run_dir / "domains" / slug(name) / "final.md").is_file()
+    """Inspect saved source outputs without writing reports, changing status or invoking models."""
+    run = require_current(run_dir)
+    domains = run["domains"]
+    terminal = sum(run["jobs"].get(d["key"], {}).get("status") in {"complete", "failed"}
+                   for d in domains)
+    available = 0
+    for domain in domains:
+        raw = saved_text(local_path(run_dir, domain["output_path"]))
+        available += raw is not None and is_json(raw)
+    checks = [
+        (1, "Current source-discovery schema", True, ""),
+        (2, "All domain jobs have terminal records", terminal == len(domains),
+         f"{terminal}/{len(domains)} terminal"),
+        (3, "Source JSON outputs available", bool(available),
+         f"{available}/{len(domains)} available; content and access claims are not graded"),
     ]
-    add(
-        "Domain responses were saved",
-        bool(available),
-        f"{len(available)}/{len(DOMAIN_NAMES)} available",
-    )
-    add("The synthesis response was saved", (run_dir / "research" / "final.md").is_file())
-
-    passed = sum(ok for _, _, ok, _ in checks)
-    lines = [
-        f"# Run {run.get('run_id', run_dir.name)} — optional operational report",
-        "",
-        "This report does not grade, reject, repair, or retry model content.",
-        "",
-        f"{len(checks)} observations · {passed} true · {len(checks) - passed} false",
-        "",
-        *(
-            f"- [{'x' if ok else ' '}] {number}. {label}"
-            + (f" — {detail}" if detail else "")
-            for number, label, ok, detail in checks
-        ),
-        "",
-    ]
-    atomic_write_text(run_dir / "check_report.md", "\n".join(lines))
+    if run.get("research"):
+        jobs = run["research"]["jobs"]
+        complete = sum(j.get("status") == "complete" for j in jobs.values())
+        available = sum(local_path(run_dir, j["output_path"]).exists() for j in jobs.values()
+                        if j.get("status") == "complete")
+        checks.append((4, "Research reports available", available == complete,
+                       f"{available}/{len(domains)} available; report content is not graded"))
     return checks

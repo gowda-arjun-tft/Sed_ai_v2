@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -22,7 +23,7 @@ from ML.deep_research.layer3.memory import (
     evidence_eviction,
     research_summarization,
 )
-from ML.deep_research.layer3.pipeline.create_run import create_run
+from tests.historical_layer3 import create_run
 from ML.deep_research.layer3.research_tools import _read
 from tests.common import create_complete_run
 
@@ -88,8 +89,12 @@ class ContextPolicyTests(unittest.TestCase):
             run = load_json(run_dir / "run.json")
             run["context_management"]["policy_version"] = 99
             write_json(run_dir / "run.json", run)
-            with self.assertWarnsRegex(RuntimeWarning, "compaction is disabled"):
+            # Avoid assertWarns' global module scan triggering unrelated lazy native imports.
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", RuntimeWarning)
                 middleware = _middleware(run_dir)
+            self.assertTrue(any(issubclass(item.category, RuntimeWarning)
+                                and "compaction is disabled" in str(item.message) for item in caught))
 
         self.assertEqual(_names(middleware), ["FilesystemMiddleware"])
 

@@ -16,8 +16,14 @@ MODULE_DIR = Path(__file__).resolve().parent
 PROMPTS_DIR = MODULE_DIR / "prompts"
 SKILL_PATH = MODULE_DIR / "SKILL.md"
 RUN_PREFIX = "L3"
-SCHEMA_VERSION = 8
-HARNESS_NAME = "domain_plain_research_direct_output"
+SCHEMA_VERSION = 9
+HARNESS_NAME = "parallel_source_finder"
+SOURCE_SUGGESTION_PATH = REPO_ROOT / "inputs" / "source_suggestion.md"
+RESEARCH_INSTRUCTION_PATH = REPO_ROOT / "inputs" / "user_research_instruction.md"
+SOURCE_REASONING_EFFORT = "high"
+SOURCE_SEARCH_DEPTH = "medium"
+SOURCE_SEARCH_VERBOSITY = "low"
+SOURCE_CONCURRENCY = 5
 CHECKPOINT_PACKAGE_VERSION = "3.1.1"
 
 MODEL_TIMEOUT_SECONDS = 600
@@ -29,7 +35,7 @@ WEB_SEARCH_LEVELS = frozenset({"low", "medium", "high"})
 FETCH_TIMEOUT_SECONDS = 30
 MAX_SOURCE_BYTES = 10 * 1024 * 1024
 
-# Defaults copied into each new run. Runtime middleware reads the run-local
+# Historical researcher defaults retained for Layer 4. Middleware reads the run-local
 # policy instead, so changing these values cannot change a resumable run.
 CONTEXT_POLICY_VERSION = 1
 CONTEXT_SOFT_TARGET_TOKENS = 200_000
@@ -42,7 +48,7 @@ SUMMARY_TRIGGER_TOKENS = 170_000
 SUMMARY_KEEP_TOKENS = 70_000
 SUMMARY_TRIM_TOKENS = None
 
-# Historical Layer 2/3 roster; schema-4 Layer 2 domains come from its plugin.
+# Historical research roster retained for Layer 4; source discovery never uses it.
 AGENT_NAMES = [
     "Asset Integrity, Systems & Operational Resilience",
     "Occupier, Lease, Income & Counterparty Economics",

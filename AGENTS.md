@@ -8,15 +8,19 @@ operations live in `layer2/backend/`, and AI code plus three generic prompts in 
 Use package-level `create_run` and `run_all` as public Python entrypoints; the notebook is the UI.
 See `layer2/README.md` for the workflow. Industry definitions belong in the selected plugin,
 not generic prompts or Python. `inputs/requirement.md` holds user objectives and the explicitly broadened research scope; review its confidential origin before public-input confirmation.
-Operational events go to each run's `run.log`. `ML/deep_research/layer3/` runs eight direct domain researchers
-sequentially, then one property synthesis. `ML/deep_research/layer4/` segregates each domain report
+Operational events go to each run's `run.log`. `ML/deep_research/layer3/` finds and tests sources
+for each actual Layer 2 domain, uploads unique documents and runs persistent domain researchers,
+sequentially for new version-2 runs, producing independent Markdown reports without synthesis. `ML/deep_research/layer4/` segregates each domain report
 through two tool-free calls, reuses the direct researcher for external influences, then synthesizes
 the available external reports. Prompts sit below each layer; design notes are in
 `ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
 Group new runs as `runs/<parent>-<markdown-name>-<short-path-id>/L2_*` and place the derived `L3_*`
-beside its historical Layer 2 source. Layer 2 schema-2/3/4/5/6/7/8 artifacts are read-only. New Layer 2 runs
-use schema 9, not yet integrated with Layers 3/4; do not produce a legacy missions handoff.
+beside its completed Layer 2 source. Layer 2 schema-2/3/4/5/6/7/8 artifacts are read-only. New Layer 2 runs
+use schema 9 and feed Layer 3 source discovery directly; never produce a legacy missions handoff.
+Layer 3 schema 9 freezes a versioned research capability for new runs; older preparation runs keep
+their original behavior. Historical schema-8 Layer 3 execution/checks are read-only; Layer 4 accepts
+only historical schema-8 research inputs and is disabled by default in the notebook.
 
 ## Build, Test, and Development Commands
 
@@ -35,7 +39,9 @@ The original Windows workflow uses the `compute` interpreter:
 ```
 
 Run Layer 2 with `.\run.ps1 -FactSheet <facts.md> -DomainPlugin <plugin.md> -Requirements <requirements.md> -PublicInputConfirmed` and Layer 3 with
-`.\run.ps1 -Research <L2-run> -Online -PublicInputConfirmed`. Resume with `-Resume` or `-ResumeL3`.
+`.\run.ps1 -Research <L2-run> -SourceSuggestion <guidance.md> -Online -PublicInputConfirmed`.
+Resume with `-Resume` or an explicit `-ResumeL3` path; do not auto-select a matching run.
+Use `-UploadDocumentsL3 <L3-run>` or `--upload-documents <L3-run>` for upload-only enrichment.
 
 ## Coding Style & Testing
 
@@ -50,9 +56,9 @@ egress, citation, or publication behavior. Do not hardcode check counts.
 ## Agent and Security Boundaries
 
 Keep secrets only in `.env`. The model is fixed to `gpt-5.6-luna`, with no application output-token
-ceiling. Layer 2 freezes the selected reasoning. Layer 3 defaults to low model and web-search proxy
-reasoning and low web-search context and verbosity; new runs may select supported levels and
-freeze those controls in `run.json`. Do not
+ceiling. Layer 2 freezes the selected reasoning. Layer 3 source discovery defaults to high reasoning,
+medium native web-search depth and low verbosity; new runs freeze those controls in `run.json`.
+Historical Layer 4 helper defaults remain unchanged. Do not
 restate model, search, token, source, or report limits in prompts.
 
 Layer 2 schema 9 freezes original inputs, prompts, Unicode-safe source ranges, public-input consent
@@ -106,8 +112,8 @@ Reuse completed raw responses on resume, recover missing/operationally failed jo
 fingerprint actual dependencies and native options. Preserve response and publication history.
 Metadata/design failure stops dependent work; successful distribution siblings still publish.
 Archive old view bytes before atomic refresh. Historical schemas 2–8 reject execution/check before
-mutation. Check-only remains observational. Schema 9 is not integrated with Layers 3/4; never emit
-a misleading legacy missions handoff or change those layers/cells without separate authorization.
+mutation. Check-only remains observational. Layer 2 schema 9 feeds Layer 3 source preparation and research;
+never emit a misleading legacy missions handoff or implicitly feed Layer 4.
 Preserve distinct research-driving facts with scope, conditions, actors, exceptions and dates.
 Concision may remove genuinely repeated wording, not unique meaning. Metadata does not substitute
 for original-source distribution; routing coverage is not proof of complete extraction.
@@ -126,17 +132,111 @@ and network safety, protect atomic writes, record attribution and usage, and exp
 failures. These operational boundaries must never resend completed content to an LLM for repair or
 replace the model's judgement with application-authored conclusions.
 
-Each Layer 3 domain researcher receives only `search_web` and `read_source`; it has no `task` tool or
-subagents, and synthesis has no tools. Python schedules one researcher at a time, saves each final
-assistant response verbatim, then synthesizes every available response. Prompts own research,
-contradiction mapping, source checking, and corrections. Python may
-enforce network safety, persistence, attribution, and atomic publication, but must not grade
-Markdown, require auxiliary model-written files, or trigger content-repair calls. Implicit
-framework summarization and tool-call repair middleware stay disabled. A run-frozen CDI
-summarizer may compact only the direct domain researcher; it must retain source pointers,
-must not grade content, and must not block publication. Never add
-keyword-based research policy, host shell, `run_python`, cross-property memory, or model-writable
-host folders without explicit approval.
+Layer 3 source discovery accepts completed Layer 2 schema-9 asset_metadata.md and domains/*.md,
+plus editable inputs/source_suggestion.md. Freeze all copies, prompt, hashes, consent and domain-file
+mapping before calls; do not require missions, planner or original factsheet. Model names never route
+outputs. Expose source_suggestion as a keyword/CLI/PowerShell input. The notebook uses L2_DYNAMIC_RUN
+only when its Layer 2 path is blank, explicit resume, high/medium/low controls and fresh consent False.
+
+Use one native Responses invocation per domain with specific required web_search tool choice, no
+JSON mode, graph, custom tool loop, separate verifier or consolidation during source discovery.
+Prompt-requested source JSON includes URL, relevance, observed access/note and document true/false/null.
+Attempt every proposed URL; snippets/citations are not proof of readability. Never claim a failed
+open proves a paywall or that OpenAI readability proves Docker download access.
+
+Use native abatch_as_completed in bounded batches with concurrency five. Save raw text before
+parsing, full provider messages/actions/annotations and usage, then publish valid JSON as readable,
+two-space-indented views in sources/<frozen-domain-stem>.json. Preserve member order, duplicate members
+and unconventional JSON values; keep exact raw model text internally and link malformed
+or empty responses in README, and keep execution status separate from usefulness/access coverage.
+Reuse completed responses, retry operational failures only when requested, and preserve successful
+siblings. Source discovery itself uses file fingerprints/history, not SQLite or conversation memory.
+Account for actual messages/tools/options/framing against the smaller of model capacity, application
+ceiling and 128K search allowance. Oversized jobs fail independently; no truncation or summarization.
+Reuse safe run.log helpers for progress, timings, action counts and payload-free errors.
+
+Fresh Layer 3 runs freeze document_uploads policy and continue to a sequential Python upload step.
+Older schema-9 source-only runs gain uploads only through explicit upload-only selection; normal
+resume retains their original behavior. Notebook LAYER3_UPLOAD_ONLY requires an explicit resume path.
+Keep discovery status separate from transfer status. Require frozen public-input consent and runtime
+authentication. Uploading itself makes no model calls and creates no File Search, vector store or OCR pipeline.
+
+Collect exact document:true and unambiguous URLs from preserved completed responses. Deduplicate
+URLs conservatively and temporary downloaded bytes by SHA-256 across this run and its resumptions.
+Validate public destinations and redirects, reject credentials, HTML impostors and unsupported/oversized
+documents. Temporary byte storage is deleted on close; no permanent downloads or cross-run cache.
+Files use purpose=user_data, with no automatic expiration. Uploaded files remain until manually deleted;
+local run deletion does not delete remote storage. Upload success is not proof of readability/analysis.
+
+Persist intent before Files create, disable create retries, and save receipts immediately in the one
+_internal/trace/document_uploads.json registry. Reconcile uncertain uploads through exact remote receipt
+and byte hash; never blindly resend them. Definitive rejections/download failures retry only explicitly.
+Reuse verified IDs and preserve unavailable/uncertain states with diagnostics. One OS-released run writer
+lock protects public discovery/upload entrypoints. Preserve successful siblings on transfer failure.
+
+Source publication adds only trusted upload_status/upload/file_id fields. Preserve provider access
+claims, original fields, duplicate members and immutable raw responses. Use documents later only when
+uploaded with a file ID; use ordinary/unknown-format URLs only when access is readable or partial.
+Blocked, failed, uncertain and unprocessed entries remain visible but ineligible. Per-document transfer
+failures do not make otherwise-complete source discovery partial; expose nested upload warnings instead.
+Keep ambiguity/failures in the registry with a README link. Atomic publication/history applies to
+enrichment too; rebuilding must not erase upload mappings or reuse unprocessed source versions.
+
+Shared historical researcher/checkpoint/memory helpers under Layer 3 remain for Layer 4. Those
+researchers expose only search_web/read_source, no task/subagents or host shell. Their run-frozen
+compaction retains source pointers without grading content or blocking publication. Do not alter
+these helpers to implement source discovery. Layer 4 is disconnected from source-only schema 9.
+
+Layer 3 research capability version 2 extends new full runs after preparation. Linked research-only
+runs copy/hash settled complete or partial preparation; never resume/rewrite the parent. Domains
+without usable sources remain scheduled. Explicit resume reuses final receipts or the same domain
+checkpoint thread. Freeze research reasoning (default max), search controls and input policy.
+New researchers run one domain at a time in frozen order. Freeze an editable
+inputs/user_research_instruction.md for purpose/presentation; defaults request supported risks,
+opportunities and corresponding actions. Keep it active through compaction. Source suggestions
+govern discovery; asset/source/prior material remains evidence. Both creation APIs accept the
+research_instruction keyword, with CLI/PowerShell/notebook controls; resume uses frozen bytes.
+Each domain has 80 logical model invocations shared by main, search, document and summary calls.
+Reserve atomically and persist before dispatch; failed/uncertain dispatches consume slots, cached
+results/local files/downloads/Files operations do not. Provider transport retries and hosted search
+actions remain separate. Append an ephemeral current counter to each request and count that input.
+After 60 used calls, prioritize essential gaps. After 70, allow saved-file reads only; no new search,
+downloads or document analysis. Summaries share the final ten but cannot use slot 80, reserved for
+a tool-free main final report. Never issue call 81. Early final responses are accepted unchanged.
+Exhaustion without a final response is budget_exhausted/partial, not a content-repair trigger.
+Preserve tool-result ordering for denied pending calls, and continue other domains after failure.
+Research owns and closes HTTP clients once per execution, not per domain. Historical version-1
+runs retain frozen concurrency and no-call-budget behavior. Native recursion remains sys.maxsize;
+keep request/input/provider limits, manual cancellation and three transport retries, without a dollar
+or output-token cap. Logs/README/notebook expose used/remaining calls and phases.
+New linked runs copy/hash matching prior evidence, answers, archives and reports; export notes/plans
+from disposable read-only checkpoint copies using native delta-channel reconstruction. Missing notes
+are disclosed. Preserve parent bytes and source references, reuse compatible caches, create fresh
+threads/allowances and record parent usage separately. Prior findings are evidence to reassess,
+not verified conclusions or active instructions. No model calls occur during run creation.
+
+Use one create_deep_agent graph per domain with native todos and file tools. Expose search_web,
+read_source and read_document, but no shell, deletion or delegation. CompositeBackend scopes frozen
+inputs/evidence/archives to this domain; only StateBackend /notes/ is model-writable. Native explicit
+research summarization starts at 250K estimated tokens and retains the latest 100K where tool groups
+permit; archives must remain readable. Count final assembled instructions/messages/tools again before
+dispatch against 300K target/350K ceiling and model capacity; search retains 128K. No silent input
+truncation, implicit overflow repair or completed-content retry. Coverage remains prompt-owned.
+
+read_document authorizes registered IDs per domain, or safely uploads a newly discovered document
+URL under one run-local registry lock. Reuse URL/content hashes and immediate receipts. Never blindly
+repeat uncertain upload POSTs or automatically retry failed prepared URLs. Submit verified IDs as
+actual file inputs, preserve answers/usage/references and cache exact questions/settings. Upload and
+file-input format/size limits differ; file-ID text cannot measure document tokens. Failed documents
+return limitations without stopping other research. Source access observations remain unchanged.
+
+Persist one AsyncSqliteSaver database per domain on the dedicated Docker Linux volume identified by
+SEDAI_RESEARCH_CHECKPOINT_DIR, outside /app. Validate before paid phases; no Windows-mounted fallback.
+Missing unfinished checkpoints require recovery, never silent fresh execution. Reports/evidence/raw
+responses remain project-local. No model-authored auxiliary file or heading is a completion gate.
+Save final assistant Markdown verbatim and publish each sibling independently with presentation history.
+Log safe timings, observed model/tool activity, checkpoints, compaction and a single 30-second heartbeat;
+payloads stay in internal traces. Notebook Layer 4 remains disabled and its shared helpers unchanged.
 
 Layer 4 follows the same output-freedom contract. Its internal and candidate segregators and final
 synthesis have no tools; its external researcher receives only `search_web` and `read_source`.

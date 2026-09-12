@@ -63,12 +63,18 @@ services:
       dockerfile: docker/Dockerfile
       target: development
     command: ["sleep", "infinity"]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PYTHONIOENCODING: utf-8
+      SEDAI_RESEARCH_CHECKPOINT_DIR: /var/lib/sedai/research-checkpoints
     # One original workspace: code, Git, editable inputs, notebooks and runs stay on Windows.
     # Do not add nested volumes that hide its runs/ or outputs/ directories.
     volumes:
       - .:/app
+      - sedai-research-checkpoints:/var/lib/sedai/research-checkpoints
 
 volumes:
+  sedai-research-checkpoints:
   sedai-runs:
   sedai-outputs:
   # Retained as recoverable backups; no service mounts or deletes the previous dev volumes.

@@ -11,7 +11,7 @@ from uuid import uuid4
 from langchain_core.messages import ToolMessage
 
 from ML.deep_research.layer3.contracts import RESEARCHER_NAME
-from ML.deep_research.layer3.pipeline.create_run import create_run
+from tests.historical_layer3 import create_run
 from ML.deep_research.layer3.pipeline.progress import model_turns, stage_event
 from ML.deep_research.layer3.providers.openai_search import OpenAISearchRetriever
 from ML.deep_research.layer3.settings import DOMAIN_NAMES

@@ -94,11 +94,18 @@ class FakeStages:
             self.active -= 1
 
     def run(self, path):
+        # Create asyncio's Windows wake-up sockets before blocking all network in the test.
+        loop = asyncio.new_event_loop()
         with patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}), patch(
             "ML.deep_research.layer2.backend.runner.build_model",
             return_value=OfflineModel(owner=self, profile=self.model_profile),
-        ), patch("socket.socket.connect", side_effect=AssertionError("network disabled in offline test")):
-            return run_all(path)
+        ), patch("socket.socket.connect", side_effect=AssertionError("network disabled in offline test")), patch(
+            "asyncio.events.new_event_loop", return_value=loop,
+        ):
+            try:
+                return run_all(path)
+            finally:
+                loop.close()
 
 
 def published(run):

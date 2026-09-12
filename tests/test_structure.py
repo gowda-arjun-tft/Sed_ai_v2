@@ -83,7 +83,7 @@ class StructureTests(unittest.TestCase):
         self.assertIn("web_search_verbosity=WEB_SEARCH_VERBOSITY", layer2_text)
         self.assertIn("public_input_confirmed=PUBLIC_INPUT_CONFIRMED", layer2_text)
         self.assertIn('LAYER2_REQUIREMENTS = Path("inputs") / "requirement.md"', layer2_text)
-        # Only Layer 2 path controls are in scope; historical Layer 3/4 cells stay unchanged.
+        # Preserve Layer 2 controls while Layer 3 switches to source-only execution.
         self.assertNotIn("inputs\\\\", layer2_text)
         self.assertNotIn("runs\\\\", layer2_text)
         self.assertIn("from ML.deep_research.layer2 import create_run", layer2_text)
@@ -123,7 +123,8 @@ class StructureTests(unittest.TestCase):
             self.skipTest("Compose is outside the runtime-only image")
         compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
         dev = compose["services"]["dev"]
-        self.assertEqual(dev["volumes"], [".:/app"])
+        self.assertEqual(dev["volumes"], [".:/app", "sedai-research-checkpoints:/var/lib/sedai/research-checkpoints"])
+        self.assertEqual(dev["environment"]["SEDAI_RESEARCH_CHECKPOINT_DIR"], "/var/lib/sedai/research-checkpoints")
         self.assertEqual(dev["command"], ["sleep", "infinity"])
         config = json.loads((REPO_ROOT / ".devcontainer/devcontainer.json").read_text())
         self.assertEqual(config["service"], "dev")

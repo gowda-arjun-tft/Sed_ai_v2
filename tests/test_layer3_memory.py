@@ -30,7 +30,7 @@ from ML.deep_research.layer3.memory import (
     evidence_eviction,
     research_summarization,
 )
-from ML.deep_research.layer3.pipeline.create_run import create_run
+from tests.historical_layer3 import create_run
 from ML.deep_research.layer3.settings import (
     EVICTION_KEEP_TOOL_RESULTS,
     EVICTION_TRIGGER_TOKENS,

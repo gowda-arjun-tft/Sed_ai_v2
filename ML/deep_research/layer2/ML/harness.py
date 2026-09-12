@@ -51,12 +51,13 @@ def configure_harness() -> None:
     )
 
 
-def build_model(reasoning_effort: str = REASONING_EFFORT) -> Any:
-    """Input reasoning effort; return the fixed provider model used by CDI agents."""
+def build_model(reasoning_effort: str = REASONING_EFFORT, **overrides: Any) -> Any:
+    """Return the fixed provider model; optional native client overrides leave default callers unchanged."""
     from deepagents.profiles.provider import apply_provider_profile
     from langchain.chat_models import init_chat_model
 
     configure_provider()
     options = apply_provider_profile(MODEL_SPEC)
     options["reasoning_effort"] = reasoning_effort
+    options.update(overrides)
     return init_chat_model(MODEL_SPEC, **options)

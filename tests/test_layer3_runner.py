@@ -1,221 +1,213 @@
-from __future__ import annotations
+"""Real source runner with offline native-Runnable calls and failure/resume scenarios."""
 
 import asyncio
+import json
 import tempfile
 import unittest
-from contextlib import asynccontextmanager
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from langchain_core.messages import AIMessage
 
-from ML.deep_research.layer2.backend.fs import load_json, read_text, slug, write_json
-from ML.deep_research.layer3.pipeline.create_run import create_run
-from ML.deep_research.layer3.runner import run_research
-from ML.deep_research.layer3.settings import DOMAIN_NAMES
-from tests.common import create_complete_run
+from ML.deep_research.layer2.backend.fs import load_json, write_json
+from ML.deep_research.layer3.pipeline.create_run import local_path
+from ML.deep_research.layer3.source_publication import publish
+from tests.layer3_fixtures import FakeFinder, new_run, snapshot, source_json
 
 
-def _new_l3(root: Path) -> Path:
-    return create_run(create_complete_run(root), root / "l3", public_input_confirmed=True)
+class SourceRunnerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_every_domain_receives_three_complete_inputs_with_bounded_parallelism(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), [f"domain-{i}" for i in range(11)])
+            before = snapshot(run / "_internal/inputs")
+            fake = FakeFinder()
+            fake.delays["source_finder/000001"] = 0.04
+            record = await fake.run(run)
+            self.assertEqual(record["status"], "complete")
+            self.assertEqual(fake.peak, 5)
+            self.assertEqual(len(fake.calls), 11)
+            self.assertNotEqual(fake.finished[0], "source_finder/000001")
+            self.assertEqual(before, snapshot(run / "_internal/inputs"))
+            by_key = {d["key"]: d for d in record["domains"]}
+            for key, request, options in fake.calls:
+                self.assertEqual(len(request), 2)
+                for label in ("source_suggestions", "asset_metadata", "domain_context"):
+                    self.assertIn(f"<{label}>", request[1].content)
+                self.assertIn(local_path(run, by_key[key]["input_path"]).read_text(encoding="utf-8"), request[1].content)
+                published = local_path(run, by_key[key]["output_path"]).read_text(encoding="utf-8")
+                self.assertEqual(json.loads(published), json.loads(source_json()))
+                self.assertIn('\n  "sources": [\n', published)
+                self.assertEqual(options["tool_choice"], {"type": "web_search"})
+            self.assertFalse((run / "research").exists())
+            self.assertFalse(list(run.rglob("*.sqlite*")))
 
+    async def test_failure_saves_siblings_and_retry_is_explicit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), ["a", "b", "c"])
+            fake = FakeFinder()
+            key = "source_finder/000002"
+            fake.failures.add(key)
+            record = await fake.run(run)
+            self.assertEqual(record["status"], "partial")
+            self.assertEqual(record["publication"]["published_sources"], 2)
+            await fake.run(run)
+            self.assertEqual(len(fake.calls), 3)
+            fake.failures.clear()
+            record = await fake.run(run, retry_failed=True)
+            self.assertEqual(len(fake.calls), 4)
+            self.assertEqual(record["status"], "complete")
+            self.assertEqual(record["jobs"][key]["attempt"], 2)
+            self.assertNotIn("PRIVATE_URL", (run / "run.log").read_text(encoding="utf-8"))
+            self.assertIn("TimeoutError", (run / "run.log").read_text(encoding="utf-8"))
 
-def _domain_state(domain: str) -> dict:
-    return {"messages": [AIMessage(content=f"# {domain}\n\nFinal domain report.\n")]}
+    async def test_unconventional_json_and_duplicates_are_preserved_without_repair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), ["a", "b", "c", "d"])
+            fake = FakeFinder()
+            for index, raw in enumerate(['{"sources":[],"sources":[{"医院":null}]}', "{}", "", "not JSON"], 1):
+                fake.outputs[f"source_finder/{index:06d}"] = raw
+            record = await fake.run(run)
+            self.assertEqual(record["status"], "complete")
+            self.assertEqual(record["publication"]["published_sources"], 2)
+            first = record["domains"][0]
+            visible = local_path(run, first["output_path"]).read_text(encoding="utf-8")
+            self.assertIn('\n  "sources": [],\n  "sources": [\n', visible)
+            self.assertEqual(visible.count('"sources"'), 2)
+            for key, raw in fake.outputs.items():
+                self.assertEqual(local_path(run, record["jobs"][key]["response_path"]).read_text(encoding="utf-8"), raw)
+            await fake.run(run, retry_failed=True)
+            self.assertEqual(len(fake.calls), 4)
 
+    async def test_oversized_domain_preserves_successful_siblings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeFinder()
+            from ML.deep_research.layer3.source_runner import prepare
+            def oversized(run, record, domain, profile):
+                request, fingerprint, count, ceiling = prepare(run, record, domain, profile)
+                return request, fingerprint, ceiling + 1 if domain["key"].endswith("1") else count, ceiling
+            with patch("ML.deep_research.layer3.source_runner.prepare", side_effect=oversized):
+                record = await fake.run(run)
+            self.assertEqual(record["status"], "partial")
+            self.assertEqual(len(fake.calls), 1)
+            self.assertEqual(record["jobs"]["source_finder/000001"]["error_type"], "InputSizeError")
 
-class FakeGraph:
-    order: list[str] = []
-    checkpointed: set[str] = set()
-    active = 0
-    maximum = 0
+    async def test_completed_response_recovered_after_run_record_interruption(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeFinder()
+            record = await fake.run(run)
+            record["jobs"] = {}
+            write_json(run / "run.json", record)
+            record = await fake.run(run)
+            self.assertEqual(len(fake.calls), 2)
+            self.assertEqual(record["status"], "complete")
+            self.assertTrue(all(j["reused"] for j in record["jobs"].values()))
 
-    def __init__(self, actor: str = "", *, failing: str = ""):
-        self.actor = actor
-        self.failing = failing
-        self.calls = 0
-        self.actors: list[str] = []
-        self.inputs: list[object] = []
-        self.thread_ids: list[str] = []
-        self.sessions: list[str] = []
+    async def test_frozen_input_tampering_rejected_before_log_or_model_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            path = run / "_internal/inputs/asset_metadata.md"
+            path.write_text("Changed")
+            before = snapshot(run)
+            fake = FakeFinder()
+            with self.assertRaisesRegex(ValueError, "Frozen"):
+                await fake.run(run)
+            self.assertFalse(fake.calls)
+            self.assertEqual(before, snapshot(run))
 
-    async def aget_state(self, config):
-        if config["configurable"]["thread_id"] in FakeGraph.checkpointed:
-            return SimpleNamespace(values={"messages": []}, next=("model",))
-        return SimpleNamespace(values={}, next=())
+    async def test_interrupted_calls_stop_and_resume_only_unfinished_work(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), ["a", "b", "c"])
+            fake = FakeFinder()
+            fake.hold = asyncio.Event()
+            task = asyncio.create_task(fake.run(run))
+            for _ in range(100):
+                if fake.active == 3:
+                    break
+                await asyncio.sleep(0.01)
+            self.assertEqual(fake.active, 3)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertEqual(fake.active, 0)
+            self.assertEqual(load_json(run / "run.json")["status"], "interrupted")
+            fake.hold = None
+            record = await fake.run(run)
+            self.assertEqual(record["status"], "complete")
+            self.assertFalse(any("waiting_progress" in repr(t.get_coro()) for t in asyncio.all_tasks()))
 
-    async def ainvoke(self, value, **kwargs):
-        actor = self.actor or kwargs["context"].agent
-        thread_id = kwargs["config"]["configurable"]["thread_id"]
-        self.calls += 1
-        self.actors.append(actor)
-        self.inputs.append(value)
-        self.thread_ids.append(thread_id)
-        self.sessions.append(kwargs["context"].session_id)
-        FakeGraph.order.append(actor)
-        FakeGraph.active += 1
-        FakeGraph.maximum = max(FakeGraph.maximum, FakeGraph.active)
-        await asyncio.sleep(0)
-        FakeGraph.active -= 1
-        if actor == self.failing:
-            FakeGraph.checkpointed.add(thread_id)
-            raise RuntimeError("provider failure")
-        if actor == "property-synthesis":
-            return {"messages": [AIMessage(content="# Property decision\n\nProceed.\n")]}
-        return _domain_state(actor)
+    async def test_incomplete_provider_output_is_preserved_and_only_retried_explicitly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), ["one"])
+            fake = FakeFinder()
+            key = "source_finder/000001"
+            fake.outputs[key] = AIMessage(content='{"partial":', response_metadata={"status": "incomplete"})
+            record = await fake.run(run)
+            self.assertEqual(record["status"], "failed")
+            self.assertEqual(local_path(run, record["jobs"][key]["response_path"]).read_text(encoding="utf-8"), '{"partial":')
+            await fake.run(run)
+            self.assertEqual(len(fake.calls), 1)
+            fake.outputs[key] = source_json()
+            await fake.run(run, retry_failed=True)
+            self.assertEqual(len(fake.calls), 2)
 
+    async def test_publication_rebuild_and_history_need_no_model_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeFinder()
+            record = await fake.run(run)
+            path = local_path(run, record["domains"][0]["output_path"])
+            path.write_text("Old presentation\r\n", newline="")
+            publish(run)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), json.loads(source_json()))
+            history = list((run / "_internal/trace/presentation_history").rglob(path.name))
+            self.assertEqual(history[0].read_bytes(), b"Old presentation\r\n")
+            path.unlink()
+            await fake.run(run)
+            self.assertEqual(len(fake.calls), 2)
+            self.assertTrue(path.is_file())
 
-@asynccontextmanager
-async def _saver(_run_dir):
-    yield object()
+    async def test_publication_failure_is_operational_and_recovers_without_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp))
+            fake = FakeFinder()
+            with patch("ML.deep_research.layer3.source_runner.publish", side_effect=OSError("PRIVATE_DISK")):
+                with self.assertRaises(OSError):
+                    await fake.run(run)
+            self.assertEqual(load_json(run / "run.json")["status"], "failed")
+            record = await fake.run(run)
+            self.assertEqual(record["status"], "complete")
+            self.assertEqual(len(fake.calls), 2)
 
+    async def test_trace_write_failure_never_resends_completed_content(self):
+        from ML.deep_research.layer3.source_finder import write_json as persist
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), ["one"])
+            fake = FakeFinder()
+            def fail_trace(path, value):
+                if path.name == "provider_message.json":
+                    raise OSError("PRIVATE_DISK")
+                return persist(path, value)
+            with patch("ML.deep_research.layer3.source_finder.write_json", side_effect=fail_trace):
+                record = await fake.run(run)
+            self.assertEqual(record["status"], "failed")
+            record = await fake.run(run, retry_failed=True)
+            self.assertEqual(len(fake.calls), 1)
+            self.assertEqual(record["publication"]["published_sources"], 1)
+            self.assertIn("provider_trace_unavailable", (run / "README.md").read_text(encoding="utf-8"))
 
-class Layer3RunnerTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        FakeGraph.order = []
-        FakeGraph.checkpointed = set()
-        FakeGraph.active = 0
-        FakeGraph.maximum = 0
-
-    async def _run(
-        self,
-        run_dir: Path,
-        *,
-        fail: str = "",
-        fail_synthesis: bool = False,
-        retry_failed: bool = False,
-    ):
-        researcher_graph = FakeGraph(failing=fail)
-        constructor_calls = 0
-
-        def researcher(_run_dir, _saver):
-            nonlocal constructor_calls
-            constructor_calls += 1
-            return researcher_graph
-
-        synthesis = FakeGraph(
-            "property-synthesis",
-            failing="property-synthesis" if fail_synthesis else "",
-        )
-        with (
-            patch("ML.deep_research.layer3.runner.checkpoint_saver", _saver),
-            patch("ML.deep_research.layer3.runner.from_run", return_value=object()),
-            patch(
-                "ML.deep_research.layer3.runner.create_domain_researcher_harness",
-                side_effect=researcher,
-            ),
-            patch(
-                "ML.deep_research.layer3.runner.create_synthesis_harness",
-                return_value=synthesis,
-            ),
-        ):
-            await run_research(run_dir, retry_failed=retry_failed)
-        return researcher_graph, synthesis, constructor_calls
-
-    async def test_researchers_run_one_at_a_time_then_synthesis(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l3(Path(temporary))
-            researcher, _, constructor_calls = await self._run(run_dir)
-            run = load_json(run_dir / "run.json")
-
-        self.assertEqual(FakeGraph.order, [*DOMAIN_NAMES, "property-synthesis"])
-        self.assertEqual(FakeGraph.maximum, 1)
-        self.assertEqual(constructor_calls, 1)
-        self.assertEqual(researcher.calls, len(DOMAIN_NAMES))
-        self.assertEqual(researcher.actors, list(DOMAIN_NAMES))
-        self.assertEqual(run["status"], "complete")
-        self.assertTrue(all(item["status"] == "complete" for item in run["execution"]["domains"].values()))
-        self.assertEqual(run["execution"]["final"]["status"], "complete")
-
-    async def test_publishes_model_responses_without_auxiliary_artifact_gates(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l3(Path(temporary))
-            await self._run(run_dir)
-            first = run_dir / "domains" / slug(DOMAIN_NAMES[0])
-            paths = {path.relative_to(first).as_posix() for path in first.rglob("*.md")}
-            answer = read_text(run_dir / "research" / "final.md")
-
-        self.assertEqual(paths, {"final.md"})
-        self.assertEqual(answer, "# Property decision\n\nProceed.\n")
-
-    async def test_transport_failure_does_not_stop_other_domains_or_synthesis(self):
-        failed = DOMAIN_NAMES[0]
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l3(Path(temporary))
-            researcher, synthesis, constructor_calls = await self._run(run_dir, fail=failed)
-            run = load_json(run_dir / "run.json")
-
-        self.assertEqual(constructor_calls, 1)
-        self.assertEqual(researcher.calls, len(DOMAIN_NAMES))
-        self.assertEqual(synthesis.calls, 1)
-        self.assertEqual(FakeGraph.order, [*DOMAIN_NAMES, "property-synthesis"])
-        self.assertEqual(run["status"], "complete")
-        self.assertEqual(run["execution"]["domains"][failed]["status"], "failed")
-
-    async def test_resume_skips_every_completed_model_response(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l3(Path(temporary))
-            await self._run(run_dir)
-            FakeGraph.order = []
-            researcher, synthesis, constructor_calls = await self._run(run_dir)
-
-        self.assertEqual(FakeGraph.order, [])
-        self.assertEqual(constructor_calls, 1)
-        self.assertEqual(researcher.calls, 0)
-        self.assertEqual(synthesis.calls, 0)
-
-    async def test_retry_failed_resumes_domain_and_restarts_changed_synthesis(self):
-        failed = DOMAIN_NAMES[0]
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l3(Path(temporary))
-            await self._run(run_dir, fail=failed)
-            before_run = load_json(run_dir / "run.json")
-            old_thread = before_run["execution"]["domains"][failed]["thread_id"]
-            old_synthesis_thread = before_run["execution"]["final"]["thread_id"]
-            FakeGraph.order = []
-            researcher, synthesis, _ = await self._run(run_dir, retry_failed=True)
-            after_run = load_json(run_dir / "run.json")
-            after = after_run["execution"]["domains"][failed]
-            final = after_run["execution"]["final"]
-
-        self.assertEqual(after["attempt"], 2)
-        self.assertEqual(after["thread_id"], old_thread)
-        self.assertEqual(researcher.inputs, [None])
-        self.assertEqual(researcher.sessions, [f"{old_thread}:attempt-2"])
-        self.assertEqual(final["attempt"], 2)
-        self.assertNotEqual(final["thread_id"], old_synthesis_thread)
-        self.assertIsInstance(synthesis.inputs[0], dict)
-        self.assertEqual(FakeGraph.order, [failed, "property-synthesis"])
-
-    async def test_retry_failed_resumes_unchanged_failed_synthesis(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l3(Path(temporary))
-            await self._run(run_dir, fail_synthesis=True)
-            before = load_json(run_dir / "run.json")["execution"]["final"]
-            FakeGraph.order = []
-            _, synthesis, _ = await self._run(run_dir, retry_failed=True)
-            after = load_json(run_dir / "run.json")["execution"]["final"]
-
-        self.assertEqual(after["attempt"], 2)
-        self.assertEqual(after["thread_id"], before["thread_id"])
-        self.assertEqual(synthesis.inputs, [None])
-        self.assertEqual(
-            synthesis.sessions,
-            [f"{before['thread_id']}:attempt-2"],
-        )
-        self.assertEqual(FakeGraph.order, ["property-synthesis"])
-
-    async def test_old_schema_is_rejected_before_graph_creation(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = _new_l3(Path(temporary))
-            run = load_json(run_dir / "run.json")
-            run["schema_version"] = 7
-            write_json(run_dir / "run.json", run)
-            with self.assertRaisesRegex(ValueError, "fresh Layer 3"):
-                await run_research(run_dir)
-            self.assertEqual(load_json(run_dir / "run.json"), run)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    async def test_changed_request_versions_preserve_prior_responses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = new_run(Path(tmp), ["one"])
+            fake = FakeFinder()
+            record = await fake.run(run)
+            entry = next(iter(record["jobs"].values()))
+            old_path = local_path(run, entry["response_path"])
+            before = old_path.read_bytes()
+            record["web_search"]["verbosity"] = "high"
+            write_json(run / "run.json", record)
+            record = await fake.run(run)
+            self.assertEqual(len(fake.calls), 2)
+            self.assertEqual(old_path.read_bytes(), before)
+            self.assertNotEqual(next(iter(record["jobs"].values()))["fingerprint"], entry["fingerprint"])
