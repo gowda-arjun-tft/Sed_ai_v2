@@ -20,6 +20,7 @@ SCHEMA_VERSION = 9
 HARNESS_NAME = "parallel_source_finder"
 SOURCE_SUGGESTION_PATH = REPO_ROOT / "inputs" / "source_suggestion.md"
 RESEARCH_INSTRUCTION_PATH = REPO_ROOT / "inputs" / "user_research_instruction.md"
+RESEARCH_CONFIG_PATH = REPO_ROOT / "inputs" / "research_config.json"
 SOURCE_REASONING_EFFORT = "high"
 SOURCE_SEARCH_DEPTH = "medium"
 SOURCE_SEARCH_VERBOSITY = "low"

@@ -14,7 +14,7 @@ from ..settings import (
     HARNESS_NAME, MODEL_INPUT_TOKEN_LIMIT, MODEL_MAX_RETRIES, MODEL_NAME,
     MODEL_TIMEOUT_SECONDS, PROMPTS_DIR, SCHEMA_VERSION, SOURCE_CONCURRENCY,
     SOURCE_REASONING_EFFORT, SOURCE_SEARCH_DEPTH, SOURCE_SEARCH_VERBOSITY,
-    SOURCE_SUGGESTION_PATH, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS,
+    SOURCE_SUGGESTION_PATH, RESEARCH_CONFIG_PATH, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS,
 )
 from ..document_records import UPLOAD_POLICY
 
@@ -59,13 +59,16 @@ def create_run(
     web_search_verbosity: str = SOURCE_SEARCH_VERBOSITY,
     research_reasoning_effort: str = "max",
     research_instruction: Path = RESEARCH_INSTRUCTION_PATH,
+    research_config: Path = RESEARCH_CONFIG_PATH,
 ) -> Path:
     """Create beside completed schema-9 Layer 2; read all inputs before creating a directory."""
     if not public_input_confirmed:
         raise ValueError("Layer 3 requires public-input confirmation")
-    from ..research_run import RESEARCH_PROMPTS, research_policy
+    from ..research_run import RESEARCH_PROMPTS, read_research_config, research_policy
 
-    research = research_policy(research_reasoning_effort)
+    config_path = storage_path(research_config)
+    config_bytes, limits = read_research_config(config_path)
+    research = research_policy(research_reasoning_effort, call_limits=limits)
     if reasoning_effort not in REASONING_EFFORTS:
         raise ValueError("unsupported reasoning effort")
     if web_search_context_size not in WEB_SEARCH_LEVELS or web_search_verbosity not in WEB_SEARCH_LEVELS:
@@ -99,6 +102,10 @@ def create_run(
         snapshots[relative] = raw
         inputs[relative] = {"source_path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
                             "bytes": len(raw)}
+    config_relative = "_internal/inputs/research_config.json"
+    snapshots[config_relative] = config_bytes
+    inputs[config_relative] = {"source_path": str(config_path), "sha256": hashlib.sha256(config_bytes).hexdigest(),
+                              "bytes": len(config_bytes)}
     # The public runs_dir argument remains accepted; the selected Layer 2 owns colocation.
     while True:
         run = l2_run.parent / f"L3_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"

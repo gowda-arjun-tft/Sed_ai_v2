@@ -18,7 +18,7 @@ from .runner import run_research
 from .research_run import checkpoint_root, create_research_run
 from .settings import (
     REPO_ROOT, RUNS_DIR, SOURCE_REASONING_EFFORT, SOURCE_SEARCH_DEPTH,
-    SOURCE_SEARCH_VERBOSITY, SOURCE_SUGGESTION_PATH, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS,
+    SOURCE_SEARCH_VERBOSITY, SOURCE_SUGGESTION_PATH, RESEARCH_CONFIG_PATH, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS,
 )
 
 
@@ -75,6 +75,7 @@ def _parser() -> argparse.ArgumentParser:
     action.add_argument("--check-only", type=Path, help="inspect Layer 3 without changing files")
     parser.add_argument("--source-suggestion", type=Path, help="editable source guidance Markdown")
     parser.add_argument("--research-instruction", type=Path, help="editable research purpose and report instructions")
+    parser.add_argument("--research-config", type=Path, help="JSON research call limits; three null values mean unlimited")
     parser.add_argument("--reasoning-effort", choices=sorted(REASONING_EFFORTS))
     parser.add_argument("--research-reasoning-effort", choices=sorted(REASONING_EFFORTS))
     parser.add_argument("--web-search-depth", choices=sorted(WEB_SEARCH_LEVELS))
@@ -97,7 +98,8 @@ def main(argv: list[str] | None = None) -> int:
     """Create/resume frozen Layer 3 phases or print non-mutating observations."""
     parser = _parser()
     args = parser.parse_args(argv)
-    new_options = any((args.source_suggestion, args.research_instruction, args.reasoning_effort, args.research_reasoning_effort,
+    new_options = any((args.source_suggestion, args.research_instruction, args.research_config,
+                       args.reasoning_effort, args.research_reasoning_effort,
                        args.web_search_depth, args.web_search_verbosity))
     if args.check_only:
         if args.online or args.public_input_confirmed or args.retry_failed or new_options:
@@ -125,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
                     parser.error("--research-from preserves preparation inputs and reasoning")
                 run_dir = create_research_run(args.research_from, RUNS_DIR,
                     research_instruction=args.research_instruction or RESEARCH_INSTRUCTION_PATH,
+                    research_config=args.research_config or RESEARCH_CONFIG_PATH,
                     public_input_confirmed=args.public_input_confirmed,
                     research_reasoning_effort=args.research_reasoning_effort or "max",
                     web_search_context_size=args.web_search_depth,
@@ -132,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 run_dir = create_run(args.research, RUNS_DIR,
                     research_instruction=args.research_instruction or RESEARCH_INSTRUCTION_PATH,
+                    research_config=args.research_config or RESEARCH_CONFIG_PATH,
                     source_suggestion=args.source_suggestion or SOURCE_SUGGESTION_PATH,
                     public_input_confirmed=args.public_input_confirmed,
                     reasoning_effort=args.reasoning_effort or SOURCE_REASONING_EFFORT,

@@ -132,9 +132,11 @@ def publish(run: Path) -> dict:
                          f"{len(reports)}/{len(record['domains'])} reports completed. No final synthesizer.\n\n"
                          + "\n".join(reports) + ("\n\nExecution/empty-response observations:\n\n" + "\n".join(gaps) if gaps else "")
                          + "\n\nCompletion records execution, not independently verified research coverage. ")
-        if research.get("version") == 2:
+        if research.get("version", 1) >= 2:
             usage = [f"- {key}: {j['budget']['used']}/{research['maximum_calls']} calls used; "
                      f"{j['budget']['remaining']} remaining; {j['budget']['phase']}."
+                     if research["maximum_calls"] is not None else
+                     f"- {key}: {j['budget']['used']} calls used; unlimited allowance; {j['budget']['phase']}."
                      for key, j in jobs.items() if j.get("budget")]
             research_text += "\n\nLogical model calls (including failed/uncertain dispatched requests):\n\n" + "\n".join(usage)
             if research.get("prior_work"):

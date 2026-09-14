@@ -16,12 +16,12 @@ from ML.deep_research.layer3.research_run import research_policy
 from tests.research_fixtures import ResearchModel, linked_run
 
 
-def new_budget(root, used=0):
+def new_budget(root, used=0, limits=None):
     """Seed disposable observed reservations to test exact production thresholds cheaply."""
     entry = {"fingerprint": "offline", "thread_id": "thread"}
     write_json(root / "calls.json", {"fingerprint": "offline", "calls": [
         {"number": i, "kind": "main", "outcome": "returned"} for i in range(1, used + 1)]})
-    return CallBudget(root, research_policy(), entry, Mock(), Mock())
+    return CallBudget(root, research_policy(call_limits=limits), entry, Mock(), Mock())
 
 
 def seed_domain(run, checkpoint, used):
@@ -34,6 +34,85 @@ def seed_domain(run, checkpoint, used):
 
 
 class ResearchBudgetTests(unittest.IsolatedAsyncioTestCase):
+    async def test_custom_thresholds_and_unlimited_reservations_survive_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            budget = new_budget(root / "bounded", limits={"maximum_calls": 8, "wrap_up_after": 3, "finalize_after": 5})
+            for number in range(1, 9):
+                phase = "research" if number <= 3 else "wrap_up" if number <= 5 else "finalization"
+                self.assertEqual(budget.phase, phase)
+                if number >= 6:
+                    with self.assertRaises(CallUnavailable):
+                        await budget.call("search", lambda n, f: n, AsyncMock())
+                if number == 8:
+                    with self.assertRaises(CallUnavailable):
+                        await budget.call("summary", lambda n, f: n, AsyncMock())
+                prepare = Mock(return_value="input")
+                await budget.call("main", prepare, AsyncMock())
+                self.assertIn(f"logical call {number} of 8", prepare.call_args.args[0])
+                self.assertEqual(prepare.call_args.args[1], number == 8)
+            with self.assertRaises(BudgetExhausted):
+                await budget.call("main", Mock(), AsyncMock())
+            unlimited = new_budget(root / "unlimited", limits=dict.fromkeys(
+                ("maximum_calls", "wrap_up_after", "finalize_after")))
+            for number in range(84):
+                kind = ("main", "search", "document", "summary")[number % 4]
+                await unlimited.call(kind, lambda note, final: (note, final), AsyncMock())
+            resumed = CallBudget(root / "unlimited", unlimited.policy, unlimited.entry, Mock(), Mock())
+            self.assertEqual(resumed.used, 84)
+            self.assertEqual(resumed.phase, "research")
+            self.assertIsNone(resumed.entry["budget"]["remaining"])
+            resumed.require_research()
+            failed = AsyncMock(side_effect=TimeoutError("PRIVATE_PAYLOAD"))
+            with self.assertRaises(TimeoutError):
+                await resumed.call("search", lambda n, f: n, failed)
+            self.assertEqual(resumed.used, 85)
+            self.assertIn("no application call limit", failed.call_args.args[0])
+            with self.assertRaises(asyncio.CancelledError):
+                await resumed.call("document", lambda n, f: n, AsyncMock(side_effect=asyncio.CancelledError()))
+            resumed = CallBudget(root / "unlimited", unlimited.policy, unlimited.entry, Mock(), Mock())
+            self.assertEqual(resumed.used, 86)
+            self.assertEqual(resumed.state["calls"][-1]["outcome"], "interrupted")
+
+    async def test_unlimited_native_graph_compacts_after_eighty_and_keeps_tools(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "unlimited.json"
+            write_json(config, dict.fromkeys(("maximum_calls", "wrap_up_after", "finalize_after")))
+            _, run = await linked_run(root, ["energy"], research_config=config)
+            record = load_json(run / "run.json")
+            record["research"].update(summary_trigger_tokens=1, summary_keep_tokens=100)
+            write_json(run / "run.json", record)
+            model = ResearchModel()
+
+            async def replies(domain, messages, options):
+                """Keep native tools available through compaction and the former hard ceiling."""
+                self.assertIn("search_web", model.surfaces[-1])
+                self.assertIn("read_document", model.surfaces[-1])
+                self.assertIn("write_file", model.surfaces[-1])
+                self.assertIn("no application call limit", messages[0].text)
+                self.assertEqual(messages[0].text.count("Runtime call allowance:"), 1)
+                if len(model.calls) > 82:
+                    return AIMessage(content="# Done\n医院 — retained qualification.\n")
+                return AIMessage(content="Read context", tool_calls=[{"name": "read_file",
+                    "args": {"file_path": "/inputs/context.md"}, "id": f"read-{len(model.calls)}"}])
+
+            model.custom = replies
+            with model.offline(root / "checkpoints"):
+                await run_all(run)
+                used = len(model.calls)
+                await run_all(run)
+                self.assertEqual(len(model.calls), used)
+            record = load_json(run / "run.json")
+            self.assertEqual(record["status"], "complete", (run / "run.log").read_text())
+            job = next(iter(record["research"]["jobs"].values()))
+            self.assertEqual(job["budget"], {"used": used, "remaining": None, "phase": "research"})
+            ledger = load_json(run / job["root"] / "calls.json")["calls"]
+            self.assertTrue(any(c["number"] > 80 and c["kind"] == "summary" for c in ledger))
+            self.assertEqual((run / job["output_path"]).read_bytes(), (run / job["root"] / "response.md").read_bytes())
+            self.assertIn("unlimited allowance", (run / "README.md").read_text())
+            self.assertIn("remaining=unlimited", (run / "run.log").read_text())
+
     async def test_atomic_reservations_all_paths_failures_and_no_eighty_first(self):
         with tempfile.TemporaryDirectory() as tmp:
             budget = new_budget(Path(tmp), 68)

@@ -175,7 +175,7 @@ class ResearchSummarization(SummarizationMiddleware):
 
     async def awrap_model_call(self, request, handler):
         """Retain existing summaries but reserve the last invocation for the final main response."""
-        if self.budget and self.budget.used >= self.budget.policy["maximum_calls"] - 1:
+        if self.budget and self.budget.remaining is not None and self.budget.remaining <= 1:
             return await handler(request.override(messages=self._get_effective_messages(request)))
         return await super().awrap_model_call(request, handler)
 

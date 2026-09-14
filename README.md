@@ -145,11 +145,15 @@ For existing preparation, set `LAYER3_PREPARED_RUN_PATH` in the notebook, or use
 `python -m ML.deep_research.layer3 --research-from '<prepared-L3-run>' --online --public-input-confirmed`
 inside the development container. A new linked run preserves the parent and starts research without
 repeating source discovery/uploads. Main research reasoning defaults to `max`. Resume its explicit new
-run path to reuse completed reports and interrupted checkpoint threads. New research capability version 2
-uses one domain at a time and 80 shared logical model calls per domain, including search, document
-analysis and summarization. Wrap-up starts after 60 calls; after 70 only saved-file reading and
+run path to reuse completed reports and interrupted checkpoint threads. New research capability version 3
+uses one domain at a time with frozen `inputs/research_config.json`: 80 shared logical model calls
+per domain by default, including search, document analysis and summarization. Wrap-up starts after 60 calls; after 70 only saved-file reading and
 finalization remain; the last call is reserved for tool-free report writing. An exhausted unfinished
 domain stays partial without blocking other domains. Historical policies are not changed.
+Set all three config values to null for unlimited application calls with continued usage tracking;
+provider credit/context limits and manual cancellation still apply. Select another config with
+`research_config`, `--research-config`, `-ResearchConfig` or notebook `LAYER3_RESEARCH_CONFIG_PATH`.
+Resume uses frozen settings, not later edits to the selected file.
 Edit `inputs/user_research_instruction.md` (notebook `LAYER3_RESEARCH_INSTRUCTION_PATH`, CLI
 `--research-instruction`, PowerShell `-ResearchInstruction`) to request risks/opportunities/actions
 or another objective. Linked runs import available prior evidence and notes into fresh threads;

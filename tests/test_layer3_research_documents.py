@@ -54,6 +54,27 @@ class ResearchHTTP(UploadHTTP):
 
 
 class ResearchDocumentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unlimited_search_and_document_requests_after_old_ceiling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run, _ = await prepared(Path(tmp))
+            http = ResearchHTTP()
+            await http.run(run)
+            record = load_json(run / "run.json")
+            root = run / "_internal/counter-test"
+            budget = new_budget(root, 80, dict.fromkeys(("maximum_calls", "wrap_up_after", "finalize_after")))
+            with http.offline(), operational_logger(run) as logger:
+                async with AsyncOpenAI(api_key="offline", http_client=httpx.AsyncClient()) as client:
+                    docs = ResearchDocuments(run, record, client, logger)
+                    domain = record["domains"][0]
+                    docs.authorize(domain["key"], parse_json(eligible_sources(run, record, domain)))
+                    search, _, read = make_tools(root, record, domain["key"], docs, budget)
+                    await search.ainvoke({"query": "Exact question"})
+                    await read.ainvoke({"reference": "file-offline1", "questions": "Exact conditions?"})
+            self.assertEqual(budget.used, 82)
+            self.assertIsNone(budget.remaining)
+            self.assertIn("logical call 81 with no application call limit", http.reads[0]["input"])
+            self.assertIn("logical call 82 with no application call limit", http.reads[1]["instructions"])
+
     async def test_search_document_counter_cache_and_failed_dispatch_share_one_ledger(self):
         with tempfile.TemporaryDirectory() as tmp:
             run, _ = await prepared(Path(tmp))

@@ -19,12 +19,13 @@ requirements set priorities and the user-approved broader research scope. Python
 Public entrypoints remain create_run and run_all, with explicit public-input confirmation for new runs.
 
 Layer 3 schema 9 runs one native source finder per actual Layer 2 domain, with five concurrent jobs,
-then uploads unique source documents. New runs freeze research capability version 2 and continue into
+then uploads unique source documents. New runs freeze research capability version 3 and continue into
 one persistent Deep Agents 0.7.7 graph per domain sequentially, with no synthesizer. It accepts
 completed schema-9 metadata/domain Markdown and editable source suggestions. Uploading remains ordinary
 Python; document analysis is an explicit tool-free file-input request inside the researcher's tool loop.
 An editable user research instruction determines the report objective, separately from source guidance.
-Existing preparation-only and version-1 policies stay unchanged; create_research_run makes a new linked handoff.
+The separate research_config JSON freezes per-domain call limits; three nulls mean unlimited calls.
+Existing preparation-only/version-1/version-2 policies stay unchanged; create_research_run makes a new linked handoff.
 Layer 4 retains segregation/research/synthesis on historical schema-8 research inputs only; its shared
 tools/checkpoints remain unchanged, and notebook execution is disabled by default.
 
@@ -80,10 +81,12 @@ Native file permissions restrict model writes to /notes; no shell, deletion, del
 paths. Native TodoListMiddleware tracks a model-authored plan without completion gates. Explicit native
 summarization starts at 250K estimated tokens, retains the latest 100K where feasible and archives full
 dialogue for retrieval. Final assembled input checks apply a 300K target/350K ceiling and provider capacity;
-search alone retains 128K. Research version 2 shares a durable 80-logical-call ledger across main,
+search alone retains 128K. Research version 3 shares a durable logical-call ledger across main,
 search, document and summarization requests. Every dispatch has an atomic reservation and ephemeral
-counter; failures/uncertain responses consume slots. After 60 calls, wrap up; after 70, use saved-file
-reading and finalization only. Slot 80 belongs to a tool-free main report, not a summary. Unfinished
+counter; failures/uncertain responses consume slots. Frozen config defaults to 80/60/70: after wrap-up,
+prioritize essential gaps; after finalization, use saved-file reading only. The final slot belongs
+to a tool-free main report, not a summary. Three nulls retain counting and summarization but disable
+budget-driven phases, restrictions and exhaustion; remaining allowance is null/displayed unlimited. Unfinished
 exhaustion is partial and does not block other domains. There is no dollar or output-token cap.
 Execution owns HTTP transports across domains and closes them after joined completion/cancellation.
 

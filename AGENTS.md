@@ -10,7 +10,7 @@ See `layer2/README.md` for the workflow. Industry definitions belong in the sele
 not generic prompts or Python. `inputs/requirement.md` holds user objectives and the explicitly broadened research scope; review its confidential origin before public-input confirmation.
 Operational events go to each run's `run.log`. `ML/deep_research/layer3/` finds and tests sources
 for each actual Layer 2 domain, uploads unique documents and runs persistent domain researchers,
-sequentially for new version-2 runs, producing independent Markdown reports without synthesis. `ML/deep_research/layer4/` segregates each domain report
+sequentially for new version-3 runs, producing independent Markdown reports without synthesis. `ML/deep_research/layer4/` segregates each domain report
 through two tool-free calls, reuses the direct researcher for external influences, then synthesizes
 the available external reports. Prompts sit below each layer; design notes are in
 `ML/deep_research/docs/`; tests are in `tests/`.
@@ -187,7 +187,7 @@ researchers expose only search_web/read_source, no task/subagents or host shell.
 compaction retains source pointers without grading content or blocking publication. Do not alter
 these helpers to implement source discovery. Layer 4 is disconnected from source-only schema 9.
 
-Layer 3 research capability version 2 extends new full runs after preparation. Linked research-only
+Layer 3 research capability version 3 extends new full runs after preparation. Linked research-only
 runs copy/hash settled complete or partial preparation; never resume/rewrite the parent. Domains
 without usable sources remain scheduled. Explicit resume reuses final receipts or the same domain
 checkpoint thread. Freeze research reasoning (default max), search controls and input policy.
@@ -196,17 +196,26 @@ inputs/user_research_instruction.md for purpose/presentation; defaults request s
 opportunities and corresponding actions. Keep it active through compaction. Source suggestions
 govern discovery; asset/source/prior material remains evidence. Both creation APIs accept the
 research_instruction keyword, with CLI/PowerShell/notebook controls; resume uses frozen bytes.
-Each domain has 80 logical model invocations shared by main, search, document and summary calls.
+Freeze inputs/research_config.json separately from the report objective, with research_config,
+--research-config, -ResearchConfig and LAYER3_RESEARCH_CONFIG_PATH controls for new runs only.
+Read once, hash exact bytes and freeze resolved values. Require exactly maximum_calls,
+wrap_up_after and finalize_after: three integers with 0 <= wrap < finalize < maximum, or three nulls.
+Reject missing/duplicate/unknown keys, wrong types and unreadable files before creating a run.
+Default per-domain limits are 80/60/70, shared by main, search, document and summary calls.
 Reserve atomically and persist before dispatch; failed/uncertain dispatches consume slots, cached
 results/local files/downloads/Files operations do not. Provider transport retries and hosted search
 actions remain separate. Append an ephemeral current counter to each request and count that input.
-After 60 used calls, prioritize essential gaps. After 70, allow saved-file reads only; no new search,
-downloads or document analysis. Summaries share the final ten but cannot use slot 80, reserved for
-a tool-free main final report. Never issue call 81. Early final responses are accepted unchanged.
+At configured wrap-up, prioritize essential gaps; at finalization, allow saved-file reads only,
+without new search, downloads or document analysis. Summaries share the reserve but cannot consume
+the last slot, reserved for a tool-free main report. Never exceed the configured ceiling.
+Three nulls disable budget-driven phases/tool restrictions/exhaustion, not accounting or summarization.
+Remaining allowance is null and displayed as unlimited. Early final responses are accepted unchanged.
 Exhaustion without a final response is budget_exhausted/partial, not a content-repair trigger.
 Preserve tool-result ordering for denied pending calls, and continue other domains after failure.
 Research owns and closes HTTP clients once per execution, not per domain. Historical version-1
-runs retain frozen concurrency and no-call-budget behavior. Native recursion remains sys.maxsize;
+runs retain frozen concurrency and no-call-budget behavior. Historical version-2 runs retain frozen
+80/60/70 limits without reading the new config. New linked runs freeze the selected config with fresh
+allowances; resumes never reset them. Native recursion remains sys.maxsize;
 keep request/input/provider limits, manual cancellation and three transport retries, without a dollar
 or output-token cap. Logs/README/notebook expose used/remaining calls and phases.
 New linked runs copy/hash matching prior evidence, answers, archives and reports; export notes/plans

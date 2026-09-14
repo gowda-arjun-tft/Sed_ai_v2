@@ -1,0 +1,5 @@
+{
+  "maximum_calls": 80,
+  "wrap_up_after": 60,
+  "finalize_after": 70
+}

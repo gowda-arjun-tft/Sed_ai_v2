@@ -17,19 +17,43 @@ from ML.deep_research.layer2.backend.fs import load_json, now_iso, sha256, stora
 from ML.deep_research.layer2.backend.settings import REASONING_EFFORTS
 from .document_records import REGISTRY_PATH, UPLOAD_POLICY, enrich, research_usable, source_entries
 from .pipeline.create_run import local_path, require_current, verify_inputs
-from .settings import PROMPTS_DIR, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS
+from .settings import PROMPTS_DIR, RESEARCH_CONFIG_PATH, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS
 from .source_publication import parse_json, pretty_json
 
 RESEARCH_PROMPTS = ("domain_research", "research_summary", "read_document")
 CHECKPOINT_DEFAULT = "/var/lib/sedai/research-checkpoints"
 
 
-def research_policy(reasoning="max") -> dict:
+def read_research_config(path: Path) -> tuple[bytes, dict]:
+    """Read once and validate user-owned operational limits, never model-authored content."""
+    def unique_members(pairs):
+        """Reject duplicate settings instead of silently taking the last value."""
+        result = dict(pairs)
+        if len(result) != len(pairs):
+            raise ValueError("Research configuration contains duplicate keys")
+        return result
+
+    raw = storage_path(path).read_bytes()
+    limits = json.loads(raw.decode("utf-8-sig"), object_pairs_hook=unique_members)
+    keys = {"maximum_calls", "wrap_up_after", "finalize_after"}
+    if not isinstance(limits, dict) or set(limits) != keys:
+        raise ValueError("Research configuration requires exactly maximum_calls, wrap_up_after and finalize_after")
+    if not all(value is None for value in limits.values()):
+        if not all(type(value) is int for value in limits.values()):
+            raise ValueError("Research limits must be three integers or three null values")
+        if not 0 <= limits["wrap_up_after"] < limits["finalize_after"] < limits["maximum_calls"]:
+            raise ValueError("Research limits require 0 <= wrap_up_after < finalize_after < maximum_calls")
+    return raw, limits
+
+
+def research_policy(reasoning="max", *, call_limits=None) -> dict:
     """Freeze research independently of preparation and historical Layer 4 settings."""
     if reasoning not in REASONING_EFFORTS:
         raise ValueError("unsupported research reasoning effort")
-    return {"version": 2, "status": "pending", "mode": "full", "reasoning_effort": reasoning,
-            "max_concurrency": 1, "maximum_calls": 80, "wrap_up_after": 60, "finalize_after": 70,
+    if call_limits is None:
+        _, call_limits = read_research_config(RESEARCH_CONFIG_PATH)
+    return {"version": 3, "status": "pending", "mode": "full", "reasoning_effort": reasoning,
+            "max_concurrency": 1, **call_limits,
             "target_tokens": 300_000, "maximum_tokens": 350_000,
             "summary_trigger_tokens": 250_000, "summary_keep_tokens": 100_000,
             "framing_reserve": 8_000, "file_input_max_bytes": 50_000_000,
@@ -40,7 +64,7 @@ def research_policy(reasoning="max") -> dict:
 def checkpoint_root(record) -> Path:
     """Require a writable, separately mounted Linux checkpoint volume before paid work."""
     policy = record["research"]
-    if policy.get("version") not in {1, 2}:
+    if policy.get("version") not in {1, 2, 3}:
         raise ValueError("unsupported research capability")
     configured = os.environ.get("SEDAI_RESEARCH_CHECKPOINT_DIR")
     if sys.platform != "linux" or not configured or configured != policy["checkpoint_root"]:
@@ -104,13 +128,15 @@ def eligible_sources(run, record, domain) -> str:
 
 def create_research_run(prepared_run, runs_dir, *, public_input_confirmed=False,
                         research_reasoning_effort="max", web_search_context_size=None,
-                        web_search_verbosity=None, research_instruction=RESEARCH_INSTRUCTION_PATH) -> Path:
+                        web_search_verbosity=None, research_instruction=RESEARCH_INSTRUCTION_PATH,
+                        research_config=RESEARCH_CONFIG_PATH) -> Path:
     """Create a new linked run; copy prepared evidence without touching the parent or calling APIs."""
     from .document_uploads import run_writer
 
     if not public_input_confirmed:
         raise ValueError("Layer 3 requires public-input confirmation")
-    policy = research_policy(research_reasoning_effort)
+    config_bytes, limits = read_research_config(research_config)
+    policy = research_policy(research_reasoning_effort, call_limits=limits)
     instruction = storage_path(research_instruction).read_bytes()
     if not instruction.decode("utf-8-sig").strip():
         raise ValueError("User research instruction is empty")
@@ -148,6 +174,7 @@ def create_research_run(prepared_run, runs_dir, *, public_input_confirmed=False,
     for name in RESEARCH_PROMPTS:
         snapshots[f"_internal/inputs/prompts/{name}.md"] = (PROMPTS_DIR / f"{name}.md").read_bytes()
     snapshots["_internal/inputs/user_research_instruction.md"] = instruction
+    snapshots["_internal/inputs/research_config.json"] = config_bytes
     if registry is not None:
         snapshots["_internal/inputs/prepared_upload_registry.json"] = json.dumps(registry, ensure_ascii=False).encode()
     while True:

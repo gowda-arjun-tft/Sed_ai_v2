@@ -18,8 +18,9 @@ Unique document URLs → temporary bytes → SHA-256 deduplication → OpenAI Fi
                  ↓
 One enriched sources/<domain-file-stem>.json per domain
                  ↓
-Independent Deep Agents — one domain at a time (research capability version 2)
+Independent Deep Agents — one domain at a time (research capability version 3)
   + frozen inputs/user_research_instruction.md
+  + frozen inputs/research_config.json (operational limits, not research content)
 Plan → search/read → save findings → investigate gaps → research/<domain>.md
 ```
 
@@ -32,6 +33,9 @@ Plan → search/read → save findings → investigate gaps → research/<domain
   risks and opportunities with corresponding actions, adjacent citations and honest evidence gaps.
   Replace it with a technical assessment or another objective without changing Python. Its frozen
   copy remains active through compaction; asset/source/prior material is evidence, not instructions.
+- Edit `inputs/research_config.json` for per-domain call limits, separately from the report objective.
+  Default: 80 maximum, wrap up after 60, finalize after 70. Three explicit null values enable
+  unlimited application calls; this can keep spending until completion, interruption or provider failure.
 - In the notebook's Layer 3 cell, choose a completed Layer 2 run or leave its path blank to use
   `L2_DYNAMIC_RUN`. Set source guidance, reasoning, search depth and verbosity.
 - Review all input for public disclosure before setting `PUBLIC_INPUT_CONFIRMED = True`.
@@ -78,6 +82,9 @@ Full creation also accepts `research_reasoning_effort`. CLI exposes `--research-
 Both creation APIs accept `research_instruction=Path(...)`; CLI uses `--research-instruction`,
 PowerShell uses `-ResearchInstruction`, and the notebook uses `LAYER3_RESEARCH_INSTRUCTION_PATH`.
 These are new-run inputs; resume always uses the frozen copy. Source suggestions remain separate.
+Both creation APIs also accept `research_config=Path(...)`; CLI uses `--research-config`,
+PowerShell uses `-ResearchConfig` (translated to the shared Docker path), and the notebook uses
+`LAYER3_RESEARCH_CONFIG_PATH`. Resume/upload/check actions cannot override the frozen config.
 Conflicting linked/resume/upload actions are rejected before run creation.
 
 ## Outputs and meaning
@@ -219,13 +226,33 @@ provider capacity can reduce allowances. Unfit mandatory requests fail operation
 truncation. File bytes/tokens are not estimated from a file ID; the separate 50 MB file-input limit
 and provider context failures remain explicit. No File Search, vector store or OCR is introduced.
 
-Research capability **version 2** runs domains sequentially and permits **80 logical model calls per
-domain**, shared by main research, web-search requests, document analysis and summarization. Atomic
+Research capability **version 3** runs domains sequentially with a user-selected JSON call policy:
+
+```json
+{
+  "maximum_calls": 80,
+  "wrap_up_after": 60,
+  "finalize_after": 70
+}
+```
+
+Alternatively, use `{"maximum_calls": null, "wrap_up_after": null, "finalize_after": null}`.
+Only three integers satisfying `0 <= wrap_up_after < finalize_after < maximum_calls`, or three
+nulls, are accepted. Missing/duplicate/unknown keys, mixed types, booleans, strings, invalid ordering
+and unreadable files fail before creating a run. Blank files or omitted fields never mean unlimited.
+Creation reads the chosen file once and freezes its exact bytes/hash and resolved values. Editing
+the original file cannot change a resumed run. New linked runs use their selected config, not the
+parent's allowance, and start fresh counters while retaining parent usage separately.
+
+Limits apply **per research domain**, shared by main research, web-search requests, document analysis
+and summarization; they do not cap source discovery or document uploads. Atomic
 reservations in each domain's `calls.json` survive failure, cancellation and resume. A failed or
 uncertain dispatched request consumes its slot; cached results, files, downloads and Files API
-operations do not. Provider retries and hosted search actions are separate, so this is not an
-80-HTTP-request or dollar limit. All requests carry a current counter included in input accounting,
+operations do not. Provider retries and hosted search actions are separate, so this is not
+a limit on underlying HTTP requests or dollars. All requests carry a current counter included in input accounting,
 without accumulating counter messages in checkpoint history.
+
+The default policy behaves as follows; custom integers move these boundaries accordingly:
 
 | Already used | Next-call behavior |
 | --- | --- |
@@ -242,6 +269,13 @@ domains continue. No repeated reports, quality grading or content-repair calls a
 The log, README and notebook show used/remaining calls and phases. Request timeouts, input limits,
 manual cancellation and `sys.maxsize` graph recursion remain; there is no output-token or dollar cap.
 Historical capability-version-1 runs keep their frozen five-domain/no-call-budget policy and prompts.
+Version-2 runs keep their frozen 80/60/70 policy and need no config file.
+
+With three nulls, calls still enter the same durable ledger, but there is no budget-based wrap-up,
+tool restriction, last-slot reservation or exhaustion. Summarization continues normally; status
+stores remaining allowance as null and displays "unlimited". Provider credit, request timeouts,
+context limits and manual cancellation still apply. No time, dollar or output-token setting is added.
+The permanent prompts remain generic; the editable Markdown alone supplies report-purpose requirements.
 
 Research execution owns its HTTP transports and closes them after all domains finish or cancellation
 is joined; a completed domain does not close the next domain's client. Linked creation reads a
@@ -278,4 +312,5 @@ Use the shared Docker Dev Container and `/usr/local/bin/python` as described in 
 Run `python -m unittest discover -s tests -v`, `python -m compileall -q ML tests` and `python -m pip check`.
 Offline fakes cover orchestration, preservation, access instructions and request serialization, not
 real-world source accuracy or improved risks/opportunities/actions. No live source-finder or research
-run is part of implementation verification. See the [version-2 implementation record](../../../railway-track/tracks/2026-09-11-layer3-directed-research.md).
+run is part of implementation verification. See the [configuration implementation record](../../../railway-track/tracks/2026-09-12-layer3-research-configuration.md)
+and the historical [version-2 record](../../../railway-track/tracks/2026-09-11-layer3-directed-research.md).

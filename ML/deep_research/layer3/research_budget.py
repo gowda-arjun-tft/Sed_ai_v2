@@ -31,7 +31,7 @@ class CallBudget:
                 raise RuntimeError("Research call ledger missing; restore it before resuming")
             self.state = {"fingerprint": entry["fingerprint"], "calls": []}
         calls = self.state["calls"]
-        if len(calls) > policy["maximum_calls"] or any(c["number"] != i for i, c in enumerate(calls, 1)):
+        if (self.remaining is not None and self.remaining < 0) or any(c["number"] != i for i, c in enumerate(calls, 1)):
             raise ValueError("Invalid research call ledger")
         self.save()
 
@@ -41,9 +41,17 @@ class CallBudget:
         return len(self.state["calls"])
 
     @property
+    def remaining(self):
+        """Keep usage observable even when no application allowance is configured."""
+        maximum = self.policy["maximum_calls"]
+        return None if maximum is None else maximum - self.used
+
+    @property
     def phase(self):
         """Describe the next dispatch from already-consumed logical calls."""
-        if self.used >= self.policy["maximum_calls"]:
+        if self.remaining is None:
+            return "research"
+        if self.remaining <= 0:
             return "exhausted"
         if self.used >= self.policy["finalize_after"]:
             return "finalization"
@@ -52,28 +60,30 @@ class CallBudget:
     def save(self):
         """Persist the authoritative ledger before its compact run-status projection."""
         write_json(self.path, self.state)
-        self.entry["budget"] = {"used": self.used, "remaining": self.policy["maximum_calls"] - self.used,
+        self.entry["budget"] = {"used": self.used, "remaining": self.remaining,
                                 "phase": self.phase}
         self.persist()
 
     def require_research(self):
-        """Deny undispatched network work once the final ten calls are reserved."""
-        if self.used >= self.policy["finalize_after"]:
+        """Deny undispatched network work only during configured finalization."""
+        if self.phase in {"finalization", "exhausted"}:
             raise CallUnavailable("Finalization: read saved evidence and write the report; no new network research.")
 
     async def call(self, kind, prepare, invoke):
         """Account for checked requests atomically; cached/local work never enters this method."""
         async with self.lock:
-            if self.used >= self.policy["maximum_calls"]:
+            if self.phase == "exhausted":
                 raise BudgetExhausted("Research logical-call allowance exhausted")
-            final = self.used == self.policy["maximum_calls"] - 1
+            final = self.remaining == 1
             if kind in {"search", "document"}:
                 self.require_research()
             if final and kind != "main":
                 raise CallUnavailable("The last logical call is reserved for the main model's report.")
             phase = self.phase
+            allowance = ("with no application call limit" if self.remaining is None
+                         else f"of {self.policy['maximum_calls']}")
             note = (f"Runtime call allowance: {self.used} used; this is logical call {self.used + 1} "
-                    f"of {self.policy['maximum_calls']} (includes search, documents and summaries). ")
+                    f"{allowance} (includes search, documents and summaries). ")
             if kind == "main":
                 note += {"research": "Finish early when the objective is met.",
                          "wrap_up": "Prioritize essential gaps and prepare to finish.",
@@ -90,9 +100,9 @@ class CallBudget:
             if self.phase != phase:
                 self.logger.info("research_phase_changed previous=%s phase=%s used=%d thread=%s",
                                  phase, self.phase, self.used, self.entry["thread_id"])
-            self.logger.info("research_call_reserved kind=%s number=%d phase=%s used=%d remaining=%d thread=%s",
+            self.logger.info("research_call_reserved kind=%s number=%d phase=%s used=%d remaining=%s thread=%s",
                              kind, receipt["number"], phase, self.used,
-                             self.policy["maximum_calls"] - self.used, self.entry["thread_id"])
+                             "unlimited" if self.remaining is None else self.remaining, self.entry["thread_id"])
         started = time.perf_counter()
         try:
             result = await invoke(payload)

@@ -13,7 +13,7 @@ from ML.deep_research.layer3.research_run import create_research_run
 from tests.layer3_fixtures import FakeFinder, new_run
 
 
-async def linked_run(root, names=None):
+async def linked_run(root, names=None, **kwargs):
     """Create real saved preparation, then a separate research handoff with frozen copies."""
     parent = new_run(root, names)
     await FakeFinder().run(parent)
@@ -22,7 +22,7 @@ async def linked_run(root, names=None):
     record = load_json(parent / "run.json")
     record.pop("research")
     write_json(parent / "run.json", record)
-    return parent, create_research_run(parent, root / "runs", public_input_confirmed=True)
+    return parent, create_research_run(parent, root / "runs", public_input_confirmed=True, **kwargs)
 
 
 class ResearchModel:

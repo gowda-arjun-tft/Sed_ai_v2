@@ -13,6 +13,7 @@ param(
     [string]$ResearchReasoningEffort = 'max',
     [string]$SourceSuggestion,
     [string]$ResearchInstruction,
+    [string]$ResearchConfig,
     [string]$ExternalResearch,
     [switch]$Online,
     [switch]$PublicInputConfirmed,
@@ -63,6 +64,9 @@ if ($SourceSuggestion -and -not $Research) {
 if ($ResearchInstruction -and -not ($Research -or $ResearchFromL3)) {
     throw '-ResearchInstruction applies only to a new Layer 3 research run.'
 }
+if ($ResearchConfig -and -not ($Research -or $ResearchFromL3)) {
+    throw '-ResearchConfig applies only to a new Layer 3 research run.'
+}
 if ($PSBoundParameters.ContainsKey('ResearchReasoningEffort') -and -not ($Research -or $ResearchFromL3)) {
     throw '-ResearchReasoningEffort applies only to a new Layer 3 research run.'
 }
@@ -94,7 +98,7 @@ function Invoke-Layer3([string[]]$Arguments) {
     }
     $Converted = @($Arguments)
     for ($Index = 1; $Index -lt $Converted.Count; $Index++) {
-        if ($Converted[$Index - 1] -in @('--research', '--research-from', '--resume-l3', '--source-suggestion', '--research-instruction')) {
+        if ($Converted[$Index - 1] -in @('--research', '--research-from', '--resume-l3', '--source-suggestion', '--research-instruction', '--research-config')) {
             $Resolved = [IO.Path]::GetFullPath($Converted[$Index], $ProjectDir)
             $Relative = [IO.Path]::GetRelativePath($ProjectDir, $Resolved)
             if ($Relative -eq '..' -or $Relative.StartsWith('..\') -or [IO.Path]::IsPathRooted($Relative)) {
@@ -114,6 +118,9 @@ if ($Research -or $ResearchFromL3) {
     }
     if ($ResearchInstruction) {
         $Layer3Args += @('--research-instruction', $ResearchInstruction)
+    }
+    if ($ResearchConfig) {
+        $Layer3Args += @('--research-config', $ResearchConfig)
     }
     if ($Online) {
         $Layer3Args += '--online'

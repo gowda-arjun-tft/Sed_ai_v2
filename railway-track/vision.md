@@ -27,6 +27,7 @@ Layer 2 builds subject metadata, decides plugin-driven domains with optional web
 Support different industry plugins and user priorities without fixed domain rosters. The persistent research harness is implemented; live responsibility coverage, citation fidelity and retained qualifications still require a separately authorized evaluation.
 
 New research follows an editable user objective, initially supported risks, opportunities and
-corresponding actions. Run one domain at a time with 80 shared logical model calls, reserving the
-final ten for completion from saved evidence. Reuse prior gathered work in fresh linked threads
+corresponding actions. Run one domain at a time with a separate user-selected execution config:
+80/60/70 logical-call phases by default, or explicit unlimited calls while retaining usage tracking.
+Bounded execution reserves the final phase for completion from saved evidence. Reuse prior gathered work in fresh linked threads
 without rewriting historical runs. Operational completion is not proof of report quality.

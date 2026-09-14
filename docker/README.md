@@ -112,12 +112,14 @@ Docker kernel; do not overwrite newer disk content with an old unsaved editor bu
 The host `run.ps1` research actions delegate to the development container and translate project paths;
 legacy preparation/upload-only actions retain their existing Windows interpreter behavior.
 
-Research capability version 2 runs one domain at a time with execution-owned HTTP clients and
-a durable 80-logical-call allowance per domain. The counter stays with project-side retained work;
+Research capability version 3 runs one domain at a time with execution-owned HTTP clients and
+a frozen `inputs/research_config.json` call policy (80/60/70 by default; three nulls mean unlimited).
+The counter stays with project-side retained work even in unlimited mode;
 the same checkpoint thread and counter are required for resume. Do not delete either to reset a run.
 New linked runs can import existing notes from a disposable copy of the parent database/WAL; this
 does not resume the parent's thread or change its SQLite files. Missing notes are reported explicitly.
-The editable `inputs/user_research_instruction.md` is frozen on creation. Reload the saved notebook
+The editable research instruction and configuration files are frozen on creation; historical
+version-1/version-2 policies remain unchanged. Reload the saved notebook
 after preserving unsaved edits, and restart only an idle kernel to load the revised controls/code.
 No container rebuild or restart is required for these source changes.
 
