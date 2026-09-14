@@ -10,8 +10,8 @@ from unittest.mock import patch
 import httpx
 from openai import AsyncOpenAI
 
-from ML.deep_research.layer2.backend.fs import load_json
-from ML.deep_research.layer3.document_uploads import upload_documents
+from ML.deep_research.domain_decider.backend.fs import load_json
+from ML.deep_research.research_module.backend.document_uploads import upload_documents
 from tests.layer3_fixtures import FakeFinder, new_run
 
 HTTPClient = httpx.AsyncClient
@@ -101,7 +101,7 @@ class UploadHTTP:
             return AsyncOpenAI(api_key="offline-key", http_client=OfflineHTTP(), **kwargs)
 
         with patch("httpx.AsyncClient", OfflineHTTP), patch(
-            "ML.deep_research.layer3.document_uploads.AsyncOpenAI", side_effect=client
+            "ML.deep_research.research_module.backend.document_uploads.AsyncOpenAI", side_effect=client
         ), patch("socket.socket.connect", side_effect=AssertionError("Network blocked")), patch(
             "socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))]
         ), patch.dict("os.environ", {"OPENAI_API_KEY": "offline-key"}):

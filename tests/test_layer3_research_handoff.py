@@ -1,5 +1,6 @@
 """Frozen user objectives, read-only prior work and execution-owned transports."""
 
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,10 +8,10 @@ from unittest.mock import patch
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer3 import run_all
-from ML.deep_research.layer3.domain_research import prepare_domain
-from ML.deep_research.layer3.research_run import create_research_run
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.research_module import run_all
+from ML.deep_research.research_module.backend.research_runner import prepare_domain
+from ML.deep_research.research_module.backend.research_run import create_research_run
 from tests.layer3_fixtures import new_run, snapshot
 from tests.research_fixtures import ResearchModel, linked_run
 
@@ -68,7 +69,7 @@ class ResearchHandoffTests(unittest.IsolatedAsyncioTestCase):
 
             model.custom = replies
             with model.offline(root / "checkpoints"), patch(
-                "ML.deep_research.layer3.domain_tools._fetch", side_effect=AssertionError("Reuse existing evidence")):
+                "ML.deep_research.research_module.ML.domain_tools._fetch", side_effect=AssertionError("Reuse existing evidence")):
                 await run_all(child)
                 count = len(model.calls)
                 await run_all(child)
@@ -102,7 +103,7 @@ class ResearchHandoffTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _, run = await linked_run(root)
-            from ML.deep_research.layer3.domain_research import build_model
+            from ML.deep_research.research_module.ML.domain_agent import build_model
             clients = []
 
             def build(*args, **kwargs):
@@ -112,7 +113,7 @@ class ResearchHandoffTests(unittest.IsolatedAsyncioTestCase):
                 return build_model(*args, **kwargs)
 
             model = ResearchModel()
-            with model.offline(root / "checkpoints"), patch("ML.deep_research.layer3.domain_research.build_model", build):
+            with model.offline(root / "checkpoints"), patch("ML.deep_research.research_module.ML.domain_agent.build_model", build):
                 await run_all(run)
             self.assertEqual(len(clients), 2)
             self.assertIs(clients[0][0], clients[1][0])
@@ -132,8 +133,23 @@ class ResearchHandoffTests(unittest.IsolatedAsyncioTestCase):
             write_json(run / "run.json", record)
             frozen = snapshot(run / "_internal/inputs")
             model = ResearchModel()
+            model.gate = asyncio.Event()
+
+            async def release_when_parallel():
+                """Hold the first request long enough to observe the second worker deterministically."""
+                for _ in range(100):
+                    if model.peak > 1:
+                        break
+                    await asyncio.sleep(0.01)
+                model.gate.set()
+
+            release = asyncio.create_task(release_when_parallel())
             with model.offline(root / "checkpoints"):
-                await run_all(run)
+                try:
+                    await run_all(run)
+                finally:
+                    model.gate.set()
+                    await release
             self.assertGreater(model.peak, 1)
             self.assertFalse(list((run / "_internal/trace/research").rglob("calls.json")))
             self.assertEqual(snapshot(run / "_internal/inputs"), frozen)

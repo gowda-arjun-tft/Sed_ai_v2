@@ -2,7 +2,10 @@
 
 ## Product Purpose
 
-CDI Deep Research organizes supplied evidence around industry plugins and user requirements. Layer 2 is industry-neutral, and Layer 3 prepares sources and researches its dynamic domains. Layer 4 retains historical real-estate research. The maintained product description remains in [README.md](../README.md).
+The two maintained packages are named Domain Decider and Research Module. One notebook cell
+connects their existing workflows; this naming/organization change does not redesign research.
+
+CDI Deep Research organizes supplied evidence around industry plugins and user requirements. Layer 2 is industry-neutral, and Layer 3 prepares sources and researches its dynamic domains. The supported workflow ends at Layer 3; historical Layer 4 artifacts remain readable. The maintained product description remains in [README.md](../README.md).
 
 ## Target Users
 
@@ -20,7 +23,7 @@ Model-output and agent-security boundaries remain authoritative in [AGENTS.md](.
 
 ## Major Capabilities
 
-Layer 2 builds subject metadata, decides plugin-driven domains with optional web-assisted planning and distributes original evidence by stable domain ID into research Markdown without a reviewer. The user-approved scope includes financial, market and investment research; evidence discipline and public-input consent remain required. It preserves source/response history and discloses unprocessed material internally. New Layer 3 runs discover sources, prepare unique documents and continue into one persistent Deep Agent per domain with private memory and a cited Markdown output. Failed prepared documents remain visible but are excluded from the starting source list; alternative documents can be prepared during research. There is no final synthesizer. Existing preparation-only runs remain unchanged and can supply a new linked research run. Layer 4 retains historical external research and is disabled by default. Current behavior is documented in [README.md](../README.md).
+Layer 2 builds subject metadata, decides plugin-driven domains with optional web-assisted planning and distributes original evidence by stable domain ID into research Markdown without a reviewer. The user-approved scope includes financial, market and investment research; evidence discipline and public-input consent remain required. It preserves source/response history and discloses unprocessed material internally. New Layer 3 runs discover sources, prepare unique documents and continue into one persistent Deep Agent per domain with private memory and a cited Markdown output. Failed prepared documents remain visible but are excluded from the starting source list; alternative documents can be prepared during research. There is no final synthesizer. Existing preparation-only runs remain unchanged and can supply a new linked research run. There is no Layer 4 execution or cross-domain synthesizer. Current behavior is documented in [README.md](../README.md).
 
 ## Long-Term Direction
 

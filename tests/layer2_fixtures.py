@@ -10,9 +10,9 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from ML.deep_research.layer2 import create_run, run_all
-from ML.deep_research.layer2.backend.fs import load_json
-from ML.deep_research.layer2.backend.windows import source_windows
+from ML.deep_research.domain_decider import create_run, run_all
+from ML.deep_research.domain_decider.backend.fs import load_json
+from ML.deep_research.domain_decider.backend.windows import source_windows
 
 
 def new_run(root: Path, text="Hospital operating; annex approved, not installed.",
@@ -21,7 +21,7 @@ def new_run(root: Path, text="Hospital operating; annex approved, not installed.
     for path, content in zip(paths, [text, plugin, requirements]):
         path.write_bytes(content.encode("utf-8"))
     if size:
-        with patch("ML.deep_research.layer2.backend.create_run.source_windows",
+        with patch("ML.deep_research.domain_decider.backend.create_run.source_windows",
                    side_effect=lambda text, **kw: source_windows(text, size=size, overlap=2, **kw)):
             return create_run(*paths, root / "runs", reasoning_effort="high", public_input_confirmed=True)
     return create_run(*paths, root / "runs", reasoning_effort="high", public_input_confirmed=True)
@@ -97,7 +97,7 @@ class FakeStages:
         # Create asyncio's Windows wake-up sockets before blocking all network in the test.
         loop = asyncio.new_event_loop()
         with patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}), patch(
-            "ML.deep_research.layer2.backend.runner.build_model",
+            "ML.deep_research.domain_decider.backend.runner.build_model",
             return_value=OfflineModel(owner=self, profile=self.model_profile),
         ), patch("socket.socket.connect", side_effect=AssertionError("network disabled in offline test")), patch(
             "asyncio.events.new_event_loop", return_value=loop,

@@ -8,9 +8,9 @@ from unittest.mock import Mock, patch
 import httpx
 from openai import BadRequestError
 
-from ML.deep_research.layer2.ML.context import request_options
-from ML.deep_research.layer2.backend.fs import load_json
-from ML.deep_research.layer2.backend.run_log import (
+from ML.deep_research.domain_decider.ML.context import request_options
+from ML.deep_research.domain_decider.backend.fs import load_json
+from ML.deep_research.domain_decider.backend.run_log import (
     DispatchLog, log_failure, operational_logger, stop_progress, waiting_progress,
 )
 
@@ -40,7 +40,7 @@ class LoggingTests(unittest.TestCase):
                 return options
 
             fake.on_call = fail_design
-            with patch("ML.deep_research.layer2.backend.jobs.request_options", side_effect=old_options):
+            with patch("ML.deep_research.domain_decider.backend.jobs.request_options", side_effect=old_options):
                 fake.run(run)
             before = load_json(run / "run.json")
             self.assertEqual(before["source_windows"], 4)
@@ -149,7 +149,7 @@ class LoggingTests(unittest.TestCase):
     def test_native_dispatch_callback_counts_only_queue_time_and_ignores_payload(self):
         logger, starts = Mock(), {}
         callback = DispatchLog(logger, "design", "design/000001", 10, starts)
-        with patch("ML.deep_research.layer2.backend.run_log.time.perf_counter", return_value=12):
+        with patch("ML.deep_research.domain_decider.backend.run_log.time.perf_counter", return_value=12):
             callback.on_chat_model_start({"secret": "PRIVATE"}, ["PRIVATE"])
         self.assertEqual(starts, {"design/000001": 12})
         self.assertEqual(logger.info.call_args.args[-1], 2)
@@ -164,7 +164,7 @@ class LoggingTests(unittest.TestCase):
                 if len(waits) > 1:
                     entered.set()
                     await asyncio.Future()
-            with patch("ML.deep_research.layer2.backend.run_log.asyncio.sleep", side_effect=controlled_sleep):
+            with patch("ML.deep_research.domain_decider.backend.run_log.asyncio.sleep", side_effect=controlled_sleep):
                 task = asyncio.create_task(waiting_progress(logger, "distribution", {"a", "b"}, {"a": 12}, 10))
                 await entered.wait()
                 await stop_progress(task)
@@ -175,7 +175,7 @@ class LoggingTests(unittest.TestCase):
         asyncio.run(exercise())
 
     def test_progress_task_is_joined_on_success_failure_and_cancelled_call(self):
-        from ML.deep_research.layer2.backend.jobs import run_jobs
+        from ML.deep_research.domain_decider.backend.jobs import run_jobs
         from tests.layer2_fixtures import OfflineModel
 
         async def exercise(run, outcome):
@@ -192,7 +192,7 @@ class LoggingTests(unittest.TestCase):
                     raise asyncio.CancelledError()
                 fake.on_call = cancel_call
             with operational_logger(run) as logger, patch(
-                "ML.deep_research.layer2.backend.jobs.waiting_progress", side_effect=watch
+                "ML.deep_research.domain_decider.backend.jobs.waiting_progress", side_effect=watch
             ):
                 try:
                     await run_jobs(run, OfflineModel(owner=fake), "metadata", [{"previous_metadata": "", "new_content": "X"}], {}, logger)

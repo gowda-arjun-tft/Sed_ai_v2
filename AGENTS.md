@@ -2,29 +2,43 @@
 
 ## Project Structure & Module Organization
 
-`ML/deep_research/layer2/` builds cumulative subject metadata, decides plugin-driven domains once,
+Current package names are `domain_decider` (formerly Layer 2) and `research_module`
+(formerly Layer 3). Layer labels below describe frozen operational contracts; keep
+schema 9, L2_/L3_ prefixes, metadata keys, checkpoint threads and CLI flags unchanged.
+No old-package forwarding wrappers are supported. One notebook cell preflights the
+selected action, completes domain preparation and passes that exact run to research.
+Explicit domain/resume/linked/upload selections are exclusive; blank paths create new runs.
+Resume uses frozen settings and never repeats domain preparation. Preserve the harness.
+Current guides are README.md, ML/deep_research/docs/Research_Architecture_Overview.md
+and docker/development.md. Do not recreate module READMEs; preserve generated run READMEs.
+
+`ML/deep_research/domain_decider/` builds cumulative subject metadata, decides plugin-driven domains once,
 then distributes original facts by stable domain IDs into Markdown through three direct-call stages. Its CLI is only an adapter;
-operations live in `layer2/backend/`, and AI code plus three generic prompts in `layer2/ML/`.
+operations live in `domain_decider/backend/`, and AI code plus three generic prompts in `domain_decider/ML/`.
 Use package-level `create_run` and `run_all` as public Python entrypoints; the notebook is the UI.
-See `layer2/README.md` for the workflow. Industry definitions belong in the selected plugin,
+See `README.md` for the workflow. Industry definitions belong in the selected plugin,
 not generic prompts or Python. `inputs/requirement.md` holds user objectives and the explicitly broadened research scope; review its confidential origin before public-input confirmation.
-Operational events go to each run's `run.log`. `ML/deep_research/layer3/` finds and tests sources
+Operational events go to each run's `run.log`. `ML/deep_research/research_module/` finds and tests sources
 for each actual Layer 2 domain, uploads unique documents and runs persistent domain researchers,
-sequentially for new version-3 runs, producing independent Markdown reports without synthesis. `ML/deep_research/layer4/` segregates each domain report
-through two tool-free calls, reuses the direct researcher for external influences, then synthesizes
-the available external reports. Prompts sit below each layer; design notes are in
+sequentially for new version-3 runs, producing independent Markdown reports without synthesis. The supported workflow ends at Layer 3. Prompts sit below each layer; design notes are in
 `ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
 Group new runs as `runs/<parent>-<markdown-name>-<short-path-id>/L2_*` and place the derived `L3_*`
 beside its completed Layer 2 source. Layer 2 schema-2/3/4/5/6/7/8 artifacts are read-only. New Layer 2 runs
 use schema 9 and feed Layer 3 source discovery directly; never produce a legacy missions handoff.
 Layer 3 schema 9 freezes a versioned research capability for new runs; older preparation runs keep
-their original behavior. Historical schema-8 Layer 3 execution/checks are read-only; Layer 4 accepts
-only historical schema-8 research inputs and is disabled by default in the notebook.
+their original behavior. Historical schema-8 Layer 3 execution/checks are read-only. Layer 4 execution has been removed;
+preserve its historical reports, inputs, traces and checkpoints without executing or migrating them.
+
+Layer 3 mirrors Layer 2's code separation. Keep CLI, run creation, orchestration, persistence,
+publication, downloads, checkpoint policy and recovery under `research_module/backend/`. Keep model-facing
+request construction, Deep Agent assembly, middleware, research tools, provider adapters and all
+production prompts under `research_module/ML/`. Both package roots contain public entrypoints only;
+do not restore compatibility wrappers for retired internal import paths.
 
 ## Build, Test, and Development Commands
 
-For Docker development, follow [docker/README.md](docker/README.md). Use the shared Dev Container
+For Docker development, follow [docker/development.md](docker/development.md). Use the shared Dev Container
 and `/usr/local/bin/python` for offline checks; preserve the Docker workflow and do not restart browser research.
 Do not run the same research job from two environments. After branch switches, finish active work
 before restarting the notebook kernel.
@@ -58,12 +72,12 @@ egress, citation, or publication behavior. Do not hardcode check counts.
 Keep secrets only in `.env`. The model is fixed to `gpt-5.6-luna`, with no application output-token
 ceiling. Layer 2 freezes the selected reasoning. Layer 3 source discovery defaults to high reasoning,
 medium native web-search depth and low verbosity; new runs freeze those controls in `run.json`.
-Historical Layer 4 helper defaults remain unchanged. Do not
+Do not
 restate model, search, token, source, or report limits in prompts.
 
 Layer 2 schema 9 freezes original inputs, prompts, Unicode-safe source ranges, public-input consent
 and model/search policies. No fixed domain count or industry roster lives in Python. Shared model,
-usage/filesystem helpers and Deep Agents settings used by Layers 3/4 remain unchanged.
+usage/filesystem helpers and Deep Agents settings used by Layer 3 remain unchanged.
 
 Keep three direct-call stages, without a graph, reviewer or additional synthesis. Metadata receives
 only each original window and preceding complete metadata; no plugin, requirements or tools.
@@ -113,7 +127,7 @@ fingerprint actual dependencies and native options. Preserve response and public
 Metadata/design failure stops dependent work; successful distribution siblings still publish.
 Archive old view bytes before atomic refresh. Historical schemas 2–8 reject execution/check before
 mutation. Check-only remains observational. Layer 2 schema 9 feeds Layer 3 source preparation and research;
-never emit a misleading legacy missions handoff or implicitly feed Layer 4.
+never emit a misleading legacy missions handoff or schedule a downstream synthesizer.
 Preserve distinct research-driving facts with scope, conditions, actors, exceptions and dates.
 Concision may remove genuinely repeated wording, not unique meaning. Metadata does not substitute
 for original-source distribution; routing coverage is not proof of complete extraction.
@@ -182,11 +196,6 @@ failures do not make otherwise-complete source discovery partial; expose nested 
 Keep ambiguity/failures in the registry with a README link. Atomic publication/history applies to
 enrichment too; rebuilding must not erase upload mappings or reuse unprocessed source versions.
 
-Shared historical researcher/checkpoint/memory helpers under Layer 3 remain for Layer 4. Those
-researchers expose only search_web/read_source, no task/subagents or host shell. Their run-frozen
-compaction retains source pointers without grading content or blocking publication. Do not alter
-these helpers to implement source discovery. Layer 4 is disconnected from source-only schema 9.
-
 Layer 3 research capability version 3 extends new full runs after preparation. Linked research-only
 runs copy/hash settled complete or partial preparation; never resume/rewrite the parent. Domains
 without usable sources remain scheduled. Explicit resume reuses final receipts or the same domain
@@ -245,13 +254,7 @@ Missing unfinished checkpoints require recovery, never silent fresh execution. R
 responses remain project-local. No model-authored auxiliary file or heading is a completion gate.
 Save final assistant Markdown verbatim and publish each sibling independently with presentation history.
 Log safe timings, observed model/tool activity, checkpoints, compaction and a single 30-second heartbeat;
-payloads stay in internal traces. Notebook Layer 4 remains disabled and its shared helpers unchanged.
-
-Layer 4 follows the same output-freedom contract. Its internal and candidate segregators and final
-synthesis have no tools; its external researcher receives only `search_web` and `read_source`.
-Python must not inspect segregation or research prose to decide whether another stage runs. Save
-each completed response verbatim, continue after failed stages, and use fixed missing-response
-markers only as downstream invocation context.
+payloads stay in internal traces. The notebook contains only Layer 2 and Layer 3 execution cells.
 
 ## Commits and Pull Requests
 

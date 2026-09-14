@@ -1,3 +1,4 @@
+[CmdletBinding()]
 param(
     [string]$FactSheet,
     [string]$DomainPlugin,
@@ -14,12 +15,10 @@ param(
     [string]$SourceSuggestion,
     [string]$ResearchInstruction,
     [string]$ResearchConfig,
-    [string]$ExternalResearch,
     [switch]$Online,
     [switch]$PublicInputConfirmed,
     [string]$ResumeL3,
     [string]$UploadDocumentsL3,
-    [string]$ResumeL4,
     [switch]$RetryFailed
 )
 
@@ -37,10 +36,10 @@ if (-not ($Research -or $ResearchFromL3 -or $ResumeL3 -or $UploadDocumentsL3) -a
     throw "Required compute interpreter not found: $Python"
 }
 
-if ($Online -and -not ($Research -or $ResearchFromL3 -or $ExternalResearch)) {
-    throw '-Online requires -Research or -ExternalResearch.'
+if ($Online -and -not ($Research -or $ResearchFromL3)) {
+    throw '-Online requires -Research or -ResearchFromL3.'
 }
-if ($PublicInputConfirmed -and ($Resume -or $ResumeL3 -or $ResumeL4 -or $UploadDocumentsL3)) {
+if ($PublicInputConfirmed -and ($Resume -or $ResumeL3 -or $UploadDocumentsL3)) {
     throw 'Resume uses the frozen public-input confirmation.'
 }
 if (($Research -or $ResearchFromL3) -and -not $Online) {
@@ -49,14 +48,8 @@ if (($Research -or $ResearchFromL3) -and -not $Online) {
 if (($Research -or $ResearchFromL3) -and -not $PublicInputConfirmed) {
     throw '-Research requires -PublicInputConfirmed.'
 }
-if ($ExternalResearch -and -not $Online) {
-    throw '-ExternalResearch requires -Online.'
-}
-if ($ExternalResearch -and -not $PublicInputConfirmed) {
-    throw '-ExternalResearch requires -PublicInputConfirmed.'
-}
-if ($RetryFailed -and -not ($ResumeL3 -or $ResumeL4 -or $UploadDocumentsL3)) {
-    throw '-RetryFailed requires -ResumeL3, -ResumeL4 or -UploadDocumentsL3.'
+if ($RetryFailed -and -not ($ResumeL3 -or $UploadDocumentsL3)) {
+    throw '-RetryFailed requires -ResumeL3 or -UploadDocumentsL3.'
 }
 if ($SourceSuggestion -and -not $Research) {
     throw '-SourceSuggestion applies only to a new Layer 3 source-discovery run.'
@@ -70,10 +63,10 @@ if ($ResearchConfig -and -not ($Research -or $ResearchFromL3)) {
 if ($PSBoundParameters.ContainsKey('ResearchReasoningEffort') -and -not ($Research -or $ResearchFromL3)) {
     throw '-ResearchReasoningEffort applies only to a new Layer 3 research run.'
 }
-if (@($FactSheet, $Resume, $Research, $ResearchFromL3, $ResumeL3, $ExternalResearch, $ResumeL4, $UploadDocumentsL3).Where({ $_ }).Count -gt 1) {
+if (@($FactSheet, $Resume, $Research, $ResearchFromL3, $ResumeL3, $UploadDocumentsL3).Where({ $_ }).Count -gt 1) {
     throw 'Choose only one run action.'
 }
-if (($DomainPlugin -or $Requirements) -and ($Resume -or $Research -or $ResearchFromL3 -or $ResumeL3 -or $ExternalResearch -or $ResumeL4 -or $UploadDocumentsL3)) {
+if (($DomainPlugin -or $Requirements) -and ($Resume -or $Research -or $ResearchFromL3 -or $ResumeL3 -or $UploadDocumentsL3)) {
     throw '-DomainPlugin and -Requirements apply only to new Layer 2 runs.'
 }
 
@@ -86,7 +79,7 @@ function Invoke-Layer3([string[]]$Arguments) {
     }
     if (-not $NeedsDocker) {
         if (-not (Test-Path -LiteralPath $Python)) { throw "Required compute interpreter not found: $Python" }
-        & $Python -m ML.deep_research.layer3 @Arguments
+        & $Python -m ML.deep_research.research_module @Arguments
         return
     }
     $DockerCommand = Get-Command docker -ErrorAction SilentlyContinue
@@ -107,7 +100,7 @@ function Invoke-Layer3([string[]]$Arguments) {
             $Converted[$Index] = '/app/' + $Relative.Replace('\', '/')
         }
     }
-    & $DockerExe compose exec -T dev /usr/local/bin/python -m ML.deep_research.layer3 @Converted
+    & $DockerExe compose exec -T dev /usr/local/bin/python -m ML.deep_research.research_module @Converted
 }
 
 if ($Research -or $ResearchFromL3) {
@@ -129,23 +122,14 @@ if ($Research -or $ResearchFromL3) {
         $Layer3Args += '--public-input-confirmed'
     }
     Invoke-Layer3 $Layer3Args
-} elseif ($ExternalResearch) {
-    $Layer4Args = @('--external-research', $ExternalResearch, '--online', '--public-input-confirmed')
-    & $Python -m ML.deep_research.layer4 @Layer4Args
 } elseif ($ResumeL3 -or $UploadDocumentsL3) {
     $Layer3Args = if ($UploadDocumentsL3) { @('--upload-documents', $UploadDocumentsL3) } else { @('--resume-l3', $ResumeL3) }
     if ($RetryFailed) {
         $Layer3Args += '--retry-failed'
     }
     Invoke-Layer3 $Layer3Args
-} elseif ($ResumeL4) {
-    $Layer4Args = @('--resume-l4', $ResumeL4)
-    if ($RetryFailed) {
-        $Layer4Args += '--retry-failed'
-    }
-    & $Python -m ML.deep_research.layer4 @Layer4Args
 } elseif ($Resume) {
-    & $Python -m ML.deep_research.layer2 --resume $Resume
+    & $Python -m ML.deep_research.domain_decider --resume $Resume
 } else {
     if (-not $FactSheet) {
         $FactSheet = Read-Host 'Full path to fact_sheet.md'
@@ -156,7 +140,7 @@ if ($Research -or $ResearchFromL3) {
     if (-not $PublicInputConfirmed) {
         throw 'Layer 2 web-assisted domain design requires -PublicInputConfirmed.'
     }
-    & $Python -m ML.deep_research.layer2 $FactSheet --domain-plugin $DomainPlugin --requirements $Requirements --web-search-depth $Layer2WebSearchDepth --web-search-verbosity $Layer2WebSearchVerbosity --public-input-confirmed
+    & $Python -m ML.deep_research.domain_decider $FactSheet --domain-plugin $DomainPlugin --requirements $Requirements --web-search-depth $Layer2WebSearchDepth --web-search-verbosity $Layer2WebSearchVerbosity --public-input-confirmed
 }
 
 exit $LASTEXITCODE

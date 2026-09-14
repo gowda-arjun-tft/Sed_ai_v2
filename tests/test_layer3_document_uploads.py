@@ -7,18 +7,18 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer2.backend.publication import ObjectMembers
-from ML.deep_research.layer3.document_records import REGISTRY_PATH, research_usable
-from ML.deep_research.layer3.document_uploads import run_writer, upload_documents
-from ML.deep_research.layer3.source_publication import publish
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.domain_decider.backend.publication import ObjectMembers
+from ML.deep_research.research_module.backend.document_records import REGISTRY_PATH, research_usable
+from ML.deep_research.research_module.backend.document_uploads import run_writer, upload_documents
+from ML.deep_research.research_module.backend.source_publication import publish
 from tests.document_upload_fixtures import PDF, UploadHTTP, entry, prepared
 from tests.layer3_fixtures import snapshot
 
 
 class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
     async def test_public_run_all_continues_new_runs_but_not_legacy_source_only_runs(self):
-        from ML.deep_research.layer3.cli import run_all
+        from ML.deep_research.research_module.backend.cli import run_all
         for enabled in (True, False):
             with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as tmp:
                 run, fake = await prepared(Path(tmp), [[entry()]])
@@ -30,13 +30,13 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
                     record.pop("document_uploads")
                     write_json(run / "run.json", record)
                 http = UploadHTTP()
-                with http.offline(), patch("ML.deep_research.layer3.cli.run_research", side_effect=fake.run):
+                with http.offline(), patch("ML.deep_research.research_module.backend.cli.run_research", side_effect=fake.run):
                     await run_all(run)
                 self.assertEqual(len(http.creates), int(enabled))
                 self.assertEqual(len(fake.calls), 1)
 
     async def test_successful_upload_survives_receipt_save_interruption(self):
-        import ML.deep_research.layer3.document_uploads as module
+        import ML.deep_research.research_module.backend.document_uploads as module
         with tempfile.TemporaryDirectory() as tmp:
             run, _ = await prepared(Path(tmp), [[entry()]])
             http = UploadHTTP()
@@ -253,7 +253,7 @@ class DocumentUploadTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run, _ = await prepared(Path(tmp), [[entry()]])
             http = UploadHTTP()
-            with patch("ML.deep_research.layer3.document_uploads.publish", side_effect=OSError("disk")):
+            with patch("ML.deep_research.research_module.backend.document_uploads.publish", side_effect=OSError("disk")):
                 with self.assertRaises(OSError):
                     await http.run(run)
             self.assertEqual(load_json(run / REGISTRY_PATH)["counts"]["uploaded_files"], 1)

@@ -1,16 +1,13 @@
-"""Current source-discovery creation and shared historical evidence tools."""
+"""Current source-discovery creation, preservation and historical rejection."""
 
 import asyncio
 import tempfile
 import unittest
 from pathlib import Path
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer3.contracts import RESEARCHER_NAME, ResearchContext, SearchHit
-from ML.deep_research.layer3.pipeline.run_checks import run_checks
-from ML.deep_research.layer3.research_tools import _search, make_research_tools
-from ML.deep_research.layer3.settings import HARNESS_NAME, SCHEMA_VERSION
-from ML.deep_research.layer3.sources import SourceStore
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.research_module.backend.run_checks import run_checks
+from ML.deep_research.research_module.backend.settings import HARNESS_NAME, SCHEMA_VERSION
 from tests.layer3_fixtures import FakeFinder, new_run, snapshot
 
 
@@ -57,28 +54,3 @@ class Layer3SchemaTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "read-only"):
                 run_checks(run)
             self.assertEqual(before, snapshot(run))
-
-
-class SharedEvidenceTests(unittest.TestCase):
-    def test_historical_researcher_tools_stay_search_and_read_for_layer4(self):
-        self.assertEqual({tool.name for tool in make_research_tools(RESEARCHER_NAME)},
-                         {"search_web", "read_source"})
-        self.assertFalse(hasattr(SourceStore(Path("unused")), "record_citation"))
-
-    def test_identical_queries_share_cache_across_callers(self):
-        class Retriever:
-            calls = 0
-
-            async def search(self, _query, **_kwargs):
-                self.calls += 1
-                return [SearchHit("hit", "https://example.com", "Example")]
-
-        with tempfile.TemporaryDirectory() as tmp:
-            context = ResearchContext(Path(tmp), "domain", "thread", Retriever())
-
-            async def exercise():
-                return await asyncio.gather(
-                    _search(context, "same query", "first"), _search(context, "same query", "second"))
-            first, second = asyncio.run(exercise())
-            self.assertEqual(first, second)
-            self.assertEqual(context.retriever.calls, 1)

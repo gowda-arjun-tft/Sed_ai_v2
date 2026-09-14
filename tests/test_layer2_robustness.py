@@ -3,9 +3,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer2.backend.jobs import saved_text
-from ML.deep_research.layer2.backend.runner import UnusableDomainPlanError
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.domain_decider.backend.jobs import saved_text
+from ML.deep_research.domain_decider.backend.runner import UnusableDomainPlanError
 from tests.layer2_fixtures import FakeStages, new_run, published
 
 
@@ -17,14 +17,14 @@ class RecoveryTests(unittest.TestCase):
             fake.outputs.update({"distribution/000001": '{"D01":"First window contribution."}',
                                  "distribution/000002": '{"D01":"Second window contribution."}'})
             fake.delay = lambda key: .06 if key == "distribution/000001" else .002
-            original = __import__("ML.deep_research.layer2.backend.jobs", fromlist=["write_json"]).write_json
+            original = __import__("ML.deep_research.domain_decider.backend.jobs", fromlist=["write_json"]).write_json
             observed = []
             def observe(path, value):
                 if path == run / "run.json" and value.get("jobs", {}).get("distribution/000002", {}).get("status") == "complete":
                     early = value["jobs"].get("distribution/000001", {}).get("status") != "complete"
                     observed.append(early)
                 return original(path, value)
-            with patch("ML.deep_research.layer2.backend.jobs.write_json", side_effect=observe):
+            with patch("ML.deep_research.domain_decider.backend.jobs.write_json", side_effect=observe):
                 fake.run(run)
             self.assertTrue(any(observed))
             output = (run / "domains/operations.md").read_text()
@@ -137,7 +137,7 @@ class RecoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))
             fake = FakeStages()
-            from ML.deep_research.layer2.backend import jobs
+            from ML.deep_research.domain_decider.backend import jobs
             original = jobs.write_json
             interrupted = False
             def fail_commit(path, value):
@@ -155,7 +155,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_interrupt_after_raw_write_cannot_promote_provider_incomplete_content(self):
         from langchain_core.messages import AIMessage
-        from ML.deep_research.layer2.backend import jobs
+        from ML.deep_research.domain_decider.backend import jobs
         for status in ("incomplete", "completed"):
             with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp:
                 run = new_run(Path(tmp))
@@ -204,7 +204,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_incomplete_provider_result_is_not_misread_after_interrupted_job_commit(self):
         from langchain_core.messages import AIMessage
-        from ML.deep_research.layer2.backend import jobs
+        from ML.deep_research.domain_decider.backend import jobs
 
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))

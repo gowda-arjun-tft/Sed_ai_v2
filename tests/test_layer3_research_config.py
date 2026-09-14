@@ -7,10 +7,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer3 import run_all
-from ML.deep_research.layer3.pipeline.create_run import verify_inputs
-from ML.deep_research.layer3.research_run import create_research_run, read_research_config
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.research_module import run_all
+from ML.deep_research.research_module.backend.create_run import verify_inputs
+from ML.deep_research.research_module.backend.research_run import create_research_run, read_research_config
 from tests.layer3_fixtures import FakeFinder, new_run, snapshot
 from tests.research_fixtures import ResearchModel, linked_run
 
@@ -27,13 +27,14 @@ class ResearchConfigTests(unittest.IsolatedAsyncioTestCase):
 
             def counted(path):
                 """Observe only the selected configuration, not preserved evidence copies."""
-                if path == config:
+                if path.samefile(config):
                     reads.append(path)
                 return reader(path)
 
             with patch.object(Path, "read_bytes", counted):
                 parent = new_run(root, research_config=config)
-            self.assertEqual(reads, [config])
+            self.assertEqual(len(reads), 1)
+            self.assertTrue(reads[0].samefile(config))
             relative = "_internal/inputs/research_config.json"
             record = load_json(parent / "run.json")
             self.assertEqual(record["research"]["version"], 3)
@@ -46,7 +47,8 @@ class ResearchConfigTests(unittest.IsolatedAsyncioTestCase):
             reads.clear()
             with patch.object(Path, "read_bytes", counted):
                 child = create_research_run(parent, root, public_input_confirmed=True, research_config=config)
-            self.assertEqual(reads, [config])
+            self.assertEqual(len(reads), 1)
+            self.assertTrue(reads[0].samefile(config))
             child_record = load_json(child / "run.json")
             self.assertIsNone(child_record["research"]["maximum_calls"])
             self.assertEqual((child / relative).read_bytes(), config.read_bytes())
@@ -106,7 +108,7 @@ class ResearchConfigTests(unittest.IsolatedAsyncioTestCase):
             before = snapshot(run / "_internal/inputs")
             model = ResearchModel()
             with model.offline(root / "checkpoints"), patch(
-                "ML.deep_research.layer3.research_run.read_research_config",
+                "ML.deep_research.research_module.backend.research_run.read_research_config",
                 side_effect=AssertionError("Historical resume must not read configuration")
             ):
                 await run_all(run)

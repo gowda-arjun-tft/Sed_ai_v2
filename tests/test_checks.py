@@ -2,11 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ML.deep_research.layer2.backend.cli import main
-from ML.deep_research.layer2.backend.create_run import require_current
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer2.backend.report import run_checks
-from ML.deep_research.layer2.backend.runner import run_all
+from ML.deep_research.domain_decider.backend.cli import main
+from ML.deep_research.domain_decider.backend.create_run import require_current
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.domain_decider.backend.report import run_checks
+from ML.deep_research.domain_decider.backend.runner import run_all
 from tests.layer2_fixtures import FakeStages, new_run
 
 

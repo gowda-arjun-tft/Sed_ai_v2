@@ -22,6 +22,6 @@ parsing, docstrings, executable-file lengths and diff whitespace checks passed. 
 fake-model scale exercises completed at 1M, 3M and 10M tokens; fresh 10M execution used
 407 jobs, 190.394 seconds and 420.3 MiB peak RAM, with 1,024.3 MiB preparation peak.
 One separate filesystem-failure attempt was recovered and is disclosed in the
-[verification report](../../ML/deep_research/layer2/docs/schema6_verification.md).
+[verification report](../../ML/deep_research/domain_decider/docs/schema6_verification.md).
 No live model, web-search or paid API calls. Operational scale does not establish
 extraction completeness or semantic retrieval quality; that evaluation remains separately authorized.

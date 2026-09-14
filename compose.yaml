@@ -27,7 +27,7 @@ x-common: &common
     # `down`/`up`. It must sit at /app so its relative `inputs/...` paths resolve.
     - ./CDI_Layer2_Layer3.ipynb:/app/CDI_Layer2_Layer3.ipynb
     # SQLite (WAL evidence index and LangGraph checkpoints) lives on Docker-managed volumes
-    # backed by ext4 inside the Linux VM, not on a Windows bind mount. See docker/README.md.
+    # backed by ext4 inside the Linux VM, not on a Windows bind mount. See docker/development.md.
     - sedai-runs:/app/runs
     - sedai-outputs:/app/outputs
   # No privileged mode, no added capabilities, no Docker socket and no other host mounts.
@@ -52,7 +52,7 @@ services:
     <<: *common
     profiles: ["cli"]
     # Overridden on every invocation, e.g. `docker compose run --rm cli python -m unittest ...`.
-    command: ["python", "-c", "print('Pass a command, e.g. python -m ML.deep_research.layer2 --help')"]
+    command: ["python", "-c", "print('Pass a command, e.g. python -m ML.deep_research.domain_decider --help')"]
 
   dev:
     <<: *common

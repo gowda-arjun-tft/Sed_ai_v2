@@ -4,116 +4,25 @@ import json
 import pkgutil
 import unittest
 
-import ML.deep_research.layer2 as layer2
-import ML.deep_research.layer3 as layer3
-import ML.deep_research.layer4 as layer4
-from ML.deep_research.layer2.backend.settings import REPO_ROOT
-from tests.common import PLANNER_PATH
+import ML.deep_research.domain_decider as layer2
+import ML.deep_research.research_module as layer3
+from ML.deep_research.domain_decider.backend.settings import REPO_ROOT
 
 
 class StructureTests(unittest.TestCase):
-    def test_demo_notebook_has_three_compilable_cells(self):
+    def test_demo_notebook_has_one_compilable_cell(self):
         notebook_path = REPO_ROOT / "CDI_Layer2_Layer3.ipynb"
         notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
         cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
-        notebook_text = "\n".join(
-            "".join(cell.get("source", [])) for cell in notebook["cells"]
-        )
-        self.assertEqual(len(cells), 3)
-        self.assertIn(notebook["metadata"]["kernelspec"]["display_name"],
-                      {"compute", "Python 3", "SedAI Docker — Python 3.12"})
-        for control in (
-            "FACT_SHEET_PATH",
-            "LAYER2_REASONING_EFFORT",
-            "PUBLIC_INPUT_CONFIRMED",
-            "LAYER3_SOURCE_RUN_PATH",
-            "LAYER3_MODEL_REASONING_EFFORT",
-            "WEB_SEARCH_DEPTH",
-            "WEB_SEARCH_VERBOSITY",
-            "LAYER4_SOURCE_RUN_PATH",
-            "LAYER4_MODEL_REASONING_EFFORT",
-            "LAYER4_WEB_SEARCH_DEPTH",
-            "LAYER4_WEB_SEARCH_VERBOSITY",
-            "LAYER4_PUBLIC_INPUT_CONFIRMED",
-            "LAYER4_RETRY_FAILED",
-        ):
-            self.assertIn(control, notebook_text)
-        self.assertRegex(
-            notebook_text,
-            r'LAYER4_SOURCE_RUN_PATH = r?"runs[/\\][^"\r\n]+[/\\]L3_[^"\r\n]+"',
-        )
-        self.assertRegex(
-            notebook_text,
-            r'LAYER4_MODEL_REASONING_EFFORT = "(?:low|medium|high|max)"',
-        )
-        for control in ("LAYER4_WEB_SEARCH_DEPTH", "LAYER4_WEB_SEARCH_VERBOSITY"):
-            self.assertRegex(
-                notebook_text, rf'{control} = "(?:low|medium|high)"'
-            )
-        self.assertIn(
-            'candidate.get("reasoning_effort") == LAYER4_MODEL_REASONING_EFFORT',
-            notebook_text,
-        )
-        self.assertIn(
-            'search_options.get("context_size") == LAYER4_WEB_SEARCH_DEPTH',
-            notebook_text,
-        )
-        self.assertIn(
-            'search_options.get("verbosity") == LAYER4_WEB_SEARCH_VERBOSITY',
-            notebook_text,
-        )
-        self.assertIn("create_layer4_run", notebook_text)
-        self.assertIn("run_layer4", notebook_text)
-        self.assertNotIn("Source Scout", notebook_text)
-        self.assertNotIn("clarification", notebook_text.casefold())
-        layer2_text = "".join(cells[0]["source"])
-        self.assertRegex(
-            layer2_text,
-            r'FACT_SHEET_PATH = Path\("inputs"\) / "[^"\r\n]+\.md"',
-        )
-        self.assertIn('print("Layer 2: running")', layer2_text)
-        self.assertIn("['status']", layer2_text)
-        self.assertIn("asyncio.to_thread(run_layer2, L2_DYNAMIC_RUN)", layer2_text)
-        self.assertIn("LAYER2_DOMAIN_PLUGIN", layer2_text)
-        self.assertIn("LAYER2_REQUIREMENTS", layer2_text)
-        self.assertIn("PUBLIC_INPUT_CONFIRMED = True", layer2_text)
-        for control in ("WEB_SEARCH_DEPTH", "WEB_SEARCH_VERBOSITY"):
-            self.assertRegex(layer2_text, rf'{control} = "(?:low|medium|high)"')
-        self.assertIn("web_search_context_size=WEB_SEARCH_DEPTH", layer2_text)
-        self.assertIn("web_search_verbosity=WEB_SEARCH_VERBOSITY", layer2_text)
-        self.assertIn("public_input_confirmed=PUBLIC_INPUT_CONFIRMED", layer2_text)
-        self.assertIn('LAYER2_REQUIREMENTS = Path("inputs") / "requirement.md"', layer2_text)
-        # Preserve Layer 2 controls while Layer 3 switches to source-only execution.
-        self.assertNotIn("inputs\\\\", layer2_text)
-        self.assertNotIn("runs\\\\", layer2_text)
-        self.assertIn("from ML.deep_research.layer2 import create_run", layer2_text)
-        self.assertIn("from ML.deep_research.layer2 import run_all", layer2_text)
-        self.assertNotIn("L2_RUN =", layer2_text)
-        self.assertIn("run.log", layer2_text)
-        for retired in (
-            "PREVIEW_MISSION",
-            "Recorded Layer 2 usage",
-            "Mission preview",
-            "display(JSON",
-            "display(Markdown",
-            "clear_output",
-            "L2_TASK",
-            "while not",
-            "summary =",
-        ):
-            self.assertNotIn(retired, layer2_text)
-        for cell in cells:
-            compile(
-                "".join(cell["source"]),
-                str(notebook_path),
-                "exec",
-                flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-            )
-
-    def test_planner_is_only_a_historical_fixture(self):
-        self.assertTrue(PLANNER_PATH.is_file())
-        self.assertEqual(PLANNER_PATH.parent, REPO_ROOT / "tests" / "fixtures")
-        self.assertFalse((REPO_ROOT / "planner_prompt.md").exists())
+        self.assertEqual(len(cells), 1)
+        self.assertEqual(notebook["metadata"]["kernelspec"]["display_name"], "SedAI Docker — Python 3.12")
+        source = "".join(cells[0]["source"])
+        for control in ("FACT_SHEET_PATH", "DOMAIN_WEB_SEARCH_DEPTH", "SOURCE_WEB_SEARCH_DEPTH",
+                        "LAYER3_RESUME_RUN_PATH", "LAYER3_PREPARED_RUN_PATH", "PUBLIC_INPUT_CONFIRMED"):
+            self.assertIn(control, source)
+        self.assertIn("asyncio.to_thread(run_domain, L2_DYNAMIC_RUN)", source)
+        self.assertIn("create_research(L2_DYNAMIC_RUN", source)
+        compile(source, str(notebook_path), "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
 
     def test_development_uses_original_workspace_without_hidden_run_volumes(self):
         import yaml
@@ -137,13 +46,14 @@ class StructureTests(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "docker/prepare_notebook.py").exists())
 
     def test_layer2_layout_public_exports_and_industry_neutral_code(self):
-        from ML.deep_research.layer2.backend import settings
-        from ML.deep_research.layer2.backend.create_run import create_run
-        from ML.deep_research.layer2.backend.runner import run_all
-        from ML.deep_research.layer3.settings import AGENT_NAMES
+        from ML.deep_research.domain_decider.backend import settings
+        from ML.deep_research.domain_decider.backend.create_run import create_run
+        from ML.deep_research.domain_decider.backend.runner import run_all
+        domain_names = ("Asset Integrity, Systems & Operational Resilience",
+                        "Finance, Debt & Macro Transmission")
 
         root = settings.MODULE_DIR
-        self.assertEqual(root, REPO_ROOT / "ML" / "deep_research" / "layer2")
+        self.assertEqual(root, REPO_ROOT / "ML" / "deep_research" / "domain_decider")
         self.assertEqual(settings.PROMPTS_DIR, root / "ML" / "prompts")
         self.assertEqual(settings.DOMAIN_PLUGIN_PATH, root / "plugins" / "real_estate.md")
         self.assertTrue(settings.DOMAIN_PLUGIN_PATH.is_file())
@@ -156,7 +66,7 @@ class StructureTests(unittest.TestCase):
         active = list(root.rglob("*.py")) + list(settings.PROMPTS_DIR.glob("*.md"))
         for path in active:
             text = path.read_text(encoding="utf-8")
-            for name in AGENT_NAMES:
+            for name in domain_names:
                 self.assertNotIn(name, text, str(path))
         self.assertFalse(hasattr(settings, "AGENT_NAMES"))
         self.assertFalse(hasattr(settings, "PLANNER_PATH"))
@@ -167,13 +77,15 @@ class StructureTests(unittest.TestCase):
             self.assertIn("## " + heading, template)
 
     def test_all_package_modules_import_without_model_calls(self):
-        for package in (layer2, layer3, layer4):
+        for retired in ("layer2", "layer3"):
+            self.assertIsNone(importlib.util.find_spec("ML.deep_research." + retired))
+        for package in (layer2, layer3):
             prefix = f"{package.__name__}."
             for module in pkgutil.walk_packages(package.__path__, prefix):
                 importlib.import_module(module.name)
 
     def test_layer2_production_functions_have_docstrings(self):
-        root = REPO_ROOT / "ML" / "deep_research" / "layer2"
+        root = REPO_ROOT / "ML" / "deep_research" / "domain_decider"
         missing = []
         total_lines = 0
         for path in sorted(root.rglob("*.py")):
@@ -189,7 +101,7 @@ class StructureTests(unittest.TestCase):
         self.assertLess(total_lines, 2177)  # inspected pre-schema-8 production baseline
 
     def test_retired_layer3_phase_controller_is_gone(self):
-        root = REPO_ROOT / "ML" / "deep_research" / "layer3"
+        root = REPO_ROOT / "ML" / "deep_research" / "research_module"
         retired = [
             "aggregator_runner.py",
             "calculation_tool.py",
@@ -204,6 +116,30 @@ class StructureTests(unittest.TestCase):
             "pipeline/write_questions.py",
         ]
         self.assertEqual([name for name in retired if (root / name).exists()], [])
+
+    def test_layer3_layout_and_public_exports(self):
+        from ML.deep_research.research_module.backend import settings
+        from ML.deep_research.research_module.backend.cli import run_all
+        from ML.deep_research.research_module.backend.create_run import create_run
+        from ML.deep_research.research_module.backend.document_uploads import upload_documents
+        from ML.deep_research.research_module.backend.research_run import create_research_run
+        from ML.deep_research.research_module.backend.run_checks import run_checks
+
+        root = REPO_ROOT / "ML" / "deep_research" / "research_module"
+        self.assertEqual({path.name for path in root.glob("*.py")}, {"__init__.py", "__main__.py"})
+        self.assertEqual(settings.PROMPTS_DIR, root / "ML" / "prompts")
+        self.assertEqual(
+            {path.name for path in settings.PROMPTS_DIR.glob("*.md")},
+            {"source_finder.md", "domain_research.md", "research_summary.md", "read_document.md"},
+        )
+        self.assertIs(layer3.create_run, create_run)
+        self.assertIs(layer3.create_research_run, create_research_run)
+        self.assertIs(layer3.run_all, run_all)
+        self.assertIs(layer3.run_checks, run_checks)
+        self.assertIs(layer3.upload_documents, upload_documents)
+        for retired in ("pipeline", "prompts", "providers"):
+            self.assertEqual(list((root / retired).glob("*.py")), [])
+            self.assertEqual(list((root / retired).glob("*.md")), [])
 
     def test_executable_source_files_do_not_exceed_350_lines(self):
         violations = []

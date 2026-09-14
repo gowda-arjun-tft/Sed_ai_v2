@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 class GlobalReadinessTests(unittest.TestCase):
     def test_slug_survives_every_writing_system(self):
-        from ML.deep_research.layer2.backend.fs import slug
+        from ML.deep_research.domain_decider.backend.fs import slug
 
         self.assertEqual(slug("Bauträger-Risiko"), "bautrager-risiko")
         self.assertEqual(slug("Marché & valorisation"), "marche-and-valorisation")
@@ -28,7 +28,7 @@ class GlobalReadinessTests(unittest.TestCase):
         )
 
     def test_pages_decode_by_declared_encoding_and_tables_keep_cells(self):
-        from ML.deep_research.layer3.text_extraction import canonical_text
+        from ML.deep_research.research_module.backend.text_extraction import canonical_text
 
         cases = [
             ("shift-jis", "text/html; charset=Shift_JIS", "東京都"),
@@ -43,7 +43,7 @@ class GlobalReadinessTests(unittest.TestCase):
         self.assertIn("Unit 1 | 1,200", canonical_text(table, "text/html"))
 
     def test_source_urls_must_be_public_http_without_credentials(self):
-        from ML.deep_research.layer3.retrieval import validate_public_url
+        from ML.deep_research.research_module.backend.retrieval import validate_public_url
 
         for url in (
             "file:///etc/passwd",
@@ -59,12 +59,12 @@ class GlobalReadinessTests(unittest.TestCase):
                 validate_public_url("https://example.com/report")
 
     def test_redirect_targets_are_revalidated(self):
-        from ML.deep_research.layer3.providers.openai_search import _SafeRedirectHandler
+        from ML.deep_research.research_module.ML.providers.openai_search import _SafeRedirectHandler
 
         expected = MagicMock()
         with (
             patch(
-                "ML.deep_research.layer3.providers.openai_search.validate_public_url"
+                "ML.deep_research.research_module.ML.providers.openai_search.validate_public_url"
             ) as validate,
             patch.object(
                 urllib.request.HTTPRedirectHandler,
@@ -85,7 +85,7 @@ class GlobalReadinessTests(unittest.TestCase):
         self.assertIs(actual, expected)
 
     def test_fetch_rejects_declared_and_streamed_oversize_sources(self):
-        from ML.deep_research.layer3.providers.openai_search import _fetch
+        from ML.deep_research.research_module.ML.providers.openai_search import _fetch
 
         for declared, body in (("11", b""), (None, b"x" * 11)):
             response = MagicMock()
@@ -100,15 +100,15 @@ class GlobalReadinessTests(unittest.TestCase):
             with (
                 self.subTest(declared=declared),
                 patch(
-                    "ML.deep_research.layer3.providers.openai_search.validate_public_url",
+                    "ML.deep_research.research_module.ML.providers.openai_search.validate_public_url",
                     side_effect=lambda url: url,
                 ),
                 patch(
-                    "ML.deep_research.layer3.providers.openai_search.urllib.request.build_opener",
+                    "ML.deep_research.research_module.ML.providers.openai_search.urllib.request.build_opener",
                     return_value=opener,
                 ),
                 patch(
-                    "ML.deep_research.layer3.providers.openai_search.MAX_SOURCE_BYTES",
+                    "ML.deep_research.research_module.ML.providers.openai_search.MAX_SOURCE_BYTES",
                     10,
                 ),
                 self.assertRaisesRegex(ValueError, "10 MiB"),

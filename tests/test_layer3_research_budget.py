@@ -8,11 +8,11 @@ from unittest.mock import AsyncMock, Mock
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer3 import run_all
-from ML.deep_research.layer3.domain_research import prepare_domain
-from ML.deep_research.layer3.research_budget import BudgetExhausted, CallBudget, CallUnavailable
-from ML.deep_research.layer3.research_run import research_policy
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.research_module import run_all
+from ML.deep_research.research_module.backend.research_runner import prepare_domain
+from ML.deep_research.research_module.backend.research_budget import BudgetExhausted, CallBudget, CallUnavailable
+from ML.deep_research.research_module.backend.research_run import research_policy
 from tests.research_fixtures import ResearchModel, linked_run
 
 

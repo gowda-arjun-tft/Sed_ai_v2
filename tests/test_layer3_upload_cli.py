@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from ML.deep_research.layer2.backend.fs import load_json
-from ML.deep_research.layer3.cli import main
+from ML.deep_research.domain_decider.backend.fs import load_json
+from ML.deep_research.research_module.backend.cli import main
 from tests.layer3_fixtures import new_run, snapshot
 
 
@@ -17,9 +17,9 @@ class UploadCLITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))
             before = snapshot(run)
-            with patch("ML.deep_research.layer3.cli.load_dotenv_key"), patch(
-                "ML.deep_research.layer3.cli.upload_documents", new_callable=AsyncMock
-            ) as upload, patch("ML.deep_research.layer3.cli.run_all", side_effect=AssertionError("No discovery")), contextlib.redirect_stdout(io.StringIO()):
+            with patch("ML.deep_research.research_module.backend.cli.load_dotenv_key"), patch(
+                "ML.deep_research.research_module.backend.cli.upload_documents", new_callable=AsyncMock
+            ) as upload, patch("ML.deep_research.research_module.backend.cli.run_all", side_effect=AssertionError("No discovery")), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main(["--upload-documents", str(run), "--retry-failed"]), 0)
                 upload.assert_awaited_once_with(run.resolve(), retry_failed=True)
             self.assertEqual(before, snapshot(run))

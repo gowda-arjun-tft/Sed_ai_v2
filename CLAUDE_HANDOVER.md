@@ -1,5 +1,9 @@
 # Claude development handover
 
+Historical snapshot (2026-09-10), not current execution guidance. For today's package names,
+combined notebook and recovery commands, read [README.md](README.md) and the
+[architecture overview](ML/deep_research/docs/Research_Architecture_Overview.md).
+
 Prepared 2026-09-10 for `C:\Users\Arjun Gowda\Desktop\Sed_ai_v2`.
 This is a snapshot for continuing development. Inspect the current checkout and running services
 before relying on recorded status; no repair or research task is authorized by this file alone.
@@ -7,7 +11,7 @@ before relying on recorded status; no repair or research task is authorized by t
 ## Start here
 
 The user will use Claude for development because Codex usage is limited. Read [AGENTS.md](AGENTS.md)
-for the controlling repository contracts and [docker/README.md](docker/README.md) for execution.
+for the controlling repository contracts and [docker/development.md](docker/development.md) for execution.
 The current branch is **plain_research**, with **Layer 2 schema 6**. `plain_research_v2` has schema 7
 and remains a separate branch. Do not merge V2 behavior while working on the original branch.
 
@@ -64,11 +68,11 @@ Source reading and sorting are tool-free. Review uses native read-only `ls`, `gl
 `read_file` over registered evidence, with SQLite persistence. Schema 6 has historical designer
 capability behavior frozen per run. Do not replace it with schema 7's extract-once/correction flow.
 
-- `ML/deep_research/layer2/backend/`: runner, storage, publication, recovery, logging and CLI adapter.
-- `ML/deep_research/layer2/ML/`: harness, input accounting and the six numbered prompts.
-- `ML/deep_research/layer2/plugins/real_estate.md`: selected industry definitions; Python has no fixed roster.
+- `ML/deep_research/domain_decider/backend/`: runner, storage, publication, recovery, logging and CLI adapter.
+- `ML/deep_research/domain_decider/ML/`: harness, input accounting and the six numbered prompts.
+- `ML/deep_research/domain_decider/plugins/real_estate.md`: selected industry definitions; Python has no fixed roster.
 - `inputs/new_fact_sheet.md` and `inputs/requirement.md`: user evidence and requirements; preserve their content.
-- Public Python entrypoints: `ML.deep_research.layer2.create_run` and `run_all`.
+- Public Python entrypoints: `ML.deep_research.domain_decider.create_run` and `run_all`.
 
 Outputs are grouped under `runs/<input-group>/L2_*`: readable `README.md`, `domain_plan.md`,
 `domains/*.md`, and `unresolved.md` when needed. Internal snapshots, fact ledger and assignments

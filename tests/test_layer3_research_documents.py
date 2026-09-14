@@ -9,13 +9,13 @@ from pathlib import Path
 import httpx
 from openai import AsyncOpenAI
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer2.backend.run_log import operational_logger
-from ML.deep_research.layer3.document_records import REGISTRY_PATH
-from ML.deep_research.layer3.domain_tools import make_tools
-from ML.deep_research.layer3.research_documents import ResearchDocuments
-from ML.deep_research.layer3.research_run import create_research_run, eligible_sources
-from ML.deep_research.layer3.source_publication import parse_json, publish
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.domain_decider.backend.run_log import operational_logger
+from ML.deep_research.research_module.backend.document_records import REGISTRY_PATH
+from ML.deep_research.research_module.ML.domain_tools import make_tools
+from ML.deep_research.research_module.ML.research_documents import ResearchDocuments
+from ML.deep_research.research_module.backend.research_run import create_research_run, eligible_sources
+from ML.deep_research.research_module.backend.source_publication import parse_json, publish
 from tests.document_upload_fixtures import UploadHTTP, entry, prepared
 from tests.layer3_fixtures import snapshot
 from tests.test_layer3_research_budget import new_budget

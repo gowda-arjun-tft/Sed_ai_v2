@@ -10,10 +10,10 @@ from unittest.mock import patch
 
 import httpx
 
-from ML.deep_research.layer2.backend.fs import load_json, text_hash, write_json
-from ML.deep_research.layer3.document_download import _download, document_extension, download_document
-from ML.deep_research.layer3.document_records import REGISTRY_PATH, UPLOAD_POLICY, candidate
-from ML.deep_research.layer3.source_publication import parse_json, pretty_json
+from ML.deep_research.domain_decider.backend.fs import load_json, text_hash, write_json
+from ML.deep_research.research_module.backend.document_download import _download, document_extension, download_document
+from ML.deep_research.research_module.backend.document_records import REGISTRY_PATH, UPLOAD_POLICY, candidate
+from ML.deep_research.research_module.backend.source_publication import parse_json, pretty_json
 from tests.document_upload_fixtures import PDF, UploadHTTP, entry, prepared
 from tests.layer3_fixtures import FakeFinder, new_run, snapshot
 

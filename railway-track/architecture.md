@@ -3,18 +3,25 @@
 ## System Overview
 
 Current architecture and boundaries are documented in [AGENTS.md](../AGENTS.md), [README.md](../README.md)
-and the [Layer 2](../ML/deep_research/layer2/README.md) and [Layer 3](../ML/deep_research/layer3/README.md) guides. Earlier audits and tracks
+and the [combined architecture guide](../ML/deep_research/docs/Research_Architecture_Overview.md). Earlier audits and tracks
 remain historical records, not the current execution contract.
+
+The packages are `domain_decider` and `research_module`, retaining backend/ML separation.
+One notebook cell preflights inputs/consent/storage, runs domain preparation synchronously
+off-thread, then passes only its completed run into the existing async research entrypoint.
+Explicit resume/linked/upload paths bypass unnecessary preparation. Blank paths create new
+runs. Frozen keys, L2_/L3_ prefixes, prompts, harness, checkpoint threads and policies remain.
+Current guides are consolidated; dated Markdown, standalone artifacts and run README files remain.
 
 ## Components
 
 Layer 2 schema 9 has three direct chat-model stages: cumulative asset metadata, one web-assisted
 domain decision and original-source distribution by stable domain ID. There is no Layer 2 graph,
 reviewer, custom tool loop, fact-ID projection or additional synthesis. Shared model construction
-and historical Deep Agents configuration remain available for Layer 4.
+and Deep Agents configuration remain available for the active Layer 3 researcher.
 
-Operations/recovery/publication live in layer2/backend; messages, local request options/accounting
-and three generic prompts live in layer2/ML. The plugin supplies baseline industry responsibilities;
+Operations/recovery/publication live in domain_decider/backend; messages, local request options/accounting
+and three generic prompts live in domain_decider/ML. The plugin supplies baseline industry responsibilities;
 requirements set priorities and the user-approved broader research scope. Python has no fixed roster.
 Public entrypoints remain create_run and run_all, with explicit public-input confirmation for new runs.
 
@@ -26,8 +33,15 @@ Python; document analysis is an explicit tool-free file-input request inside the
 An editable user research instruction determines the report objective, separately from source guidance.
 The separate research_config JSON freezes per-domain call limits; three nulls mean unlimited calls.
 Existing preparation-only/version-1/version-2 policies stay unchanged; create_research_run makes a new linked handoff.
-Layer 4 retains segregation/research/synthesis on historical schema-8 research inputs only; its shared
-tools/checkpoints remain unchanged, and notebook execution is disabled by default.
+Layer 4 and its exclusively used historical graph/compactor/executor have been removed. The notebook
+and PowerShell expose only Layers 2/3. Historical Layer 4 artifacts remain readable, not executable;
+no report conversion or replacement synthesis is introduced.
+
+Layer 3 follows the same code boundary as Layer 2: its package root exposes only public entrypoints;
+operational execution, persistence, publication, downloads and recovery live in `research_module/backend/`;
+model requests, Deep Agent construction, middleware, tools, provider adapters and prompts live in
+`research_module/ML/`. The research runner owns scheduling/checkpoints while the model package owns graph
+construction. No retired internal-path forwarding modules are retained.
 
 Railway Track stores durable authorized-work history. Claude guidance lives in CLAUDE.md and the
 dated CLAUDE_HANDOVER.md; personal skills are not bundled into Docker.
@@ -128,7 +142,7 @@ The VS Code Dev Container mounts the original checkout read-write at /app and us
 /usr/local/bin/python. It follows the checked-out branch; source-discovery work is on layer3-v1.
 Browser containers retain separate volume-backed state and image-backed code. Development alone was
 rebuilt/recreated after checking its kernel was idle to attach checkpoint storage; browser identity
-and start time were preserved. Python dependencies were not upgraded. See the [Docker guide](../docker/README.md).
+and start time were preserved. Python dependencies were not upgraded. See the [Docker guide](../docker/development.md).
 
 ## Security
 
@@ -181,7 +195,7 @@ native source finders → immediately save completions/traces → collect exact 
 URL/byte deduplication → upload each unique document → publish enriched per-domain JSON →
 capability-enabled domain researchers → independent verbatim Markdown reports. Old preparation-only
 runs still stop at JSON. Linked research starts from a new frozen copy without rediscovery or re-upload.
-The notebook uses an explicit resume path or L2_DYNAMIC_RUN for a blank new-run input; it never
+The notebook uses explicit alternative action paths; blank paths create fresh domain and research runs. It never
 auto-selects an older matching run. Failed jobs retry only on request; completed unusual responses
 remain reusable. Local cancellation stops outstanding workers before recovery can start.
 Uploads persist intent before dispatch and receipts immediately. Transfer failures preserve successful

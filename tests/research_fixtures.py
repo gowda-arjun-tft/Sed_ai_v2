@@ -8,8 +8,8 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from ML.deep_research.layer3.contracts import Document
-from ML.deep_research.layer3.research_run import create_research_run
+from ML.deep_research.research_module.backend.contracts import Document
+from ML.deep_research.research_module.backend.research_run import create_research_run
 from tests.layer3_fixtures import FakeFinder, new_run
 
 
@@ -18,7 +18,7 @@ async def linked_run(root, names=None, **kwargs):
     parent = new_run(root, names)
     await FakeFinder().run(parent)
     # A completed preparation predating research capabilities.
-    from ML.deep_research.layer2.backend.fs import load_json, write_json
+    from ML.deep_research.domain_decider.backend.fs import load_json, write_json
     record = load_json(parent / "run.json")
     record.pop("research")
     write_json(parent / "run.json", record)
@@ -79,8 +79,8 @@ class ResearchModel:
 
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         with patch("langchain_openai.ChatOpenAI._agenerate", generate), patch(
-            "ML.deep_research.layer3.cli.checkpoint_root", return_value=checkpoint_dir
-        ), patch("ML.deep_research.layer3.domain_tools._fetch", fetch), patch(
+            "ML.deep_research.research_module.backend.cli.checkpoint_root", return_value=checkpoint_dir
+        ), patch("ML.deep_research.research_module.ML.domain_tools._fetch", fetch), patch(
             "socket.socket.connect", side_effect=AssertionError("Network blocked")
         ), patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}):
             yield

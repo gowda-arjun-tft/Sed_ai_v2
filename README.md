@@ -1,195 +1,168 @@
-# CDI Deep Research
-
-Layer 2 designs plugin-driven domains and organizes supplied evidence. Layer 3 finds and tests sources
-for those dynamic domains, uploads unique documents and runs one persistent researcher per domain,
-producing independent cited Markdown reports without final synthesis. Layer 4 remains available for historical
-schema-8 research inputs only and is disabled by default in the notebook. Windows Python uses `compute` at
-`C:\src\anaconda3\envs\compute\python.exe`.
-For VS Code Docker development, follow the [Docker guide](docker/README.md): open the original
-project in its Dev Container and select `/usr/local/bin/python`. Layer 2 uses schema 9 on this branch.
-
-## Structure
-
-- `ML/deep_research/layer2/` designs plugin-driven domains, reads original source windows,
-  builds subject metadata, decides domains and distributes Markdown without a reviewer.
-- `ML/deep_research/layer3/` runs one native source finder per actual Layer 2 domain, up to five
-  concurrently, then uploads unique documents and runs persistent domain researchers sequentially without synthesis.
-- `ML/deep_research/layer4/` stores internal conditions, maps external-factor briefs directly from
-  Layer 3, researches those pathways with full property context, and writes one cross-domain
-  synthesis.
-- `ML/deep_research/docs/` contains archived run-verification and redesign notes; the root
-  architecture HTML records the previous schema-7 design.
-- `tests/` contains model-free unit and fabricated end-to-end run tests.
-
-Generated `runs/`, `.env`, caches, sources, and checkpoint databases remain local and are ignored.
-New runs are grouped by the input path so repeated work stays easy to identify:
+# CDI Research
 
 ```text
-runs/<parent>-<markdown-name>-<short-path-id>/
-  L2_YYYYMMDD_HHMMSS_xxxx/
-  L3_YYYYMMDD_HHMMSS_xxxx/
-  L4_YYYYMMDD_HHMMSS_xxxx/
+One notebook cell
+ → Domain Decider: metadata → domains → supplied domain facts
+ → Research Module: sources → document uploads → domain research
+ → Independent Markdown reports (no synthesizer)
 ```
 
 ## Setup
 
-```powershell
-& 'C:\src\anaconda3\envs\compute\python.exe' -m pip install -r requirements.txt
-```
+Open the original repository with **Dev Containers: Reopen in Container** in VS Code.
+Select **SedAI Docker — Python 3.12**, `/usr/local/bin/python`. Follow
+[Docker development](docker/development.md) for setup, checkpoint storage and diagnostics.
+The shared `/app` mount exposes the original code, Git, inputs and runs. Never use two
+writers for one run or restart a container during research. Store `OPENAI_API_KEY` in the
+runtime environment or `.env`, never in code or logs.
 
-Set only the API key in `.env`:
+Review inputs before public-input confirmation: the requirements have a confidential
+origin. Freezing them does not make them public. APIs default consent to false; the notebook
+retains the user's explicit `True` selection. Review it before running.
 
-```text
-OPENAI_API_KEY=your-key
-```
-
-The model remains `gpt-5.6-luna`. Layer 3 source discovery defaults to high reasoning, medium native
-web-search depth and low verbosity; new runs freeze selected controls. Neither Layer 2 nor Layer 3
-sets an application output-token ceiling. Source discovery uses direct Responses API calls, without
-Deep Agents graphs, custom tools, new SQLite or conversation memory. Existing Deep Agents helpers
-remain for Layer 4's historical workflow.
-
-## Layer 2 — schema 9
-
-Supply original factsheet, selected industry plugin and user requirements. Review all inputs for
-public web-assisted planning; the current requirements have a confidential origin. Confirmation
-defaults to false and must be explicit before a new run is created.
-
-    .\run.ps1 -FactSheet 'C:\path\facts.md' -DomainPlugin '.\ML\deep_research\layer2\plugins\real_estate.md' -Requirements 'C:\path\requirements.md' -Layer2WebSearchDepth high -Layer2WebSearchVerbosity medium -PublicInputConfirmed
-    .\run.ps1 -Resume '.\runs\<fact-sheet>\L2_YYYYMMDD_HHMMSS_xxxx'
-
-Public Python uses `create_run(factsheet, plugin, requirements, runs_root,
-reasoning_effort=..., web_search_context_size=..., web_search_verbosity=...,
-public_input_confirmed=True)`, then `run_all(run_dir)`. The notebook exposes the same Layer 2
-reasoning, search-depth and verbosity controls plus default-false public-input confirmation.
+## Organization
 
 ```text
-Factsheet → 50K/5K windows → sequential asset_metadata.md
-Metadata + plugin + requirements + optional native web search → internal JSON plan + domain_plan.md
-Original windows + metadata + domain plan → ID-keyed Markdown contributions
-Python → source-ordered domains/*.md; routing warnings link to the internal trace
+ML/deep_research/
+├── domain_decider/
+│   ├── __init__.py + __main__.py
+│   ├── backend/       Execution, persistence, publication, CLI
+│   ├── ML/prompts/    Three direct-call prompts and model helpers
+│   ├── plugins/       Industry responsibilities
+│   └── docs/          Audits and fixed quality benchmark
+├── research_module/
+│   ├── __init__.py + __main__.py
+│   ├── backend/       Preparation, uploads, budgets, recovery
+│   └── ML/            Agent, tools, middleware, providers/, prompts/
+└── docs/              Current architecture and historical evidence
 ```
 
-Only the designer can search. It extends baseline responsibilities or adds distinct domains where
-useful; there is no fixed final count. The real-estate plugin and requirements now allow financial,
-valuation, ESG/CapEx, alternative-use and local-market research alongside the original priorities.
-The designer uses web evidence for planning, not for inventing supplied asset facts.
+The [architecture overview](ML/deep_research/docs/Research_Architecture_Overview.md)
+describes all stages, limits, memory, source eligibility and recovery, with a historical
+document index. [AGENTS.md](AGENTS.md) defines working rules;
+[Railway Track](railway-track/change.md) records changes. There are no old-package wrappers,
+new shared-runtime package or installable wheel. The harness and pinned dependencies remain unchanged.
 
-Domain JSON contains IDs, names and responsibilities, with no Boundaries. Distribution is an ID-to-
-Markdown JSON object. The web-enabled designer requests JSON through its prompt; only tool-free
-distribution binds native JSON-object mode. Neither adds a strict nested schema or repair loop.
-Names label files but IDs route them; duplicate/unusable values remain visible internally.
-An unusable plan stops dependent work without resending a completed response. Python copies facts,
-qualifications and topic sections without semantic deduplication or paraphrasing.
+## One notebook execution cell
 
-Keep native distribution concurrency five, direct calls, source seeks, three transport retries,
-fresh messages, immediate saves, fingerprints/history and partial publication. No graph, reviewer,
-SQLite or extra synthesis. Four source windows still mean nine logical stage calls, not necessarily
-nine billed operations when hosted search is used. No application output-token cap.
-Account for messages, tools, format and framing against 300K/350K input policy; the designer also
-applies the 128K web-search limit. Oversized mandatory input fails safely without truncation.
+Open [CDI_Layer2_Layer3.ipynb](CDI_Layer2_Layer3.ipynb). Preserve unsaved editor changes before
+reloading it; restart only an idle kernel to clear old imports. The filename and Docker kernel
+are unchanged. Historical output is not attached to the new cell.
 
-Open README.md, asset_metadata.md, domain_plan.md, run.log and domains/. The exact JSON plan stays in its designer response trace. Inputs, raw responses, web sources,
-usage, routing observations and history stay under _internal/. There is no visible unresolved.md.
-Check-only is non-mutating. Historical Layer 2 schemas 2–8 are read-only. Completed schema-9 Markdown
-now feeds Layer 3 source preparation and domain research; Layer 4 integration remains separate.
+| Input/control | Meaning |
+| --- | --- |
+| `FACT_SHEET_PATH` | Original factsheet |
+| `LAYER2_DOMAIN_PLUGIN`, `LAYER2_REQUIREMENTS` | Industry duties and user objectives |
+| `LAYER3_SOURCE_SUGGESTION_PATH` | Preferred source authorities/classes |
+| `LAYER3_RESEARCH_INSTRUCTION_PATH` | Editable report purpose; default risks, opportunities and actions |
+| `LAYER3_RESEARCH_CONFIG_PATH` | Per-domain operational call thresholds |
+| `LAYER2_REASONING_EFFORT` | Domain-preparation reasoning |
+| `DOMAIN_WEB_SEARCH_DEPTH`, `DOMAIN_WEB_SEARCH_VERBOSITY` | Domain designer only |
+| `LAYER3_MODEL_REASONING_EFFORT` | Source-discovery reasoning |
+| `LAYER3_RESEARCH_REASONING_EFFORT` | Persistent researcher reasoning |
+| `SOURCE_WEB_SEARCH_DEPTH`, `SOURCE_WEB_SEARCH_VERBOSITY` | Research Module search settings |
+| `PUBLIC_INPUT_CONFIRMED` | Required permission for public provider processing |
+| `LAYER3_RETRY_FAILED` | Retry operational failures, never completed-content repair |
 
-See the [Layer 2 workflow guide](ML/deep_research/layer2/README.md) and
-[fixed quality benchmark](ML/deep_research/layer2/docs/research_context_benchmark.md).
-Offline tests establish operational behavior, not perfect extraction or live search quality.
+Current notebook selections remain max reasoning, medium depth, low verbosity, confirmed
+input and retry-failed enabled. API defaults are unchanged. New runs freeze selected settings.
+The default research config is `{"maximum_calls":80,"wrap_up_after":60,"finalize_after":70}`.
+Three explicit nulls mean unlimited application calls, not unlimited provider credit/context.
+Otherwise require integers with `0 <= wrap_up_after < finalize_after < maximum_calls`.
+Missing, duplicate, unknown, empty or invalid settings are errors, not unlimited execution.
 
-## Layer 3 — source preparation and domain research, schema 9
+### Select one action
 
-Review the completed Layer 2 metadata/domain files and editable source guidance before public-input
-confirmation. New runs find sources, upload documents and continue into domain research.
-Research requires the dedicated checkpoint volume in the Docker development service:
+| Selection | Result |
+| --- | --- |
+| All action paths blank | Create/run domains, then create/run research from that exact completed run |
+| `LAYER3_SOURCE_RUN_PATH` | Existing Domain Decider run: reuse complete output or resume incomplete work, then create research |
+| `LAYER3_RESUME_RUN_PATH` | Resume only that Research Module run with frozen settings |
+| `LAYER3_PREPARED_RUN_PATH` | New linked research-only run; preserve its settled preparation parent |
+| `LAYER3_UPLOAD_ONLY=True` + resume path | Upload-only enrichment; no model calls |
+
+All paths default blank; upload-only defaults false. Conflicts fail before creating runs.
+Fresh execution preflights paths, config, consent, key and checkpoint storage before model
+work. Domain failure/partial status stops the chain with its saved status and log location.
+A rerun with blank paths creates new runs; recovery requires an explicit path.
+The cell shows both paths/logs, discovery/upload/research status, completed-domain counts,
+per-domain call usage and report location. It adds no agent or research loop.
+
+## Public APIs and recovery commands
+
+```python
+from ML.deep_research.domain_decider import create_run, run_all
+from ML.deep_research.research_module import (
+    create_run as create_research, create_research_run,
+    run_all as run_research, upload_documents, run_checks,
+)
+```
+
+Domain Decider: `create_run(factsheet, plugin, requirements, runs_root,
+public_input_confirmed=True, reasoning_effort=..., web_search_context_size=...,
+web_search_verbosity=...)`, then synchronous `run_all(run)`.
+
+Research Module: `create_research(completed_domain_run, runs_root,
+source_suggestion=..., research_instruction=..., research_config=...,
+public_input_confirmed=True, reasoning_effort=..., research_reasoning_effort=...,
+web_search_context_size=..., web_search_verbosity=...)`, then `await run_research(run)`.
+`runs_root` remains accepted; research is colocated beside its domain source.
+`create_research_run(prepared_run, runs_root, ...)` creates fresh linked threads/allowance
+and imports available evidence without repeating discovery/completed uploads.
+`await upload_documents(run, retry_failed=False)` performs explicit upload-only processing.
+
+Run Python commands inside the development container. Package names changed; CLI flags
+and PowerShell parameters deliberately remain unchanged.
 
 ```powershell
-.\run.ps1 -Research '.\runs\<fact-sheet>\L2_YYYYMMDD_HHMMSS_xxxx' -SourceSuggestion '.\inputs\source_suggestion.md' -Online -PublicInputConfirmed
+.\run.ps1 -FactSheet inputs/new_fact_sheet.md -DomainPlugin ML/deep_research/domain_decider/plugins/real_estate.md -Requirements inputs/requirement.md -PublicInputConfirmed
+.\run.ps1 -Resume '<L2-run>'
+.\run.ps1 -Research '<L2-run>' -SourceSuggestion inputs/source_suggestion.md -Online -PublicInputConfirmed
+.\run.ps1 -ResumeL3 '<L3-run>' -RetryFailed
+.\run.ps1 -ResearchFromL3 '<prepared-L3-run>' -Online -PublicInputConfirmed
+.\run.ps1 -UploadDocumentsL3 '<L3-run>'
 ```
 
-Resume a specific source run, or explicitly retry its operationally failed jobs:
-
-```powershell
-.\run.ps1 -ResumeL3 '.\runs\<fact-sheet>\L3_YYYYMMDD_HHMMSS_xxxx'
-.\run.ps1 -ResumeL3 '.\runs\<fact-sheet>\L3_YYYYMMDD_HHMMSS_xxxx' -RetryFailed
-.\run.ps1 -UploadDocumentsL3 '.\runs\<fact-sheet>\L3_YYYYMMDD_HHMMSS_xxxx'
+```bash
+python -m ML.deep_research.domain_decider --help
+python -m ML.deep_research.research_module --help
+python -m ML.deep_research.research_module --resume-l3 '<L3-run>' --retry-failed
+python -m ML.deep_research.research_module --check-only '<L3-run>'
 ```
 
-Each finder receives complete shared metadata, its domain Markdown and source suggestions. Native
-web search is required; the prompt asks it to open every proposed URL and report observed access.
-It returns prompt-requested JSON (no API JSON mode) with URL, relevance, access/note and document flag.
-New runs then fetch document candidates into temporary storage, deduplicate URLs and byte hashes,
-upload once to OpenAI Files and add `upload_status`/`upload`/`file_id` to every matching source entry. File IDs are
-reusable across the run's domains and resumptions. The versioned research capability then writes
-`research/<domain>.md` through Deep Agents, with native planning and retrievable evidence. No synthesizer.
+New-run options include `--research-instruction`, `--research-config`, `--source-suggestion`
+and reasoning/search controls. Resume/upload/check cannot override frozen settings.
+Check-only remains observational. Schema 9, `L2_`/`L3_` prefixes, frozen keys, checkpoint
+paths and thread IDs are unchanged. Unsupported historical schemas remain read-only.
+Missing unfinished checkpoints require recovery, never silent restart.
 
-Outputs include readable `sources/*.json`, independent `research/*.md`, README, metadata and `run.log`. Exact raw
-model text, full provider messages,
-available actions/annotations and usage remain under `_internal/trace`. Completed invalid or empty
-responses stay saved with visible warnings, without repair calls or coverage-based failures.
-Frozen inputs, file-based recovery and successful-sibling publication are retained. The effective
-source-finder input limit is the smaller of model capacity, application ceiling and the 128K web-search allowance.
-Main research uses a 300K target/350K ceiling with explicit retrievable compaction beginning at 250K.
-Historical schema-8 research execution/checks are rejected without mutation.
+## Outputs and safety
 
-The notebook exposes explicit source/resume paths and preserves the user's current consent selection;
-new-run APIs still default public-input confirmation to False.
-blank source path uses `L2_DYNAMIC_RUN`. `LAYER3_UPLOAD_ONLY = True` requires an explicit resume path
-and enriches saved source JSON without searches. Older runs otherwise remain source-only.
-Uploaded files persist until manually deleted; upload success does not establish readability. Individual
-document failures remain visible and excluded from future research without making completed source discovery partial.
-See the [Layer 3 guide](ML/deep_research/layer3/README.md) for safety, recovery and retention details.
+Runs stay in `runs/<parent>-<markdown-name>-<short-path-id>/`:
 
-For existing preparation, set `LAYER3_PREPARED_RUN_PATH` in the notebook, or use
-`python -m ML.deep_research.layer3 --research-from '<prepared-L3-run>' --online --public-input-confirmed`
-inside the development container. A new linked run preserves the parent and starts research without
-repeating source discovery/uploads. Main research reasoning defaults to `max`. Resume its explicit new
-run path to reuse completed reports and interrupted checkpoint threads. New research capability version 3
-uses one domain at a time with frozen `inputs/research_config.json`: 80 shared logical model calls
-per domain by default, including search, document analysis and summarization. Wrap-up starts after 60 calls; after 70 only saved-file reading and
-finalization remain; the last call is reserved for tool-free report writing. An exhausted unfinished
-domain stays partial without blocking other domains. Historical policies are not changed.
-Set all three config values to null for unlimited application calls with continued usage tracking;
-provider credit/context limits and manual cancellation still apply. Select another config with
-`research_config`, `--research-config`, `-ResearchConfig` or notebook `LAYER3_RESEARCH_CONFIG_PATH`.
-Resume uses frozen settings, not later edits to the selected file.
-Edit `inputs/user_research_instruction.md` (notebook `LAYER3_RESEARCH_INSTRUCTION_PATH`, CLI
-`--research-instruction`, PowerShell `-ResearchInstruction`) to request risks/opportunities/actions
-or another objective. Linked runs import available prior evidence and notes into fresh threads;
-parent usage remains separate. No dollar or output-token cap is added. Offline checks do not establish live quality.
+| Run | Visible outputs |
+| --- | --- |
+| `L2_*` | `asset_metadata.md`, `domain_plan.md`, `domains/*.md`, `README.md`, `run.json`, `run.log` |
+| `L3_*` | `sources/*.json`, `research/*.md`, `README.md`, `run.json`, `run.log` |
 
-## Layer 4
+Exact prompts, input bytes, completions, provider actions, usage, upload receipts and history
+stay in `_internal/`. Checkpoints stay on the dedicated Linux volume. Generated run README
+files are outputs and remain unchanged. Individual document failures are warnings; failed or
+uncertain documents remain visible but ineligible. Successful sibling reports publish independently.
+Completed empty/unconventional responses are preserved without repair. Files accepted by OpenAI
+remain until manually deleted; deleting local data does not remove remote files.
+Historical Layer 4 reports remain readable; no execution or replacement synthesis is included.
 
-Layer 4 is disabled by default in the notebook. For explicit historical use only, start from an
-existing schema-8 Layer 3 research run, not the new source-discovery JSON:
+## Offline verification
 
-```powershell
-.\run.ps1 -ExternalResearch '.\runs\<fact-sheet>\L3_YYYYMMDD_HHMMSS_xxxx' -Online -PublicInputConfirmed
+```bash
+python -m unittest discover -s tests -v
+python -m compileall -q ML tests docker
+python -m pip check
+git diff --check
 ```
 
-Resume an interrupted run, or retry only failed model stages from their checkpoints:
-
-```powershell
-.\run.ps1 -ResumeL4 '.\runs\<fact-sheet>\L4_YYYYMMDD_HHMMSS_xxxx'
-.\run.ps1 -ResumeL4 '.\runs\<fact-sheet>\L4_YYYYMMDD_HHMMSS_xxxx' -RetryFailed
-```
-
-Layer 4 schema 2 sends the frozen Layer 3 domain report independently to two sequential, tool-free
-calls. The internal result is a stored user-facing artifact only. The candidate result is a compact
-external-factor research brief. The direct external researcher receives the unchanged Layer 3
-report plus that brief and exposes only `search_web` and `read_source`; final synthesis is
-tool-free. Schema-1 runs remain immutable comparison artifacts and cannot resume in schema 2. All
-completed Markdown is saved verbatim; Python does not grade, repair or retry completed content.
-
-## Validation
-
-```powershell
-& 'C:\src\anaconda3\envs\compute\python.exe' -m unittest discover -s tests -v
-& 'C:\src\anaconda3\envs\compute\python.exe' -m compileall -q ML tests
-& 'C:\src\anaconda3\envs\compute\python.exe' -m pip check
-```
-
-The suite makes no model calls. It covers dynamic source inputs, bounded concurrency, native request
-serialization, exact JSON preservation, file recovery, non-mutating checks and notebook safety.
-Historical Layer 4 harness/egress/checkpoint tests and the 350-line source limit remain covered.
+Tests use fake models/network responses and native checkpoints. They establish orchestration
+and preservation, not live extraction accuracy, citation fidelity or research quality.
+The [fixed quality benchmark](ML/deep_research/domain_decider/docs/research_context_benchmark.md)
+is retained for separately authorized evaluation of metadata plus domain content together.

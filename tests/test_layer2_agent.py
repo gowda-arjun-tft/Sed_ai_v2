@@ -5,11 +5,11 @@ from unittest.mock import patch
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from ML.deep_research.layer2.ML.context import InputSizeError, estimate, messages, request_options
-from ML.deep_research.layer2.ML.harness import build_model
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer2.backend.settings import MODULE_DIR, PROMPTS_DIR, PROMPT_FILES
-from ML.deep_research.layer2.backend.windows import token_count
+from ML.deep_research.domain_decider.ML.context import InputSizeError, estimate, messages, request_options
+from ML.deep_research.domain_decider.ML.harness import build_model
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.domain_decider.backend.settings import MODULE_DIR, PROMPTS_DIR, PROMPT_FILES
+from ML.deep_research.domain_decider.backend.windows import token_count
 from tests.layer2_fixtures import FakeStages, domain_plan, new_run, section
 
 

@@ -9,9 +9,9 @@ from unittest.mock import patch
 
 from langchain_core.messages import AIMessage
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer3.pipeline.create_run import local_path
-from ML.deep_research.layer3.source_publication import publish
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.research_module.backend.create_run import local_path
+from ML.deep_research.research_module.backend.source_publication import publish
 from tests.layer3_fixtures import FakeFinder, new_run, snapshot, source_json
 
 
@@ -82,11 +82,11 @@ class SourceRunnerTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))
             fake = FakeFinder()
-            from ML.deep_research.layer3.source_runner import prepare
+            from ML.deep_research.research_module.backend.source_runner import prepare
             def oversized(run, record, domain, profile):
                 request, fingerprint, count, ceiling = prepare(run, record, domain, profile)
                 return request, fingerprint, ceiling + 1 if domain["key"].endswith("1") else count, ceiling
-            with patch("ML.deep_research.layer3.source_runner.prepare", side_effect=oversized):
+            with patch("ML.deep_research.research_module.backend.source_runner.prepare", side_effect=oversized):
                 record = await fake.run(run)
             self.assertEqual(record["status"], "partial")
             self.assertEqual(len(fake.calls), 1)
@@ -172,7 +172,7 @@ class SourceRunnerTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp))
             fake = FakeFinder()
-            with patch("ML.deep_research.layer3.source_runner.publish", side_effect=OSError("PRIVATE_DISK")):
+            with patch("ML.deep_research.research_module.backend.source_runner.publish", side_effect=OSError("PRIVATE_DISK")):
                 with self.assertRaises(OSError):
                     await fake.run(run)
             self.assertEqual(load_json(run / "run.json")["status"], "failed")
@@ -181,7 +181,7 @@ class SourceRunnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(fake.calls), 2)
 
     async def test_trace_write_failure_never_resends_completed_content(self):
-        from ML.deep_research.layer3.source_finder import write_json as persist
+        from ML.deep_research.research_module.ML.source_finder import write_json as persist
         with tempfile.TemporaryDirectory() as tmp:
             run = new_run(Path(tmp), ["one"])
             fake = FakeFinder()
@@ -189,7 +189,7 @@ class SourceRunnerTests(unittest.IsolatedAsyncioTestCase):
                 if path.name == "provider_message.json":
                     raise OSError("PRIVATE_DISK")
                 return persist(path, value)
-            with patch("ML.deep_research.layer3.source_finder.write_json", side_effect=fail_trace):
+            with patch("ML.deep_research.research_module.ML.source_finder.write_json", side_effect=fail_trace):
                 record = await fake.run(run)
             self.assertEqual(record["status"], "failed")
             record = await fake.run(run, retry_failed=True)

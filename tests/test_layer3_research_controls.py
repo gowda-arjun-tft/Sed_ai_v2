@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer3.cli import main
-from ML.deep_research.layer3.research_run import checkpoint_root, research_policy
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.research_module.backend.cli import main
+from ML.deep_research.research_module.backend.research_run import checkpoint_root, research_policy
 from tests.layer3_fixtures import FakeFinder, new_run, snapshot
 from tests.test_layer3_notebook import code_cells
 
@@ -33,7 +33,7 @@ class ResearchControlTests(unittest.IsolatedAsyncioTestCase):
                 write_json(run / "run.json", record)
 
             for resume in ("", "conflicting-run"):
-                tree = ast.parse(code_cells()[1])
+                tree = ast.parse(code_cells()[0])
                 for node in tree.body:
                     if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
                         name = node.targets[0].id
@@ -43,8 +43,8 @@ class ResearchControlTests(unittest.IsolatedAsyncioTestCase):
                         if name in overrides:
                             node.value = ast.copy_location(ast.Constant(overrides[name]), node.value)
                 code = compile(ast.fix_missing_locations(tree), "Notebook", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
-                with patch("ML.deep_research.layer3.run_all", new_callable=AsyncMock, side_effect=completed) as research, patch(
-                    "ML.deep_research.layer2.backend.cli.load_dotenv_key"
+                with patch("ML.deep_research.research_module.backend.research_run.checkpoint_root"), patch("ML.deep_research.research_module.run_all", new_callable=AsyncMock, side_effect=completed) as research, patch(
+                    "ML.deep_research.domain_decider.backend.cli.load_dotenv_key"
                 ), patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}), contextlib.redirect_stdout(io.StringIO()) as output:
                     namespace = {}
                     if resume:
@@ -72,8 +72,8 @@ class ResearchControlTests(unittest.IsolatedAsyncioTestCase):
             instruction.write_text("Technical objective — inspect tolerances.\n", encoding="utf-8")
             config = Path(tmp) / "bounded.json"
             write_json(config, {"maximum_calls": 8, "wrap_up_after": 3, "finalize_after": 5})
-            with patch("ML.deep_research.layer3.cli.run_all", new_callable=AsyncMock) as execute, patch(
-                "ML.deep_research.layer3.cli.load_dotenv_key"
+            with patch("ML.deep_research.research_module.backend.cli.run_all", new_callable=AsyncMock) as execute, patch(
+                "ML.deep_research.research_module.backend.cli.load_dotenv_key"
             ), patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(await asyncio.to_thread(main, ["--research-from", str(parent), "--online", "--public-input-confirmed",
                                        "--research-reasoning-effort", "high", "--research-instruction", str(instruction),

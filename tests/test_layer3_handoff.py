@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ML.deep_research.layer2.backend.fs import atomic_write_text, load_json, write_json
-from ML.deep_research.layer3.cli import _parser, main
-from ML.deep_research.layer3.pipeline.create_run import create_run, local_path
+from ML.deep_research.domain_decider.backend.fs import atomic_write_text, load_json, write_json
+from ML.deep_research.research_module.backend.cli import _parser, main
+from ML.deep_research.research_module.backend.create_run import create_run, local_path
 from tests.layer3_fixtures import layer2_input, new_run, snapshot
 
 
@@ -100,7 +100,7 @@ class CliTests(unittest.TestCase):
             run = new_run(Path(tmp))
             before = snapshot(run)
             with contextlib.redirect_stdout(io.StringIO()), patch(
-                "ML.deep_research.layer3.cli.run_research", side_effect=AssertionError("No calls")
+                "ML.deep_research.research_module.backend.cli.run_research", side_effect=AssertionError("No calls")
             ):
                 main(["--check-only", str(run)])
             self.assertEqual(before, snapshot(run))

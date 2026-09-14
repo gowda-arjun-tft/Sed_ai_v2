@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ML.deep_research.layer2.backend.fs import load_json
-from ML.deep_research.layer2.backend.jobs import saved_text
-from ML.deep_research.layer2.backend.publication import domain_definitions, domain_names, materialize
+from ML.deep_research.domain_decider.backend.fs import load_json
+from ML.deep_research.domain_decider.backend.jobs import saved_text
+from ML.deep_research.domain_decider.backend.publication import domain_definitions, domain_names, materialize
 from tests.layer2_fixtures import FakeStages, domain_plan, new_run
 
 
@@ -163,7 +163,7 @@ class MarkdownTests(unittest.TestCase):
             run = new_run(Path(tmp))
             fake = FakeStages()
             original = (run / "README.md").read_bytes()
-            with patch("ML.deep_research.layer2.backend.publication.materialize", side_effect=OSError("offline write failure")):
+            with patch("ML.deep_research.domain_decider.backend.publication.materialize", side_effect=OSError("offline write failure")):
                 with self.assertRaises(OSError):
                     fake.run(run)
             self.assertEqual((run / "README.md").read_bytes(), original)

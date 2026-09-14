@@ -10,10 +10,10 @@ from unittest.mock import patch
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from ML.deep_research.layer2.ML.context import InputSizeError
-from ML.deep_research.layer2.backend.fs import load_json, text_hash, write_json
-from ML.deep_research.layer3 import run_all
-from ML.deep_research.layer3.research_memory import check_input, count_input
+from ML.deep_research.domain_decider.ML.context import InputSizeError
+from ML.deep_research.domain_decider.backend.fs import load_json, text_hash, write_json
+from ML.deep_research.research_module import run_all
+from ML.deep_research.research_module.ML.research_memory import check_input, count_input
 from tests.research_fixtures import ResearchModel, linked_run
 
 
@@ -128,7 +128,7 @@ class ResearchMemoryTests(unittest.IsolatedAsyncioTestCase):
             for forbidden in ("max_turns", "max_tool_calls", "max_seconds", "budget", "max_output_tokens"):
                 self.assertNotIn(forbidden, policy)
             # Enormous follow-up tool schemas/context fail before a fake/provider call.
-            from ML.deep_research.layer3.research_memory import ResearchGuard
+            from ML.deep_research.research_module.ML.research_memory import ResearchGuard
             from langchain.agents.middleware.types import ModelRequest
             from unittest.mock import AsyncMock, Mock
             request = ModelRequest(model=Mock(profile={}), messages=[HumanMessage(content="followup " * 100)],

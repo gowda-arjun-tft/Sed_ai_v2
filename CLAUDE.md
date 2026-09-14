@@ -6,4 +6,4 @@ Use the personal `deep-agents-builder` skill for Python Deep Agents work and `pr
 
 Claude is the user's development agent for this project. Work directly within the user's requested scope; do not delegate the assignment back to Codex or revive the old automated handoff policy. Follow `.agents/skills/railway-track/SKILL.md` for meaningful authorized changes.
 
-Run Python through the existing Docker development environment as described in `docker/README.md`. Do not start research to verify setup. Preserve existing changes, user inputs, historical runs and any active research. The earlier paid optimization experiment is inactive unless the user explicitly reauthorizes it.
+Run Python through the existing Docker development environment as described in `docker/development.md`. Do not start research to verify setup. Preserve existing changes, user inputs, historical runs and any active research. The earlier paid optimization experiment is inactive unless the user explicitly reauthorizes it.

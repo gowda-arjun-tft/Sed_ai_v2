@@ -10,12 +10,12 @@ from unittest.mock import patch
 import httpx
 from openai import BadRequestError
 
-from ML.deep_research.layer2.ML.context import estimate
-from ML.deep_research.layer2.ML.harness import build_model
-from ML.deep_research.layer2.backend.fs import load_json
-from ML.deep_research.layer3.pipeline.create_run import local_path
-from ML.deep_research.layer3.source_finder import prepare, request_options
-from ML.deep_research.layer3.settings import PROMPTS_DIR, SOURCE_SUGGESTION_PATH
+from ML.deep_research.domain_decider.ML.context import estimate
+from ML.deep_research.domain_decider.ML.harness import build_model
+from ML.deep_research.domain_decider.backend.fs import load_json
+from ML.deep_research.research_module.backend.create_run import local_path
+from ML.deep_research.research_module.ML.source_finder import prepare, request_options
+from ML.deep_research.research_module.backend.settings import PROMPTS_DIR, SOURCE_SUGGESTION_PATH
 from tests.layer3_fixtures import FakeFinder, new_run, snapshot
 
 
@@ -144,7 +144,7 @@ class SourceTraceTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.Event().wait()
                 finally:
                     stopped.set()
-            with patch("ML.deep_research.layer3.source_runner.waiting_progress", side_effect=progress):
+            with patch("ML.deep_research.research_module.backend.source_runner.waiting_progress", side_effect=progress):
                 await fake.run(run)
             self.assertTrue(stopped.is_set())
             self.assertIn("waiting_for_provider", (run / "run.log").read_text(encoding="utf-8"))

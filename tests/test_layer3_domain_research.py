@@ -6,10 +6,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from ML.deep_research.layer2.backend.fs import load_json, write_json
-from ML.deep_research.layer3 import run_all
-from ML.deep_research.layer3.pipeline.run_checks import run_checks
-from ML.deep_research.layer3.research_run import checkpoint_root, create_research_run
+from ML.deep_research.domain_decider.backend.fs import load_json, write_json
+from ML.deep_research.research_module import run_all
+from ML.deep_research.research_module.backend.run_checks import run_checks
+from ML.deep_research.research_module.backend.research_run import checkpoint_root, create_research_run
 from tests.layer3_fixtures import new_run, snapshot
 from tests.research_fixtures import ResearchModel, linked_run
 
@@ -22,8 +22,8 @@ class DomainResearchTests(unittest.IsolatedAsyncioTestCase):
             original = snapshot(parent)
             model = ResearchModel()
             with model.offline(root / "checkpoints"), patch(
-                "ML.deep_research.layer3.cli.run_research", side_effect=AssertionError("No discovery")
-            ), patch("ML.deep_research.layer3.cli._run_uploads", side_effect=AssertionError("No upload phase")):
+                "ML.deep_research.research_module.backend.cli.run_research", side_effect=AssertionError("No discovery")
+            ), patch("ML.deep_research.research_module.backend.cli._run_uploads", side_effect=AssertionError("No upload phase")):
                 await run_all(run)
                 record = load_json(run / "run.json")
                 self.assertEqual(record["research"]["status"], "complete", (run / "run.log").read_text())
@@ -53,8 +53,8 @@ class DomainResearchTests(unittest.IsolatedAsyncioTestCase):
             root = Path(tmp)
             run = new_run(root)
             with patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}), patch(
-                "ML.deep_research.layer3.cli.run_research", new_callable=AsyncMock
-            ) as discovery, patch("ML.deep_research.layer3.cli.checkpoint_root", side_effect=RuntimeError("dedicated volume required")):
+                "ML.deep_research.research_module.backend.cli.run_research", new_callable=AsyncMock
+            ) as discovery, patch("ML.deep_research.research_module.backend.cli.checkpoint_root", side_effect=RuntimeError("dedicated volume required")):
                 with self.assertRaisesRegex(RuntimeError, "volume"):
                     await run_all(run)
                 discovery.assert_not_awaited()
@@ -74,8 +74,8 @@ class DomainResearchTests(unittest.IsolatedAsyncioTestCase):
                 record["document_uploads"]["status"] = "partial"
                 write_json(path / "run.json", record)
 
-            with model.offline(root / "checkpoints"), patch("ML.deep_research.layer3.cli.run_research", discover), patch(
-                "ML.deep_research.layer3.cli._run_uploads", uploads):
+            with model.offline(root / "checkpoints"), patch("ML.deep_research.research_module.backend.cli.run_research", discover), patch(
+                "ML.deep_research.research_module.backend.cli._run_uploads", uploads):
                 await run_all(run)
             self.assertEqual(events, ["discovery", "uploads"])
             self.assertEqual(load_json(run / "run.json")["status"], "complete")
@@ -124,7 +124,7 @@ class DomainResearchTests(unittest.IsolatedAsyncioTestCase):
             _, run = await linked_run(root, ["energy"])
             model = ResearchModel()
             with model.offline(root / "checkpoints"):
-                with patch("ML.deep_research.layer3.domain_research._view", side_effect=OSError("offline publication failure")):
+                with patch("ML.deep_research.research_module.backend.research_runner._view", side_effect=OSError("offline publication failure")):
                     await run_all(run)
                 first = load_json(run / "run.json")
                 self.assertEqual(first["status"], "partial")

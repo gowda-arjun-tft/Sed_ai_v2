@@ -11,8 +11,8 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 from typing import Any
 
-from ML.deep_research.layer2.backend.fs import atomic_write_text, load_json, write_json
-from ML.deep_research.layer3.pipeline.create_run import create_run
+from ML.deep_research.domain_decider.backend.fs import atomic_write_text, load_json, write_json
+from ML.deep_research.research_module.backend.create_run import create_run
 
 
 def layer2_input(root: Path, names=None) -> Path:
@@ -112,9 +112,9 @@ class FakeFinder(Runnable):
 
     async def run(self, run: Path, **kwargs):
         """Patch only construction and block network during a real source runner invocation."""
-        from ML.deep_research.layer3.source_runner import run_sources
+        from ML.deep_research.research_module.backend.source_runner import run_sources
 
-        with patch("ML.deep_research.layer3.source_runner.build_model",
+        with patch("ML.deep_research.research_module.backend.source_runner.build_model",
                    return_value=OfflineSourceModel(owner=self, profile=self.profile)), patch(
             "socket.socket.connect", side_effect=AssertionError("Network disabled"),
         ), patch("sqlite3.connect", side_effect=AssertionError("No source-finder SQLite")):
