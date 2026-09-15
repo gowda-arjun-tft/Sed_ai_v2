@@ -49,6 +49,52 @@ def verify_inputs(run: Path, record: dict) -> None:
         local_path(run, domain["output_path"])
 
 
+def factsheet_snapshot(run: Path, record: dict) -> tuple[bytes, dict] | None:
+    """Read only a manifest-backed source snapshot, optionally following its recorded Layer 2."""
+    relative = "_internal/inputs/fact_sheet.md"
+    manifest = record.get("inputs", {})
+    item = manifest.get(relative) or manifest.get("fact_sheet.md")
+    path = local_path(run, relative)
+    if item is not None:
+        # Missing recorded bytes are corruption, not optional-source unavailability.
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != item.get("sha256"):
+            raise ValueError("Frozen factsheet hash mismatch")
+        if not raw.decode("utf-8-sig").strip():
+            raise ValueError("Frozen factsheet is empty")
+        return raw, {"source_path": str(path), "sha256": item["sha256"], "bytes": len(raw)}
+    if path.exists():
+        raise ValueError("Frozen factsheet has no input manifest entry")
+    source = record.get("source_l2", {}).get("path")
+    if source:
+        parent = storage_path(source)
+        if not parent.exists():
+            return None
+        original = load_json(parent / "run.json")
+        if original.get("schema_version") != 9 or original.get("source_l2"):
+            raise ValueError("Invalid recorded Domain Decider source")
+        expected_id = record["source_l2"].get("run_id")
+        if expected_id is not None and original.get("run_id") != expected_id:
+            raise ValueError("Recorded Domain Decider identity changed")
+        return factsheet_snapshot(parent, original)
+    return None
+
+
+def freeze_factsheet(snapshots: dict, inputs: dict, policy: dict, source, enabled=True) -> None:
+    """Add verified optional bytes to existing snapshots and freeze their availability."""
+    policy["research_factsheet_access"] = enabled
+    policy["factsheet"] = {"status": "unavailable" if enabled else "disabled"}
+    if not enabled:
+        snapshots.pop("_internal/inputs/fact_sheet.md", None)
+        inputs.pop("_internal/inputs/fact_sheet.md", None)
+        return
+    if source is not None:
+        raw, item = source
+        relative = "_internal/inputs/fact_sheet.md"
+        snapshots[relative], inputs[relative] = raw, item
+        policy["factsheet"] = {"status": "available", "input_path": relative}
+
+
 def create_run(
     l2_run: Path,
     runs_dir: Path,
@@ -63,10 +109,13 @@ def create_run(
     research_config: Path = RESEARCH_CONFIG_PATH,
     stage_settings: dict | None = None, destination: Path | None = None,
     prompt_directory: Path | None = None,
+    research_factsheet_access: bool = True,
 ) -> Path:
     """Create beside completed schema-9 Layer 2; read all inputs before creating a directory."""
     if not public_input_confirmed:
         raise ValueError("Layer 3 requires public-input confirmation")
+    if type(research_factsheet_access) is not bool:
+        raise ValueError("research_factsheet_access must be a Boolean")
     from .research_run import RESEARCH_PROMPTS, read_research_config, research_policy
 
     config_path = storage_path(research_config)
@@ -114,6 +163,9 @@ def create_run(
     snapshots[config_relative] = config_bytes
     inputs[config_relative] = {"source_path": str(config_path), "sha256": hashlib.sha256(config_bytes).hexdigest(),
                               "bytes": len(config_bytes)}
+    freeze_factsheet(snapshots, inputs, research,
+                    factsheet_snapshot(l2_run, source) if research_factsheet_access else None,
+                    research_factsheet_access)
     # The public runs_dir argument remains accepted; the selected Layer 2 owns colocation.
     while True:
         run_id = f"L3_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"

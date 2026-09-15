@@ -1,6 +1,6 @@
 # Layer 2 V3 — fixed research-context benchmark
 
-Version 3, 10 September 2026. Manual evaluation only; the existing schema-9 run below supplies baseline observations, not results from the revised prompt.
+Version 4, 15 September 2026. Manual evaluation only; retained schema-9 baselines supply observations, not results from the revised prompts or source-access capability.
 Retains every B01–B12 case from `plain_research_v2:ML/deep_research/layer2/docs/schema7_research_context_benchmark.md`
 at commit `b66a57cbf27989b53ba505f34b32226535b3b614`.
 This is a documentation-only extension, not a V2 code merge, production validator or repair loop.
@@ -176,3 +176,61 @@ separately, without changing or resuming the baseline. Record both prompt hashes
 Check all B01–B15 against combined context, including regressions; report fidelity before token/call differences.
 If material omissions persist, test smaller distribution windows only as a separately authorized next experiment.
 No live comparison, source-verification stage or production quality gate is introduced here.
+
+## run_003 baseline and research verification extension
+
+Latest baseline: `runs/new_fact_sheet/run_003`; its Domain Decider's frozen factsheet has
+the same SHA-256 and 490,449 bytes recorded above. Preserve all B01–B15 and both older
+baselines. This update adds B16–B19; it does not drop failed cases or establish a new score.
+
+Evaluate two boundaries independently: **source → shared metadata plus domain input**,
+then **prepared context and available source checks → final report**. Correct shared
+metadata can avoid repetition but cannot cancel a misleading domain/report statement.
+Score each required meaning, qualification, scope and appropriate responsibility placement
+as retained / partial / absent / distorted, with source and output locations. Do not turn
+an observed sample score into whole-source extraction accuracy.
+
+| Case | run_003 observation to retest |
+| --- | --- |
+| B01 | Lease report section 6 discusses area/parking income implications without the line-948 no-claim/no-rent-adjustment protection; missing from its prepared context. |
+| B02 | The lease domain input retains the specific fire-plan exception, but the report's fire-system allocation omits it. This is a research-output regression, not solely an extraction failure. |
+| B04 | All three separate section amounts are not retained in the final technical report. Preserve lines 286–288 and the Altbau-1/Zwischenbau label ambiguity at line 866; do not infer an aggregate reconciliation. |
+| B15 | Legal report section 3.4 incorrectly calls the two Legal Fact Book statements a direct conflict. Lines 424–425 concern different burdened parcels. The separate official letter at 1341–1344 still requires register/plan verification. |
+| B03/B06/B08 | Retest payment reservation/addendum status, energy periods/scopes and distinct insurance sums; useful existing content must not regress. |
+
+### B16 — Supplied VAT discrepancy versus reviewer calculation
+
+- Source: line 1126; IDs `7cf87e27`, `6163bfce`, `0977dfc6`, `bfb77d1e`, `49e4c32d`, `f6a527f7`, `edcadfbc`, `33feba32`.
+- Required meaning: Chemicon quotes net EUR 702,668.06, “19% VAT” EUR 112,426.89 and gross EUR 815,094.95. These stated amounts must survive preparation. The report must distinguish the supplied quotation from its calculation: 19% of net rounds to EUR 133,506.93, implying EUR 836,174.99 gross, EUR 21,080.04 above stated gross. Net plus stated VAT does match stated gross.
+- Acceptable paraphrase: retain the quotation and explicitly flag inconsistent tax arithmetic with the calculation basis; do not decide which amount is payable.
+- Placement: finance, lease/works allocation, technical tender or insurance/cost analysis where used.
+- Material failure: call all figures reconciled, silently replace the source quote, infer tax treatment or award, or compare gross tender prices as reliable without disclosing the mismatch.
+- Baseline: lease section 4, climate garage section and external-dependencies garage discussion repeat the quoted net/gross without this qualification.
+
+### B17 — Historical rent is not a supported current downside
+
+- Source: lines 371 (older EUR 636,131.07), 610 (EUR 685,207.44 effective 1 January 2012), 1011–1016 (latest increase and reservation/addendum status); B03 remains controlling for the latter.
+- Required meaning: keep effective dates and distinguish historical schedules, insurance bases and latest claimed/payment rent. A 6% yield comparison is an assumed arithmetic illustration, not evidence of current market yield or contractual reversion to old rent.
+- Acceptable paraphrase: attribute dated figures and require current agreement/ledger evidence before quantifying collectability or downside.
+- Placement: financial/lease income and valuation responsibilities.
+- Material failure: describe the old schedule as an established current low case, convert illustrative differences to supported value losses, or infer arrears from payment reservation alone.
+- Baseline: finance core cases, section 2.1 and Risk 1 make these distinctions insufficiently.
+
+### B18 — Assessed charges versus net owner burden
+
+- Source: municipal assessment lines 1304–1319; lease allocation lines 973–975. Preserve the actual assessment period and categories, section 5.2 scope (including section-13 insurance qualification), section 5.3 direct payment/invoicing and section 5.4 proportional allocation.
+- Required meaning: the four 2025 municipal charges total EUR 45,233.64; assessment alone does not establish non-recoverable owner cost. Match each charge to lease recovery, period and actual accounts before deriving owner NOI.
+- Acceptable paraphrase: distinguish gross assessed property charges from verified net landlord expense; show sensitivities only with explicit allocation assumptions.
+- Placement: finance and lease/operating-cost responsibilities.
+- Material failure: label all assessment costs non-recoverable, add potentially overlapping provisions as a verified owner expense, or silently disregard tenant recovery.
+- Baseline: finance core-case table, recurring-cost range and Risk 6.
+
+### B19 — Resolvable citation references
+
+- Source: final lease report's existing footnote definitions 6, 7, 9 and 12, matched to their cited sources. No new external reading is asserted.
+- Required meaning: use the defined citation identifier and place page/section qualifiers outside it; retain the original destination and supported locator.
+- Acceptable example: `[^6] (pp. 1, 6–8)` rather than an undefined `[^6, pp. 1, 6–8]` reference.
+- Placement: all final reports; the four known examples occur in lease sections 2.1, 2.3, 4 and the public-budget discussion.
+- Material failure: undefined references, fabricated destinations/pages or a working link treated as proof of claim support. Citation syntax and factual support are evaluated separately.
+
+Later live comparisons require separate authorization and identical frozen inputs/settings.

@@ -13,7 +13,7 @@ from langchain_core.runnables import RunnableLambda
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from openai import AsyncOpenAI
 
-from ML.deep_research.domain_decider.backend.fs import atomic_write_text, load_json, text_hash, write_json
+from ML.deep_research.domain_decider.backend.fs import atomic_write_text, load_json, sha256, text_hash, write_json
 from ML.deep_research.domain_decider.backend.run_log import log_failure, operational_logger, stop_progress, waiting_progress
 from ..ML.domain_agent import build_agent
 from ..ML.domain_tools import make_tools
@@ -39,6 +39,21 @@ def prepare_domain(run, record, domain, checkpoint_dir):
         frozen["stage_settings"] = record["stage_settings"]
     policy = {k: v for k, v in research.items() if k not in {"jobs", "status", "counts", "elapsed_seconds"}}
     entry = research["jobs"].get(key)
+    if research.get("version", 1) >= 5 and research["factsheet"]["status"] == "available":
+        relative = research["factsheet"]["input_path"]
+        source = local_path(run, relative)
+        expected = record["inputs"][relative]["sha256"]
+        target = local_path(run, (root / "inputs/fact_sheet.md").relative_to(run).as_posix())
+        if sha256(source) != expected:
+            raise ValueError("Frozen factsheet hash mismatch")
+        if target.exists() or entry:
+            if sha256(target) != expected:
+                raise ValueError("Frozen researcher factsheet changed")
+        else:
+            # ponytail: reuse the native protected inputs route, no new retrieval backend.
+            atomic_write_text(target, source.read_bytes().decode("utf-8"))
+            if sha256(target) != expected:
+                raise ValueError("Researcher factsheet copy changed")
     if entry:
         context = (root / "inputs/context.md").read_text(encoding="utf-8")
         if text_hash(context) != entry["input_sha256"]:

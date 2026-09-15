@@ -214,12 +214,13 @@ class DirectCallTests(unittest.TestCase):
         self.assertNotIn("plugin", prompts["metadata"])
         for word in ("baseline responsibilities", "domain_id", "supplied context", "web_search"):
             self.assertIn(word, prompts["design"])
-        for word in ("exceptions", "responsible party", "overlap-only", "multi-domain", "scope"):
+        for word in ("exceptions", "who must or may act", "overlap-only", "multi-domain", "scope"):
             self.assertIn(word, prompts["distribution"])
         for word in ("no quota", "positive research responsibilities", "Stop once", "Search may be unnecessary"):
             self.assertIn(word, prompts["design"])
         for word in ("notice periods", "genuinely identical", "no relevant new content", "domain IDs",
-                     "complete research-relevant meanings", "separate consequences", "cost basis",
+                     "complete research-relevant meanings", "each separate consequence", "cost basis",
+                     "which subject benefits", "who actually bears a cost", "separate section estimates",
                      "comparable subject, party, scope and time", "return no intermediate inventory",
                      "entry-count or word limit", "Shared identity/context need not be repeated",
                      "Rule with two consequences", "Whole versus component estimate"):

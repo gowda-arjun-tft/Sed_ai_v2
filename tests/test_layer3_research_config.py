@@ -37,7 +37,7 @@ class ResearchConfigTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(reads[0].samefile(config))
             relative = "_internal/inputs/research_config.json"
             record = load_json(parent / "run.json")
-            self.assertEqual(record["research"]["version"], 4)
+            self.assertEqual(record["research"]["version"], 5)
             self.assertEqual(record["research"]["maximum_calls"], 8)
             self.assertEqual((parent / relative).read_bytes(), raw)
             self.assertEqual(record["inputs"][relative]["sha256"], hashlib.sha256(raw).hexdigest())

@@ -16,7 +16,7 @@ from uuid import uuid4
 from ML.deep_research.domain_decider.backend.fs import load_json, now_iso, sha256, storage_path, write_json
 from ML.deep_research.domain_decider.backend.settings import REASONING_EFFORTS
 from .document_records import REGISTRY_PATH, UPLOAD_POLICY, enrich, research_usable, source_entries
-from .create_run import local_path, require_current, verify_inputs
+from .create_run import factsheet_snapshot, freeze_factsheet, local_path, require_current, verify_inputs
 from .settings import PROMPTS_DIR, RESEARCH_CONFIG_PATH, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS
 from .source_publication import parse_json, pretty_json
 from ML.deep_research.domain_decider.backend.stage_settings import resolve_stage_settings
@@ -53,7 +53,7 @@ def research_policy(reasoning="max", *, call_limits=None) -> dict:
         raise ValueError("unsupported research reasoning effort")
     if call_limits is None:
         _, call_limits = read_research_config(RESEARCH_CONFIG_PATH)
-    return {"version": 4, "status": "pending", "mode": "full", "reasoning_effort": reasoning,
+    return {"version": 5, "status": "pending", "mode": "full", "reasoning_effort": reasoning,
             "webpage_max_bytes": 52_428_800, "persistent_source_guidance": True,
             "max_concurrency": 1, **call_limits,
             "target_tokens": 300_000, "maximum_tokens": 350_000,
@@ -66,7 +66,7 @@ def research_policy(reasoning="max", *, call_limits=None) -> dict:
 def checkpoint_root(record) -> Path:
     """Require a writable, separately mounted Linux checkpoint volume before paid work."""
     policy = record["research"]
-    if policy.get("version") not in {1, 2, 3, 4}:
+    if policy.get("version") not in {1, 2, 3, 4, 5}:
         raise ValueError("unsupported research capability")
     configured = os.environ.get("SEDAI_RESEARCH_CHECKPOINT_DIR")
     if sys.platform != "linux" or not configured or configured != policy["checkpoint_root"]:
@@ -131,12 +131,15 @@ def eligible_sources(run, record, domain) -> str:
 def create_research_run(prepared_run, runs_dir, *, public_input_confirmed=False,
                         research_reasoning_effort="max", web_search_context_size=None,
                         web_search_verbosity=None, research_instruction=RESEARCH_INSTRUCTION_PATH,
-                        research_config=RESEARCH_CONFIG_PATH, stage_settings=None, destination=None) -> Path:
+                        research_config=RESEARCH_CONFIG_PATH, stage_settings=None, destination=None,
+                        research_factsheet_access=True) -> Path:
     """Create a new linked run; copy prepared evidence without touching the parent or calling APIs."""
     from .document_uploads import run_writer
 
     if not public_input_confirmed:
         raise ValueError("Layer 3 requires public-input confirmation")
+    if type(research_factsheet_access) is not bool:
+        raise ValueError("research_factsheet_access must be a Boolean")
     config_bytes, limits = read_research_config(research_config)
     policy = research_policy(research_reasoning_effort, call_limits=limits)
     selected = resolve_stage_settings(stage_settings, legacy={
@@ -158,8 +161,12 @@ def create_research_run(prepared_run, runs_dir, *, public_input_confirmed=False,
     # Read-only historical parents may never have had a writer-lock file.
     guard = run_writer(parent) if (parent / "_internal/trace/writer.lock").exists() else nullcontext()
     with guard:
-        snapshots = {p: local_path(parent, p).read_bytes() for p in original["inputs"]}
+        snapshots = {p: local_path(parent, p).read_bytes() for p in original["inputs"]
+                     if research_factsheet_access or p != "_internal/inputs/fact_sheet.md"}
         record = copy.deepcopy(original)
+        freeze_factsheet(snapshots, record["inputs"], policy,
+                        factsheet_snapshot(parent, original) if research_factsheet_access else None,
+                        research_factsheet_access)
         for job in original["jobs"].values():
             if not job.get("response_path"):
                 continue

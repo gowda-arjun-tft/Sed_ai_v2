@@ -17,7 +17,7 @@ class StructureTests(unittest.TestCase):
         self.assertEqual(len(cells), 1)
         self.assertEqual(notebook["metadata"]["kernelspec"]["display_name"], "SedAI Docker — Python 3.12")
         source = "".join(cells[0]["source"])
-        for control in ("FACT_SHEET_PATH", "STAGE_SETTINGS", "REASONING_SUMMARIES",
+        for control in ("FACT_SHEETS_DIR", "STAGE_SETTINGS", "REASONING_SUMMARIES",
                         "RESUME_RUN_PATH", "PUBLIC_INPUT_CONFIRMED"):
             self.assertIn(control, source)
         self.assertIn("await run_all(FULL_RUN", source)

@@ -52,18 +52,28 @@ are unchanged. Historical output is not attached to the new cell.
 
 | Input/control | Meaning |
 | --- | --- |
-| `FACT_SHEET_PATH` | Original factsheet |
+| `FACT_SHEETS_DIR` | Folder of top-level Markdown factsheets, processed alphabetically one at a time |
 | `DOMAIN_PLUGIN`, `REQUIREMENTS_PATH` | Industry duties and user objectives |
 | `SOURCE_SUGGESTION_PATH` | Authority, jurisdiction and source preferences |
 | `RESEARCH_INSTRUCTION_PATH` | Editable report objective, including external reassessment |
 | `RESEARCH_CONFIG_PATH` | Per-domain call thresholds: 80/60/70 or three explicit nulls |
 | `STAGE_SETTINGS` | Independent reasoning, verbosity and applicable search context |
 | `REASONING_SUMMARIES` | Request provider-supported summaries; default true |
+| `RESEARCH_FACTSHEET_ACCESS` | Original-source access for researchers; current notebook selection false, new runs only |
 | `PUBLIC_INPUT_CONFIRMED` | Explicit consent; default false |
-| `RESUME_RUN_PATH` | Full numbered run root; blank creates the next run |
+| `RESUME_RUN_PATH` | One full numbered run root; blank creates fresh runs for every selected factsheet |
 | `RETRY_FAILED` | Explicit operational retry during resume; default false |
 
-The notebook supports **full execution or explicit root resume only**. Linked research,
+The notebook supports **sequential folder execution or one explicit root resume**. Set
+`FACT_SHEETS_DIR = Path("inputs/facts")`; the top-level `.md` files are selected once in
+alphabetical order, without recursion. Missing folders/empty selections fail before work.
+Each file completes its Domain Decider and Research Module before the next starts, using
+the same controls and its own existing numbered run group. Ordinary failures/partial results
+do not stop later files; cancellation stops the queue. The final notebook summary lists
+outcomes, report locations and individual resume paths; no batch record is written.
+A blank resume always starts fresh runs for every selected file, even after an interrupted
+batch. Explicit resume ignores the folder and resumes only its selected workflow.
+Linked research,
 standalone phase execution and upload-only remain advanced APIs/CLI actions below.
 Resume ignores current creation controls and uses frozen bytes, settings, counters and
 checkpoint identities. Completed full-run resume makes no model calls. A fresh invocation
@@ -188,6 +198,31 @@ Historical Layer 4 reports remain readable; no execution or replacement synthesi
 
 ## Evidence and observability
 
+New research capability **5** keeps a verified, byte-identical factsheet snapshot when
+available from the selected Domain Decider and access is enabled. Each domain can search/read it through the
+existing read-only `/inputs/fact_sheet.md` route; only an availability notice is in the
+persistent prompt, not the whole source. Native file access remains available after
+compaction and during finalization. The source describes what was supplied, not independently
+verified reality. Access can resolve an uncertain clause but cannot guarantee detection of omissions.
+
+New linked runs prefer their parent's frozen source, otherwise only its recorded Domain
+Decider snapshot. Missing historical source locations are disclosed; missing/corrupt bytes
+with a recorded hash are errors. The current editable input is never substituted. Existing
+capability 1–4 resumes retain their frozen behavior, prompts and checkpoints.
+
+Set `RESEARCH_FACTSHEET_ACCESS = False` to disable original-source access for new researchers.
+The full-workflow and both research creation APIs accept `research_factsheet_access=True`.
+The Boolean is frozen at creation; explicit resume ignores the current notebook toggle and
+shows the saved availability (`available`, `unavailable` or `disabled`). Disabled runs do not
+copy/project the original into researcher inputs, including linked runs. Domain Decider still
+uses the factsheet; derived facts and prior evidence are not redacted. No new tool or repair stage.
+
+The distribution prompt preserves relationship direction and scoped estimates. Generic research
+instructions require source, arithmetic and citation checks; risk-specific protections,
+financial assumptions and allocation checks remain in `inputs/user_research_instruction.md`.
+The [fixed benchmark](ML/deep_research/domain_decider/docs/research_context_benchmark.md) scores
+preparation and final-report fidelity separately.
+
 The real-estate plugin expands asset-specific external duties without requiring communication
 between isolated agents. The editable research instruction asks for preliminary findings,
 external drivers, exposure, safeguards/counterevidence and refined consequences/actions within
@@ -198,7 +233,7 @@ compaction. Exact source URLs must be opened; snippets/index listings are not re
 proof. Per-response `access_audit.json` compares entries to available explicit opens without
 changing claims, completion status or retry behavior.
 
-New capability-v4 research fetches webpages with a 50 MiB (52,428,800 byte) bound on headers
+Capability-v4 and later research fetches webpages with a 50 MiB (52,428,800 byte) bound on headers
 and actual bytes. Upload and file-input limits remain separate. Unicode components are encoded
 without guessing paths. Failed reads return operational distinctions; the agent can search
 for the exact title/publisher and open an authoritative alternative. No bypass or crawler exists.

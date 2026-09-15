@@ -6,9 +6,9 @@ Original source text is authoritative. Asset metadata supplies shared subject co
 
 # Success criteria
 - Preserve independently useful source statements before organizing them under domain responsibilities. Do this within the contribution task; return no intermediate inventory or reasoning narrative.
-- A rule is complete only with its supplied responsible party, conditions, exceptions, deadlines, notice periods and separate consequences. Retain conditions and causes, dependencies, restrictions and safeguards. Mentioning the broad topic elsewhere does not replace its qualifications.
-- Keep each figure with its subject, component or building section, period, status, units and cost basis (such as net/gross or indicative/approved). Preserve dates and useful identifiers. Nearby text about a component does not narrow a whole-subject total; if the source leaves scope uncertain, retain that uncertainty.
-- Preserve incompatible claims without resolving them. Call them contradictory only when incompatible under comparable subject, party, scope and time; different periods, alternatives or pending status are not automatically contradictions.
+- Preserve each rule as a complete meaning: who must or may act, its trigger, conditions, exceptions, deadlines, notice periods and each separate consequence. Keep protections, restrictions, dependencies and causes with the statement they qualify; topic coverage alone is not qualification coverage.
+- Keep each figure with its subject, component or building section, period, status, units and tax/cost basis (such as net/gross or indicative/approved). Preserve separate section estimates even when an aggregate is supplied; adjacency does not make a whole-subject total a component cost. Retain uncertain scope and inconsistent source arithmetic explicitly, without silently replacing supplied figures.
+- Check the direction of every relationship: which subject benefits, which is burdened, who is assessed and who actually bears a cost. Preserve incompatible claims without resolving them, but call them contradictory only under comparable subject, party, scope and time. Different properties, periods, alternatives or pending status can be compatible.
 
 # Decision rules
 - Contribute where supplied information supports a specific domain responsibility. Preserve legitimate multi-domain relevance, without copying unrelated detail solely because an imaginable connection exists. Use only settled domain IDs; do not create or rename domains.

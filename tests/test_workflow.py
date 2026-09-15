@@ -33,7 +33,8 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory)
             args = self.inputs(root)
             with patch.object(workflow, "checkpoint_root"), patch.object(workflow, "load_dotenv_key"), patch.dict(
-                "os.environ", {"OPENAI_API_KEY": "offline"}), patch("socket.socket.connect", side_effect=AssertionError("network")):
+                "os.environ", {"OPENAI_API_KEY": "offline"}), patch("httpx.Client.send", side_effect=AssertionError("network")), patch(
+                "httpx.AsyncClient.send", side_effect=AssertionError("network")):
                 run = workflow.create_run(root / "fact.md", **args)
                 (root / "source.md").write_text("CHANGED AFTER FREEZE")
                 fake = FakeStages()
@@ -43,6 +44,8 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
                     saved = load_json(path / "run.json")
                     self.assertEqual(Path(saved["source_l2"]["path"]), run / "domain_decider")
                     self.assertEqual((path / "_internal/inputs/source_suggestion.md").read_text(), "Use municipal sources.")
+                    self.assertEqual((path / "_internal/inputs/fact_sheet.md").read_bytes(),
+                                     (run / "domain_decider/_internal/inputs/fact_sheet.md").read_bytes())
                     saved.update(status="complete", discovery_status="complete")
                     saved["research"]["status"] = "complete"
                     write_json(path / "run.json", saved)
@@ -68,7 +71,7 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             args = self.inputs(root)
             with patch.object(workflow, "checkpoint_root"), patch.object(workflow, "load_dotenv_key"), patch.dict(
                 "os.environ", {"OPENAI_API_KEY": "offline"}):
-                run = workflow.create_run(root / "fact.md", **args)
+                run = workflow.create_run(root / "fact.md", research_factsheet_access=False, **args)
                 def fail(path):
                     """Persist an ordinary partial domain outcome."""
                     value = load_json(path / "run.json")
@@ -88,6 +91,12 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
                     await workflow.run_all(run)
                     research.assert_awaited_once()
                 self.assertEqual((run / "domain_decider/run.json").read_bytes(), domain_bytes)
+                saved = load_json(run / "research_module/run.json")
+                self.assertFalse(load_json(run / "run.json")["research_factsheet_access"])
+                self.assertEqual(saved["research"]["factsheet"]["status"], "disabled")
+                self.assertNotIn("_internal/inputs/fact_sheet.md", saved["inputs"])
+                self.assertFalse((run / "research_module/_internal/inputs/fact_sheet.md").exists())
+                self.assertTrue((run / "domain_decider/_internal/inputs/fact_sheet.md").exists())
 
     def test_counter_concurrency_identity_changes_and_abandoned_reservations(self):
         """Same path keeps its group, identical names at different paths are disambiguated."""
@@ -144,6 +153,8 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory)
             args = self.inputs(root)
             with patch.object(workflow, "load_dotenv_key"), patch.dict("os.environ", {"OPENAI_API_KEY": "offline"}):
+                with self.assertRaisesRegex(ValueError, "Boolean"):
+                    workflow.create_run(root / "fact.md", research_factsheet_access="False", **args)
                 with self.assertRaises(ValueError):
                     workflow.create_run(root / "fact.md", **(args | {"public_input_confirmed": False}))
                 write_json(root / "config.json", {"maximum_calls": True})

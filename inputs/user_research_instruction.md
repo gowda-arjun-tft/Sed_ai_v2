@@ -42,6 +42,14 @@ exceptions and measurement scope. Check numerical reconciliations before claimin
 figures agree. Distinguish supplied facts, external findings, attributed claims and
 assumptions; explain unresolved differences without inventing a resolution.
 
+Before assigning a risk consequence, check contractual protections, exceptions and
+responsibility allocation in the supplied agreement. An assessed property charge does
+not establish the owner's net burden: distinguish payment, recovery from another party
+and unresolved allocation. Support financial scenarios with explicit assumptions and
+current evidence; historical rent alone does not establish a current contractual downside.
+Label an illustrative sensitivity as such, not a forecast or established loss. Keep
+net/gross amounts and different estimation scopes separate when drawing conclusions.
+
 Identify unanswered questions and access limitations as evidence gaps. A missing record
 alone does not establish a physical defect or a high risk. State what remains unknown
 and what evidence would clarify it, without treating that uncertainty as a proven defect.

@@ -7,7 +7,10 @@ Current package names are `domain_decider` (formerly Layer 2) and `research_modu
 schema 9, L2_/L3_ prefixes, metadata keys, checkpoint threads and CLI flags unchanged.
 No old-package forwarding wrappers are supported. One notebook cell preflights full execution
 or explicit workflow-root resume, completes domain preparation and passes that exact run to research.
-Blank resume creates a numbered full run. Advanced module/linked/upload actions remain in APIs/CLI.
+Blank resume processes top-level Markdown files from FACT_SHEETS_DIR alphabetically, one full
+workflow at a time; each gets its own numbered run. Ordinary failures continue, cancellation stops.
+Explicit resume selects one run and ignores the folder; no automatic batch recovery/registry.
+Advanced module/linked/upload actions remain in APIs/CLI.
 Resume uses frozen settings and never repeats completed domain preparation. Preserve the harness.
 Current guides are README.md, ML/deep_research/docs/Research_Architecture_Overview.md
 and docker/development.md. Do not recreate module READMEs; preserve generated run READMEs.
@@ -20,7 +23,7 @@ See `README.md` for the workflow. Industry definitions belong in the selected pl
 not generic prompts or Python. `inputs/requirement.md` holds user objectives and the explicitly broadened research scope; review its confidential origin before public-input confirmation.
 Operational events go to each run's `run.log`. `ML/deep_research/research_module/` finds and tests sources
 for each actual Layer 2 domain, uploads unique documents and runs persistent domain researchers,
-sequentially for new version-4 runs, producing independent Markdown reports without synthesis. The supported workflow ends at Layer 3. Prompts sit below each layer; design notes are in
+sequentially for version-4 and later runs, producing independent Markdown reports without synthesis. The supported workflow ends at Layer 3. Prompts sit below each layer; design notes are in
 `ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
 Group new full workflows as `runs/<factsheet-name>/run_001/`, with `domain_decider/` and
@@ -202,7 +205,7 @@ failures do not make otherwise-complete source discovery partial; expose nested 
 Keep ambiguity/failures in the registry with a README link. Atomic publication/history applies to
 enrichment too; rebuilding must not erase upload mappings or reuse unprocessed source versions.
 
-Layer 3 research capability version 4 extends new full runs after preparation. Linked research-only
+Layer 3 research capability version 5 extends new full runs after preparation. Linked research-only
 runs copy/hash settled complete or partial preparation; never resume/rewrite the parent. Domains
 without usable sources remain scheduled. Explicit resume reuses final receipts or the same domain
 checkpoint thread. Freeze research reasoning (default max), search controls and input policy.
@@ -302,6 +305,21 @@ archive hash and next dispatch context. Preserve the native algorithm/thresholds
 Operational logs stay payload-free; private traces require research-data access protection and
 must not expose credentials. Record only observed provider action order/timing. Todo completion is
 not verified coverage. Keep existing cancellable heartbeats; never simulate provider thinking.
+
+## Original factsheet access (fresh research capability 5)
+
+New research runs freeze the Boolean research_factsheet_access (default True). When False,
+record disabled access and omit the original researcher snapshot/projection, including linked runs.
+Notebook RESEARCH_FACTSHEET_ACCESS applies only to new runs; resume uses frozen policy.
+When enabled and available, freeze verified original bytes/hash with the input manifest.
+Project a byte-identical copy through the existing read-only `/inputs/fact_sheet.md`
+route per domain, reusing native grep/read_file. Do not send the full source in every model
+request or add retrieval middleware. Persistent context contains availability/path only; ordinary
+memory compaction, finalization and checkpoint behavior remain unchanged. Linked runs prefer the
+parent snapshot, otherwise only its explicitly recorded Domain Decider snapshot. Unavailable
+historical locations are disclosed; missing recorded files or hash corruption are operational
+failures. Never substitute editable inputs or silently upgrade capability 1–4 resumes.
+Report purpose stays in user instructions; numerical/source/citation checks are prompt-owned.
 
 ## Commits and Pull Requests
 

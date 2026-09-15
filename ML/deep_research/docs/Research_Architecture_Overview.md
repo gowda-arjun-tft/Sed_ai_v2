@@ -121,9 +121,36 @@ values override legacy arguments. CLI `--stage-settings` and PowerShell `-StageS
 and reject mixed legacy generation flags or overrides on resume/check/upload-only. Legacy API
 defaults remain when not explicitly overridden.
 
-Research capability 4 freezes these options, persistent source guidance and the 50 MiB webpage
-allowance. Versions 1–3 retain their original frozen behavior. Domain schema 9 freezes a separate
-versioned stage-settings policy; no historical response or policy is rewritten.
+Research capability 4 introduced these options, persistent source guidance and the 50 MiB webpage
+allowance. New capability 5 additionally freezes optional original-factsheet access. Versions 1–4
+retain their original frozen behavior. Domain schema 9 freezes a separate versioned stage-settings
+policy; no historical response or policy is rewritten.
+
+### Optional original-source checks (capability 5)
+
+The notebook's `RESEARCH_FACTSHEET_ACCESS` (default True) is frozen at creation and passed
+through the phase handoff. False records disabled access and omits the original snapshot and
+native-file projection, including linked runs. Resume ignores current notebook controls;
+derived inputs and prior evidence remain available. Domain Decider still uses the factsheet.
+When enabled, run creation copies verified Domain Decider factsheet bytes into the existing research input
+manifest. Linked creation prefers the parent's own frozen copy; only its recorded Domain Decider
+location may supply a missing copy. An unavailable historical location is disclosed without
+guessing another file. A missing recorded file, invalid manifest or hash mismatch is an operational
+error before run creation. Live editable inputs never replace frozen evidence.
+
+Each domain receives a byte-identical read-only projection at `/inputs/fact_sheet.md`, alongside
+its existing protected inputs. Native `grep` and paginated `read_file` retrieve relevant passages;
+there is no new tool, backend, index or automatic reread. Persistent system context carries only
+availability/path, surviving compaction; finalization already permits saved-file reads. Source
+hashes participate in existing fingerprints and projection verification protects resume. Existing
+call accounting, native file permissions, memory thresholds and checkpoint threads are unchanged.
+
+Original evidence is authoritative for what was supplied, not proof that every assertion is true.
+Prompt-directed verification checks conditions, scope, relationship direction, calculations and
+citations. Risk-specific consequences, safeguards and financial assumptions remain user-owned
+instructions. There is no model-output grader or additional review stage. Benchmark cases separate
+source-to-prepared-context retention from final-report interpretation. Optional source access
+cannot guarantee that the agent notices an omitted fact.
 
 ## 1. Purpose and current scope
 
@@ -133,7 +160,7 @@ Research Module converts the dynamic research domains produced by Domain Decider
 | --- | --- |
 | Branch | `layer3-v1` |
 | Operational schema | Research Module schema 9 |
-| Research capability | Version 4 for new runs; earlier policies remain frozen |
+| Research capability | Version 5 for new runs; earlier policies remain frozen |
 | Domain count | Dynamic; inherited from Domain Decider |
 | Model | `gpt-5.6-luna` |
 | Final output | One Markdown research report per domain |
@@ -309,7 +336,7 @@ A domain with zero eligible prepared sources is still scheduled. Its researcher 
 
 ## 7. Stage 4 — persistent domain research
 
-Research Module creates one Deep Agents 0.7.7 graph per domain. New capability-version-4 runs execute domains sequentially so one domain is completed or safely retained before the next begins.
+Research Module creates one Deep Agents 0.7.7 graph per domain. Capability-version-4 and later runs execute domains sequentially so one domain is completed or safely retained before the next begins.
 
 Each researcher receives:
 

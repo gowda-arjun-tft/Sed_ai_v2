@@ -28,7 +28,7 @@ requirements set priorities and the user-approved broader research scope. Python
 Public entrypoints remain create_run and run_all, with explicit public-input confirmation for new runs.
 
 Layer 3 schema 9 runs one native source finder per actual Layer 2 domain, with five concurrent jobs,
-then uploads unique source documents. New runs freeze research capability version 4 and continue into
+then uploads unique source documents. New runs freeze research capability version 5 and continue into
 one persistent Deep Agents 0.7.7 graph per domain sequentially, with no synthesizer. It accepts
 completed schema-9 metadata/domain Markdown and editable source suggestions. Uploading remains ordinary
 Python; document analysis is an explicit tool-free file-input request inside the researcher's tool loop.
@@ -49,6 +49,21 @@ Railway Track stores durable authorized-work history. Claude guidance lives in C
 dated CLAUDE_HANDOVER.md; personal skills are not bundled into Docker.
 
 ## Data and Storage
+
+The notebook selects top-level Markdown files from FACT_SHEETS_DIR once and awaits each full
+workflow sequentially. Each file retains its own numbered run, settings and checkpoints;
+ordinary failures continue, manual cancellation stops. Explicit resume selects one run,
+not the batch. The summary is notebook output only; no batch registry or scheduler was added.
+
+Capability 5 freezes research_factsheet_access from the notebook/API (default True); False
+omits the original from researcher inputs and records disabled access. Resume uses saved policy.
+When enabled, it snapshots the verified original factsheet when available, using the existing input
+manifest and read-only per-domain `/inputs/fact_sheet.md` projection. Native grep/read_file provide
+on-demand passage checks; only availability is added to persistent context. Linked runs prefer the
+parent snapshot, otherwise only its recorded Domain Decider source. Unavailable historical paths
+are disclosed; corrupted recorded snapshots fail before creation. Existing versions 1–4 do not gain
+this access on resume. There is no new retrieval service, tool, memory layer or content-repair gate.
+See the current architecture guide for preservation, benchmark and verification boundaries.
 
 Runs freeze original input bytes, three prompt snapshots/hashes, source ranges, model/input/search
 policies and consent. Visible views are README.md, asset_metadata.md, domain_plan.md, domains/*.md,

@@ -132,6 +132,12 @@ def publish(run: Path) -> dict:
                          f"{len(reports)}/{len(record['domains'])} reports completed. No final synthesizer.\n\n"
                          + "\n".join(reports) + ("\n\nExecution/empty-response observations:\n\n" + "\n".join(gaps) if gaps else "")
                          + "\n\nCompletion records execution, not independently verified research coverage. ")
+        if research.get("version", 1) >= 5:
+            research_text += ("\n\nOriginal factsheet: read-only source checks available through native file tools. "
+                              if research["factsheet"]["status"] == "available" else
+                              "\n\nOriginal factsheet access disabled by the saved setting. "
+                              if research["factsheet"]["status"] == "disabled" else
+                              "\n\nOriginal factsheet unavailable; source checks are limited to retained evidence. ")
         if research.get("version", 1) >= 2:
             usage = [f"- {key}: {j['budget']['used']}/{research['maximum_calls']} calls used; "
                      f"{j['budget']['remaining']} remaining; {j['budget']['phase']}."

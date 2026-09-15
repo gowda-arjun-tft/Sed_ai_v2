@@ -21,10 +21,12 @@ from .domain_decider.backend.tracing import TRACE_ROOT, event
 def create_run(fact_sheet, *, domain_plugin=DOMAIN_PLUGIN_PATH, requirements=REPO_ROOT / "inputs/requirement.md",
                source_suggestion=SOURCE_SUGGESTION_PATH, research_instruction=RESEARCH_INSTRUCTION_PATH,
                research_config=RESEARCH_CONFIG_PATH, stage_settings=None, public_input_confirmed=False,
-               runs_dir=RUNS_DIR):
+               runs_dir=RUNS_DIR, research_factsheet_access=True):
     """Preflight and freeze the full workflow without making any provider requests."""
     if public_input_confirmed is not True:
         raise ValueError("Full research requires public-input confirmation")
+    if type(research_factsheet_access) is not bool:
+        raise ValueError("research_factsheet_access must be a Boolean")
     load_dotenv_key()
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY is required")
@@ -44,6 +46,7 @@ def create_run(fact_sheet, *, domain_plugin=DOMAIN_PLUGIN_PATH, requirements=REP
     record = {"workflow_version": 1, "schema_version": 9, "status": "created", "number": number,
               "source_identity": identity, "started_at": now_iso(), "public_input_confirmed": True,
               "stage_settings": resolved, "checkpoint_root": policy["checkpoint_root"],
+              "research_factsheet_access": research_factsheet_access,
               "inputs": save_inputs(root, snapshots),
               "phases": {"domain_decider": "domain_decider", "research_module": "research_module"}}
     write_json(root / "run.json", record)
@@ -66,7 +69,8 @@ def _phase(root, record, name):
             research_module.create_run(child_path(root, record["phases"]["domain_decider"]), root.parent,
                 source_suggestion=inputs / "source_suggestion.md",
                 research_instruction=inputs / "user_research_instruction.md", research_config=inputs / "research_config.json",
-                prompt_directory=inputs / "research_prompts", **common)
+                prompt_directory=inputs / "research_prompts",
+                research_factsheet_access=record.get("research_factsheet_access", True), **common)
     child = load_json(path / "run.json")
     if name == "research_module" and Path(child["source_l2"]["path"]).resolve() != child_path(root, record["phases"]["domain_decider"]):
         raise ValueError("Research phase does not belong to the selected domain preparation")

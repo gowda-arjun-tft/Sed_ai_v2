@@ -35,6 +35,18 @@ def build_agent(run, record, root, entry, tools, saver, logger, budget=None, cli
     if record["research"].get("persistent_source_guidance"):
         prompt += "\n\n# Selected source guidance\n\n" + (
             run / "_internal/inputs/source_suggestion.md").read_text(encoding="utf-8-sig")
+    if record["research"].get("version", 1) >= 5:
+        access = record["research"]["factsheet"]["status"]
+        prompt += "\n\n# Original supplied factsheet access\n\n" + (
+            "The frozen original is available read-only at /inputs/fact_sheet.md. "
+            "Use native grep and paginated read_file for relevant passages when needed; "
+            "it is not loaded into every request."
+            if access == "available" else
+            "Original factsheet access is disabled for this run. Use the prepared evidence; "
+            "do not attempt to open the original factsheet."
+            if access == "disabled" else
+            "The original factsheet is unavailable in this run. Do not infer its contents; "
+            "disclose material checks that the prepared evidence cannot support.")
     middleware = [files, TodoListMiddleware(),
                   ResearchSummarization(summary_model, backend, record,
                                         (prompt_root / "research_summary.md").read_text(encoding="utf-8"),

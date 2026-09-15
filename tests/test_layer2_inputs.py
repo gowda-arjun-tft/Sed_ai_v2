@@ -135,7 +135,7 @@ class InputTests(unittest.TestCase):
             new = new_run(root)
             snapshot = new / "_internal/inputs/prompts/distribution.md"
             self.assertEqual(snapshot.read_bytes(), (PROMPTS_DIR / PROMPT_FILES["distribution"]).read_bytes())
-            self.assertIn("separate consequences", snapshot.read_text())
+            self.assertIn("each separate consequence", snapshot.read_text())
             record = load_json(new / "run.json")
             self.assertEqual(sha256(snapshot), record["inputs"]["prompts/distribution.md"]["sha256"])
             for stage in ("metadata", "design"):
