@@ -12,6 +12,7 @@ from ..ML.context import InputSizeError, estimate, messages, request_options
 from .fs import atomic_write_text, load_json, now_iso, text_hash, write_json
 from .run_log import DispatchLog, diagnostic_identifier, log_failure, stop_progress, waiting_progress
 from .usage import UsageCallback
+from .tracing import event, private_json
 
 
 class IncompleteResponseError(RuntimeError):
@@ -79,6 +80,7 @@ async def run_jobs(run: Path, model, stage: str, sections: list[dict], previous:
             entry.update(status="complete", error_type="", response_sha256=text_hash(text), reused=True)
             results[index] = path
             logger.info("job_reused stage=%s job=%s attempt=%d", stage, key, entry["attempt"])
+            event(run / "_internal/trace", "job_reused", stage=stage, job=key, reference=entry["response_path"])
             continue
         attempt = entry["attempt"] + 1
         folder = run / "_internal/trace/responses" / key / fingerprint
@@ -110,6 +112,11 @@ async def run_jobs(run: Path, model, stage: str, sections: list[dict], previous:
                   "callbacks": [UsageCallback(run / "_internal/trace", entry["request_id"]),
                                 DispatchLog(logger, stage, key, scheduled, starts)]}
         entry["callback_run_id"] = str(config["run_id"])
+        if record.get("stage_settings"):
+            private_json((run / relative).with_name("request.json"), {"messages": request, "options": options})
+            event((run / relative).parent, "job_scheduled", stage=stage, job=key,
+                  request_id=entry["request_id"], model_request=entry["callback_run_id"],
+                  input_reference="request.json", estimated_tokens=count)
         inputs.append(request)
         configs.append(config)
         pending.append((index, key, scheduled))
@@ -152,9 +159,14 @@ async def run_jobs(run: Path, model, stage: str, sections: list[dict], previous:
                 write_json(path.with_name("completion.json"), entry)
                 atomic_write_text(path, result.text)
                 logger.info("response_saved stage=%s job=%s path=%s", stage, key, entry["response_path"])
-                if stage == "design":
+                if stage == "design" or record.get("stage_settings"):
                     # One native web trace per designer response; other stages need no duplicate body.
                     write_json(path.with_name("provider_message.json"), result.model_dump(mode="json"))
+                    from .tracing import reasoning_summaries
+                    reasoning_summaries(path.with_name("reasoning_summary.json"), result.model_dump(mode="json"))
+                    event(path.parent, "domain_response_saved", stage=stage, job=key,
+                          request_id=entry["request_id"], model_request=entry["callback_run_id"],
+                          response_id=result.id, reference="provider_message.json", usage=result.usage_metadata)
                 if incomplete:
                     raise IncompleteResponseError("provider reported incomplete output")
                 results[index] = path

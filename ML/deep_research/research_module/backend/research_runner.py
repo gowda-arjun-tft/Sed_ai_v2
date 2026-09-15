@@ -24,6 +24,8 @@ from .research_run import checkpoint_path, eligible_sources
 from .research_budget import BudgetExhausted, CallBudget
 from .research_handoff import seed_prior_work
 from .source_publication import _view, parse_json, publish
+from .checkpoint_trace import TracedSqliteSaver
+from ML.deep_research.domain_decider.backend.tracing import TRACE_CONTEXT, event
 
 
 def prepare_domain(run, record, domain, checkpoint_dir):
@@ -33,6 +35,8 @@ def prepare_domain(run, record, domain, checkpoint_dir):
     identifier = text_hash(key)[:24]
     root = run / "_internal/trace/research" / identifier
     frozen = {key: record[key] for key in ("model", "web_search", "reasoning_effort", "timeout_seconds", "provider_max_retries", "inputs")}
+    if record.get("stage_settings"):
+        frozen["stage_settings"] = record["stage_settings"]
     policy = {k: v for k, v in research.items() if k not in {"jobs", "status", "counts", "elapsed_seconds"}}
     entry = research["jobs"].get(key)
     if entry:
@@ -79,6 +83,8 @@ def reuse_final(run, root, entry):
     if saved["fingerprint"] != entry["fingerprint"] or saved["sha256"] != text_hash(raw):
         raise ValueError("Research response or dependency fingerprint changed")
     _view(run, entry["output_path"], raw)
+    event(root / "trace", "research_publication_saved", thread=entry["thread_id"],
+          reference=entry["output_path"], sha256=saved["sha256"])
     entry.update(status="complete", reused=True, response_sha256=saved["sha256"], empty_response=not bool(raw.strip()))
     return True
 
@@ -87,6 +93,7 @@ async def _domain(run, record, domain, checkpoint_dir, documents, logger, retry_
     """Own one checkpoint connection and publish one domain without gating successful siblings."""
     key, began = domain["key"], time.perf_counter()
     budget = None
+    trace_token = TRACE_CONTEXT.set({"domain": key, "run_id": record["run_id"]})
     entry = record["research"]["jobs"].setdefault(key, {"status": "pending"})
     # Remove a new placeholder; prepare_domain atomically fills its actual identities.
     if "root" not in entry:
@@ -114,7 +121,10 @@ async def _domain(run, record, domain, checkpoint_dir, documents, logger, retry_
         starts[key] = time.perf_counter()
         write_json(run / "run.json", record)
         logger.info("research_started domain=%s thread=%s attempt=%d", key, entry["thread_id"], entry["attempt"])
-        async with AsyncSqliteSaver.from_conn_string(str(checkpoint)) as saver:
+        saver_class = TracedSqliteSaver if record["research"]["version"] >= 4 else AsyncSqliteSaver
+        async with saver_class.from_conn_string(str(checkpoint)) as saver:
+            if isinstance(saver, TracedSqliteSaver):
+                saver.trace_root = root / "trace"
             await saver.setup()
             graph, files, model = build_agent(run, record, root, entry,
                                               make_tools(root, record, key, documents, budget), saver, logger, budget, clients)
@@ -122,6 +132,8 @@ async def _domain(run, record, domain, checkpoint_dir, documents, logger, retry_
                       "callbacks": [trace], "metadata": {"lc_agent_name": key}, "max_concurrency": 5}
             try:
                 snapshot = await graph.aget_state(config)
+                event(root / "trace", "checkpoint_loaded", thread=entry["thread_id"],
+                      config=snapshot.config, present=bool(snapshot.values), pending_nodes=list(snapshot.next))
                 logger.info("checkpoint_loaded domain=%s thread=%s present=%s pending_nodes=%d",
                             key, entry["thread_id"], bool(snapshot.values), len(snapshot.next))
                 if entry["checkpoint_started"] and not snapshot.values:
@@ -163,6 +175,7 @@ async def _domain(run, record, domain, checkpoint_dir, documents, logger, retry_
         publish(run)
         logger.info("research_finished domain=%s status=%s elapsed_seconds=%.3f observed_calls=%s",
                     key, entry["status"], entry["elapsed_seconds"], entry.get("observed_calls", {}))
+        TRACE_CONTEXT.reset(trace_token)
 
 
 async def run_domains(run, checkpoint_dir, *, retry_failed=False):

@@ -11,6 +11,7 @@ from ..backend.document_files import failure, verify_existing
 from ..backend.document_records import REGISTRY_PATH, UPLOAD_POLICY, candidate
 from ..backend.document_uploads import _process
 from .research_memory import check_input
+from ML.deep_research.domain_decider.backend.tracing import event, reasoning_summaries
 
 
 class DocumentLimitation(ValueError):
@@ -22,9 +23,12 @@ def save_provider(root, response, *, phase):
     root.mkdir(parents=True, exist_ok=True)
     payload = response.model_dump(mode="json")
     write_json(root / "provider_message.json", payload)
+    reasoning_summaries(root / "reasoning_summary.json", payload)
     atomic_write_text(root / "response.md", response.output_text)
     write_json(root / "usage.json", {"phase": phase, "response_id": response.id,
                                      "usage": payload.get("usage"), "timestamp": now_iso()})
+    event(root, "supporting_model_returned", stage=phase, provider_id=response.id,
+          usage=payload.get("usage"), reference="provider_message.json")
     if payload.get("status") not in {None, "completed"}:
         raise RuntimeError("Provider did not complete the tool request; response retained")
 
@@ -37,6 +41,7 @@ def recovered_provider(root, *, phase):
     payload = load_json(path)
     if payload.get("status") != "completed":
         return None
+    event(root, "supporting_model_reused", stage=phase, provider_id=payload.get("id"), reference="provider_message.json")
     response = Response.model_construct(**payload)  # Match the SDK's permissive transport decoding.
     text = response.output_text
     target = root / "response.md"
@@ -138,8 +143,11 @@ class ResearchDocuments:
         prompt = (self.run / "_internal/inputs/prompts/read_document.md").read_text(encoding="utf-8")
         options = {"model": self.record["model"], "reasoning": {"effort": self.record["research"]["reasoning_effort"]},
                    "store": False, "text": {"verbosity": self.record["web_search"]["verbosity"]}}
+        from ML.deep_research.domain_decider.backend.stage_settings import generation_options
+        options.update(generation_options(self.record, "document"))
         cache_id = text_hash(json.dumps([digest, questions, prompt, options], sort_keys=True))
         cache = evidence / "documents" / cache_id
+        reused = (cache / "complete.json").exists()
         # Cache stays domain-private; receipts/uploads are shared across domains.
         if not (cache / "complete.json").exists():
             content = [{"type": "input_text", "text": questions}, {"type": "input_file", "file_id": file_id}]
@@ -155,13 +163,15 @@ class ResearchDocuments:
 
             async def invoke(instructions):
                 """Send the verified file as an actual provider file input."""
-                return await self.client.responses.create(instructions=instructions, input=request, **options)
+                event(cache, "supporting_model_started", stage="document_read", reference="request.json")
+                response = await self.client.responses.create(instructions=instructions, input=request, **options)
+                save_provider(cache, response, phase="document_read")
+                return response
 
             response = recovered_provider(cache, phase="document_read")
             if response is None:
                 response = (await budget.call("document", prepare, invoke) if budget
                             else await invoke(prepare("", False)))
-                save_provider(cache, response, phase="document_read")
             write_json(cache / "complete.json", {"sha256": text_hash(response.output_text),
                                                 "file_id": file_id, "content_sha256": digest, "urls": urls})
             self.logger.info("document_read_completed domain=%s content_id=%s response_id=%s",
@@ -169,4 +179,5 @@ class ResearchDocuments:
         text = (cache / "response.md").read_text(encoding="utf-8")
         if text_hash(text) != load_json(cache / "complete.json")["sha256"]:
             raise OSError("Saved document answer changed")
+        event(cache, "document_answer_read", reused=reused, reference="response.md", content_sha256=digest)
         return f"Document: {file_id}\nSources: {json.dumps(urls)}\nSaved: /evidence/documents/{cache_id}/response.md\n\n{text}"

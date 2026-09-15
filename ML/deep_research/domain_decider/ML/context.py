@@ -5,6 +5,7 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..backend.windows import token_count
+from ..backend.stage_settings import generation_options, search_context
 
 
 class InputSizeError(ValueError):
@@ -19,16 +20,14 @@ def messages(prompt: str, sections: dict[str, str]) -> list:
 
 def request_options(stage: str, record: dict) -> dict:
     """Input a stage and frozen policy; return native options shared by dispatch and accounting."""
-    if stage == "metadata":
-        return {}
-    options = {}
+    options = generation_options(record, stage)
     if stage == "distribution":
         options["response_format"] = {"type": "json_object"}
     if stage == "design":
-        options.update(tools=[{"type": "web_search", "search_context_size": record["web_search"]["context_size"]}],
+        options.update(tools=[{"type": "web_search", "search_context_size": search_context(record, stage)}],
                        tool_choice=record["web_search"]["tool_choice"],
                        include=["web_search_call.action.sources"])
-        if "verbosity" in record["web_search"]:
+        if not record.get("stage_settings") and "verbosity" in record["web_search"]:
             options["text"] = {"verbosity": record["web_search"]["verbosity"]}
     return options
 

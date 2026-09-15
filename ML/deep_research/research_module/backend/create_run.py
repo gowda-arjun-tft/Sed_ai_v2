@@ -17,6 +17,7 @@ from .settings import (
     SOURCE_SUGGESTION_PATH, RESEARCH_CONFIG_PATH, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS,
 )
 from .document_records import UPLOAD_POLICY
+from ML.deep_research.domain_decider.backend.stage_settings import resolve_stage_settings
 
 
 def local_path(run: Path, relative: str) -> Path:
@@ -60,6 +61,8 @@ def create_run(
     research_reasoning_effort: str = "max",
     research_instruction: Path = RESEARCH_INSTRUCTION_PATH,
     research_config: Path = RESEARCH_CONFIG_PATH,
+    stage_settings: dict | None = None, destination: Path | None = None,
+    prompt_directory: Path | None = None,
 ) -> Path:
     """Create beside completed schema-9 Layer 2; read all inputs before creating a directory."""
     if not public_input_confirmed:
@@ -69,6 +72,11 @@ def create_run(
     config_path = storage_path(research_config)
     config_bytes, limits = read_research_config(config_path)
     research = research_policy(research_reasoning_effort, call_limits=limits)
+    resolved = resolve_stage_settings(stage_settings, legacy={
+        "source_discovery": {"reasoning": reasoning_effort, "search_context": web_search_context_size,
+                             "verbosity": web_search_verbosity},
+        "research": {"reasoning": research_reasoning_effort},
+    })
     if reasoning_effort not in REASONING_EFFORTS:
         raise ValueError("unsupported reasoning effort")
     if web_search_context_size not in WEB_SEARCH_LEVELS or web_search_verbosity not in WEB_SEARCH_LEVELS:
@@ -88,8 +96,8 @@ def create_run(
     paths = {"_internal/inputs/asset_metadata.md": local_path(l2_run, "asset_metadata.md"),
              "_internal/inputs/source_suggestion.md": storage_path(source_suggestion),
              "_internal/inputs/user_research_instruction.md": storage_path(research_instruction),
-             "_internal/inputs/prompts/source_finder.md": PROMPTS_DIR / "source_finder.md"}
-    paths.update({f"_internal/inputs/prompts/{name}.md": PROMPTS_DIR / f"{name}.md"
+             "_internal/inputs/prompts/source_finder.md": Path(prompt_directory or PROMPTS_DIR) / "source_finder.md"}
+    paths.update({f"_internal/inputs/prompts/{name}.md": Path(prompt_directory or PROMPTS_DIR) / f"{name}.md"
                   for name in RESEARCH_PROMPTS})
     for item in domains:
         paths[item["input_path"]] = local_path(l2_run, item["source_file"])
@@ -108,11 +116,14 @@ def create_run(
                               "bytes": len(config_bytes)}
     # The public runs_dir argument remains accepted; the selected Layer 2 owns colocation.
     while True:
-        run = l2_run.parent / f"L3_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"
+        run_id = f"L3_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"
+        run = storage_path(destination) if destination is not None else l2_run.parent / run_id
         try:
             run.mkdir()
             break
         except FileExistsError:
+            if destination is not None:
+                raise
             continue
     for relative, raw in snapshots.items():
         target = run / relative
@@ -121,7 +132,8 @@ def create_run(
     (run / "_internal/trace").mkdir(parents=True)
     (run / "sources").mkdir()
     record = {
-        "schema_version": SCHEMA_VERSION, "harness": HARNESS_NAME, "run_id": run.name,
+        "schema_version": SCHEMA_VERSION, "harness": HARNESS_NAME, "run_id": run_id,
+        "stage_settings": resolved,
         "status": "created", "started_at": now_iso(), "updated_at": now_iso(),
         "source_l2": {"run_id": source.get("run_id"), "path": str(l2_run),
                       "status": source["status"], "checks": source.get("checks") or {},

@@ -5,10 +5,10 @@
 Current package names are `domain_decider` (formerly Layer 2) and `research_module`
 (formerly Layer 3). Layer labels below describe frozen operational contracts; keep
 schema 9, L2_/L3_ prefixes, metadata keys, checkpoint threads and CLI flags unchanged.
-No old-package forwarding wrappers are supported. One notebook cell preflights the
-selected action, completes domain preparation and passes that exact run to research.
-Explicit domain/resume/linked/upload selections are exclusive; blank paths create new runs.
-Resume uses frozen settings and never repeats domain preparation. Preserve the harness.
+No old-package forwarding wrappers are supported. One notebook cell preflights full execution
+or explicit workflow-root resume, completes domain preparation and passes that exact run to research.
+Blank resume creates a numbered full run. Advanced module/linked/upload actions remain in APIs/CLI.
+Resume uses frozen settings and never repeats completed domain preparation. Preserve the harness.
 Current guides are README.md, ML/deep_research/docs/Research_Architecture_Overview.md
 and docker/development.md. Do not recreate module READMEs; preserve generated run READMEs.
 
@@ -20,10 +20,16 @@ See `README.md` for the workflow. Industry definitions belong in the selected pl
 not generic prompts or Python. `inputs/requirement.md` holds user objectives and the explicitly broadened research scope; review its confidential origin before public-input confirmation.
 Operational events go to each run's `run.log`. `ML/deep_research/research_module/` finds and tests sources
 for each actual Layer 2 domain, uploads unique documents and runs persistent domain researchers,
-sequentially for new version-3 runs, producing independent Markdown reports without synthesis. The supported workflow ends at Layer 3. Prompts sit below each layer; design notes are in
+sequentially for new version-4 runs, producing independent Markdown reports without synthesis. The supported workflow ends at Layer 3. Prompts sit below each layer; design notes are in
 `ML/deep_research/docs/`; tests are in `tests/`.
 Generated runs, secrets, caches, sources, and checkpoints stay local.
-Group new runs as `runs/<parent>-<markdown-name>-<short-path-id>/L2_*` and place the derived `L3_*`
+Group new full workflows as `runs/<factsheet-name>/run_001/`, with `domain_decider/` and
+`research_module/` phase directories, one canonical root log and one private event index.
+Use the OS-locked durable counter and source-path identity; changed contents increment the same
+group, while same-name/different-path inputs get readable numeric group disambiguation.
+Freeze all selected inputs and both phases' prompts before model work; persist phase destinations
+and use public phase runners. Preserve internal L2/L3 IDs and checkpoint threads.
+Standalone module defaults retain `runs/<parent>-<markdown-name>-<short-path-id>/L2_*`, with `L3_*`
 beside its completed Layer 2 source. Layer 2 schema-2/3/4/5/6/7/8 artifacts are read-only. New Layer 2 runs
 use schema 9 and feed Layer 3 source discovery directly; never produce a legacy missions handoff.
 Layer 3 schema 9 freezes a versioned research capability for new runs; older preparation runs keep
@@ -196,7 +202,7 @@ failures do not make otherwise-complete source discovery partial; expose nested 
 Keep ambiguity/failures in the registry with a README link. Atomic publication/history applies to
 enrichment too; rebuilding must not erase upload mappings or reuse unprocessed source versions.
 
-Layer 3 research capability version 3 extends new full runs after preparation. Linked research-only
+Layer 3 research capability version 4 extends new full runs after preparation. Linked research-only
 runs copy/hash settled complete or partial preparation; never resume/rewrite the parent. Domains
 without usable sources remain scheduled. Explicit resume reuses final receipts or the same domain
 checkpoint thread. Freeze research reasoning (default max), search controls and input policy.
@@ -254,7 +260,48 @@ Missing unfinished checkpoints require recovery, never silent fresh execution. R
 responses remain project-local. No model-authored auxiliary file or heading is a completion gate.
 Save final assistant Markdown verbatim and publish each sibling independently with presentation history.
 Log safe timings, observed model/tool activity, checkpoints, compaction and a single 30-second heartbeat;
-payloads stay in internal traces. The notebook contains only Layer 2 and Layer 3 execution cells.
+payloads stay in internal traces. The notebook contains one full-workflow/resume execution cell.
+
+## Workflow-strengthening policy (fresh runs)
+
+Industry plugins live in `inputs/plugins/`; the default real-estate plugin provides external
+asset-linked responsibilities, not cross-agent communication. Risk/opportunity/action format and
+external reassessment belong in the editable user instruction, within the existing research loop.
+Preserve user requirements and confidential-origin warnings. Frozen source guidance also remains
+in the researcher's persistent system context through compaction. Search/open exact URLs;
+record proposed-URL versus available explicit-open evidence observationally, without altering
+access claims, statuses or retry behavior. An open action alone is not proof of readability.
+
+One notebook STAGE_SETTINGS dictionary controls metadata, design, distribution, source_discovery,
+research, research_search, document and summary. Full-workflow defaults: high reasoning except
+medium summary; medium verbosity except low discovery/search; medium search context where applicable.
+Keep supported levels including max selectable. Separate summary/document settings use shared
+execution-owned clients and call accounting. Keyword stage_settings overrides corresponding legacy
+API arguments; --stage-settings/-StageSettings JSON adapters reject mixed legacy generation flags
+and creation-setting overrides on resume/check/upload-only. Freeze resolved values and include
+options in request accounting/fingerprints. Historical policies without stage settings are unchanged.
+New provider requests use reasoning.summary=auto unless disabled; retain returned summaries
+privately and separately from report text. Never claim hidden chain-of-thought is available or
+silently drop rejected provider options. Domain schema9 keeps a versioned stage-settings policy;
+research capability4 freezes settings, persistent source guidance and webpage allowance. Versions
+1/2/3 retain original behavior, including config, counters, threads and prompts.
+
+New webpage reads enforce declared/actual 52,428,800-byte limits (50 MiB); historical fallback
+remains 10 MiB. Keep document-upload and model-file limits separate, public-address checks and
+safe redirects. Encode Unicode components without changing existing escapes/queries. Exact-URL
+search merging preserves order and fills missing title/snippet values only from real later records.
+Expose restrictions/missing endpoints/encoding/size/extraction failures honestly. The agent may
+search for an authoritative exact alternative by title/publisher/topic; no Python search loop,
+access bypass, crawler or OCR is added.
+
+Extend existing callbacks and saver boundaries, not a new monitoring/middleware framework.
+Private append-only events correlate workflow, request, logical reservation, tool and checkpoint
+IDs with timestamps, settings, usage, durations and artifact references. Capture todo/note proposals
+and native applied writes, file/archive results, selected/retained compaction messages, summary,
+archive hash and next dispatch context. Preserve the native algorithm/thresholds; no extra checkpoints.
+Operational logs stay payload-free; private traces require research-data access protection and
+must not expose credentials. Record only observed provider action order/timing. Todo completion is
+not verified coverage. Keep existing cancellable heartbeats; never simulate provider thinking.
 
 ## Commits and Pull Requests
 

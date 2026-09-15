@@ -163,10 +163,13 @@ def publish(run: Path) -> dict:
     atomic_write_text(revision / "README.md",
                       f"# Layer 2 results\n\nStatus: {record['status']}\n\n"
                       f"{len(complete)}/{expected} logical calls complete · {len(definitions)} domains\n\n"
-                      "[Asset metadata](asset_metadata.md) · [Domain plan](domain_plan.md) · [Log](run.log)\n\n"
+                      f"[Asset metadata](asset_metadata.md) · [Domain plan](domain_plan.md) · [Log]({'../run.log' if record.get('workflow_root') else 'run.log'})\n\n"
                       + links + warning + "\n\nRouting does not measure extraction completeness. "
-                      "Schema 9 is not yet integrated with Layers 3/4. Domain Markdown and shared asset metadata "
+                      "Domain Markdown and shared asset metadata "
                       "are the research inputs. Raw responses and history remain in `_internal/`.\n")
     write_json(run / "_internal/trace/publication.json", {"path": revision.relative_to(run).as_posix()})
     materialize(run, revision)
+    if record.get("stage_settings"):
+        from .tracing import event
+        event(run / "_internal/trace", "domain_publication_saved", reference="publication.json", domain_count=len(definitions))
     return {"domain_count": len(definitions), "routing_issues": len(issues), "audit_path": audit_path}

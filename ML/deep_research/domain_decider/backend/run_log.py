@@ -98,7 +98,15 @@ def log_failure(logger, event, exc, **context):
 def operational_logger(run_dir: Path) -> Iterator[logging.Logger]:
     """Input a run path; yield its UTF-8 logger and close the handler after execution."""
     path = (run_dir / "run.log").resolve()
-    logger = logging.getLogger(f"cdi.layer2.{path}")
+    from .fs import load_json
+    record_path = run_dir / "run.json"
+    record = load_json(record_path) if record_path.exists() else {}
+    if record.get("workflow_root"):
+        root = Path(record["workflow_root"]).resolve()
+        if run_dir.resolve().parent != root:
+            raise ValueError("Operational log must belong to the enclosing workflow")
+        path = root / "run.log"
+    logger = logging.getLogger(f"cdi.{run_dir.resolve()}")
     logger.setLevel(logging.INFO)
     logger.propagate = False
     handler = logging.FileHandler(path, mode="a", encoding="utf-8")

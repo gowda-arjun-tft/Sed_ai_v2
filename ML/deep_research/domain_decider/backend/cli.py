@@ -10,6 +10,7 @@ from .create_run import create_run, require_current
 from .fs import load_json, read_text
 from .report import run_checks
 from .runner import run_all
+from .stage_settings import read_stage_settings
 from .settings import (
     REPO_ROOT, RUNS_DIR, WEB_SEARCH_CONTEXT_SIZE, WEB_SEARCH_LEVELS,
     WEB_SEARCH_VERBOSITY,
@@ -57,14 +58,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--domain-plugin", type=Path)
     parser.add_argument("--requirements", type=Path)
     parser.add_argument("--web-search-depth", choices=sorted(WEB_SEARCH_LEVELS),
-                        default=WEB_SEARCH_CONTEXT_SIZE)
+                        default=None)
     parser.add_argument("--web-search-verbosity", choices=sorted(WEB_SEARCH_LEVELS),
-                        default=WEB_SEARCH_VERBOSITY)
+                        default=None)
+    parser.add_argument("--stage-settings", type=Path, help="JSON per-stage generation controls")
     parser.add_argument("--public-input-confirmed", action="store_true",
                         help="confirm supplied context is suitable for public web-assisted planning")
     parser.add_argument("--resume", type=Path, help="resume a schema-9 Layer 2 run")
     parser.add_argument("--check-only", type=Path, help="inspect a schema-9 Layer 2 run")
     args = parser.parse_args(argv)
+    if args.stage_settings and (args.web_search_depth or args.web_search_verbosity):
+        parser.error("--stage-settings cannot be mixed with legacy generation settings")
+    if (args.resume or args.check_only) and any((args.stage_settings, args.web_search_depth,
+                                               args.web_search_verbosity, args.public_input_confirmed,
+                                               args.fact_sheet, args.domain_plugin, args.requirements)):
+        parser.error("Existing-run actions use frozen settings")
     load_dotenv_key()
     if args.check_only:
         run_dir = args.check_only.resolve()
@@ -80,8 +88,9 @@ def main(argv: list[str] | None = None) -> int:
         if not (args.fact_sheet and args.domain_plugin and args.requirements):
             parser.error("provide fact_sheet.md, --domain-plugin and --requirements, or --resume")
         run_dir = create_run(args.fact_sheet, args.domain_plugin, args.requirements, RUNS_DIR,
-                             web_search_context_size=args.web_search_depth,
-                             web_search_verbosity=args.web_search_verbosity,
+                             web_search_context_size=args.web_search_depth or WEB_SEARCH_CONTEXT_SIZE,
+                             web_search_verbosity=args.web_search_verbosity or WEB_SEARCH_VERBOSITY,
+                             stage_settings=read_stage_settings(args.stage_settings) if args.stage_settings else None,
                              public_input_confirmed=args.public_input_confirmed)
         print(f"Created {run_dir}", flush=True)
     run_all(run_dir)

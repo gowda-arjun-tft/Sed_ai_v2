@@ -17,6 +17,7 @@ from ML.deep_research.domain_decider.backend.usage import UsageCallback, summari
 from .create_run import local_path, require_current, verify_inputs
 from ..ML.source_finder import prepare, recover, request_options, save_response
 from .source_publication import publish
+from ML.deep_research.domain_decider.backend.tracing import event, private_json
 
 
 def _save(run: Path, record: dict) -> None:
@@ -39,6 +40,7 @@ async def _batch(run, record, model, domains, logger, retry_failed):
         record["jobs"][key] = entry
         if reused:
             logger.info("job_reused stage=source_finder job=%s attempt=%s", key, entry["attempt"])
+            event(run / "_internal/trace", "job_reused", stage="source_discovery", job=key, reference=entry["response_path"])
             continue
         if entry.get("status") == "failed" and not retry_failed:
             logger.info("job_skipped stage=source_finder job=%s reason=retry_not_requested", key)
@@ -67,6 +69,12 @@ async def _batch(run, record, model, domains, logger, retry_failed):
                           DispatchLog(logger, "source_finder", key, scheduled, starts)],
         })
         pending.append((key, scheduled))
+        entry["callback_run_id"] = str(configs[-1]["run_id"])
+        if record.get("stage_settings"):
+            folder = local_path(run, entry["response_path"]).parent
+            private_json(folder / "request.json", {"messages": request, "options": request_options(record)})
+            event(folder, "job_scheduled", stage="source_discovery", job=key, request_id=entry["request_id"],
+                  model_request=entry["callback_run_id"], estimated_tokens=count, input_reference="request.json")
         logger.info("job_scheduled stage=source_finder job=%s attempt=%d input_estimate=%d ceiling=%d",
                     key, attempt, count, ceiling)
     _save(run, record)

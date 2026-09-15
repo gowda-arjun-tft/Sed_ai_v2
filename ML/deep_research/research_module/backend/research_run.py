@@ -19,6 +19,7 @@ from .document_records import REGISTRY_PATH, UPLOAD_POLICY, enrich, research_usa
 from .create_run import local_path, require_current, verify_inputs
 from .settings import PROMPTS_DIR, RESEARCH_CONFIG_PATH, RESEARCH_INSTRUCTION_PATH, WEB_SEARCH_LEVELS
 from .source_publication import parse_json, pretty_json
+from ML.deep_research.domain_decider.backend.stage_settings import resolve_stage_settings
 
 RESEARCH_PROMPTS = ("domain_research", "research_summary", "read_document")
 CHECKPOINT_DEFAULT = "/var/lib/sedai/research-checkpoints"
@@ -52,7 +53,8 @@ def research_policy(reasoning="max", *, call_limits=None) -> dict:
         raise ValueError("unsupported research reasoning effort")
     if call_limits is None:
         _, call_limits = read_research_config(RESEARCH_CONFIG_PATH)
-    return {"version": 3, "status": "pending", "mode": "full", "reasoning_effort": reasoning,
+    return {"version": 4, "status": "pending", "mode": "full", "reasoning_effort": reasoning,
+            "webpage_max_bytes": 52_428_800, "persistent_source_guidance": True,
             "max_concurrency": 1, **call_limits,
             "target_tokens": 300_000, "maximum_tokens": 350_000,
             "summary_trigger_tokens": 250_000, "summary_keep_tokens": 100_000,
@@ -64,7 +66,7 @@ def research_policy(reasoning="max", *, call_limits=None) -> dict:
 def checkpoint_root(record) -> Path:
     """Require a writable, separately mounted Linux checkpoint volume before paid work."""
     policy = record["research"]
-    if policy.get("version") not in {1, 2, 3}:
+    if policy.get("version") not in {1, 2, 3, 4}:
         raise ValueError("unsupported research capability")
     configured = os.environ.get("SEDAI_RESEARCH_CHECKPOINT_DIR")
     if sys.platform != "linux" or not configured or configured != policy["checkpoint_root"]:
@@ -129,7 +131,7 @@ def eligible_sources(run, record, domain) -> str:
 def create_research_run(prepared_run, runs_dir, *, public_input_confirmed=False,
                         research_reasoning_effort="max", web_search_context_size=None,
                         web_search_verbosity=None, research_instruction=RESEARCH_INSTRUCTION_PATH,
-                        research_config=RESEARCH_CONFIG_PATH) -> Path:
+                        research_config=RESEARCH_CONFIG_PATH, stage_settings=None, destination=None) -> Path:
     """Create a new linked run; copy prepared evidence without touching the parent or calling APIs."""
     from .document_uploads import run_writer
 
@@ -137,6 +139,11 @@ def create_research_run(prepared_run, runs_dir, *, public_input_confirmed=False,
         raise ValueError("Layer 3 requires public-input confirmation")
     config_bytes, limits = read_research_config(research_config)
     policy = research_policy(research_reasoning_effort, call_limits=limits)
+    selected = resolve_stage_settings(stage_settings, legacy={
+        "research": {"reasoning": research_reasoning_effort},
+        "research_search": {**({"search_context": web_search_context_size} if web_search_context_size else {}),
+                            **({"verbosity": web_search_verbosity} if web_search_verbosity else {})},
+    })
     instruction = storage_path(research_instruction).read_bytes()
     if not instruction.decode("utf-8-sig").strip():
         raise ValueError("User research instruction is empty")
@@ -178,11 +185,14 @@ def create_research_run(prepared_run, runs_dir, *, public_input_confirmed=False,
     if registry is not None:
         snapshots["_internal/inputs/prepared_upload_registry.json"] = json.dumps(registry, ensure_ascii=False).encode()
     while True:
-        run = parent.parent / f"L3_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"
+        run_id = f"L3_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"
+        run = storage_path(destination) if destination is not None else parent.parent / run_id
         try:
             run.mkdir()
             break
         except FileExistsError:
+            if destination is not None:
+                raise
             continue
     for relative, raw in snapshots.items():
         target = local_path(run, relative)
@@ -190,7 +200,8 @@ def create_research_run(prepared_run, runs_dir, *, public_input_confirmed=False,
         target.write_bytes(raw)
     record["inputs"] = {p: {"sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}
                         for p, raw in snapshots.items()}
-    record.update(run_id=run.name, status="created", started_at=now_iso(), updated_at=now_iso(),
+    record.pop("workflow_root", None)
+    record.update(run_id=run_id, stage_settings=selected, status="created", started_at=now_iso(), updated_at=now_iso(),
                   prepared_run={"path": str(parent), "run_id": original["run_id"],
                                 "manifest_sha256": hashlib.sha256(json.dumps(original, sort_keys=True).encode()).hexdigest()},
                   discovery_status=original.get("discovery_status", original["status"]), research=policy)

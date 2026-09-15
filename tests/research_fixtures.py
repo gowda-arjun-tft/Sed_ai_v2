@@ -73,7 +73,7 @@ class ResearchModel:
             finally:
                 owner.active -= 1
 
-        def fetch(url):
+        def fetch(url, max_bytes=None):
             """Return canonical public-source bytes, not a search snippet."""
             return Document(url, "text/plain; charset=utf-8", "医院 — rule, exception, 2030.".encode(), "2026-09-11")
 

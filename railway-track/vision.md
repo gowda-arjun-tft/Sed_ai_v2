@@ -3,7 +3,10 @@
 ## Product Purpose
 
 The two maintained packages are named Domain Decider and Research Module. One notebook cell
-connects their existing workflows; this naming/organization change does not redesign research.
+connects their existing workflows in a numbered full run. User-owned plugin/objective/source
+guidance controls research content; independent frozen stage settings control execution.
+Private observations explain tools, memory and checkpoints without claiming hidden reasoning
+or guaranteeing report quality. Existing runs and the persistent graph remain protected.
 
 CDI Deep Research organizes supplied evidence around industry plugins and user requirements. Layer 2 is industry-neutral, and Layer 3 prepares sources and researches its dynamic domains. The supported workflow ends at Layer 3; historical Layer 4 artifacts remain readable. The maintained product description remains in [README.md](../README.md).
 

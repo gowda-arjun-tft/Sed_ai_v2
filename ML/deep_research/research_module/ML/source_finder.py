@@ -9,17 +9,19 @@ from ML.deep_research.domain_decider.ML.context import estimate, messages
 from ML.deep_research.domain_decider.backend.fs import atomic_write_text, text_hash, write_json
 from ML.deep_research.domain_decider.backend.jobs import IncompleteResponseError, saved_entry, saved_text
 from ..backend.create_run import local_path
+from ML.deep_research.domain_decider.backend.stage_settings import generation_options, search_context
 
 
-def request_options(record: dict) -> dict:
+def request_options(record: dict, stage="source_discovery") -> dict:
     """Bind only hosted web search, requiring its use without enforced JSON mode."""
     search = record["web_search"]
     return {
-        "tools": [{"type": "web_search", "search_context_size": search["context_size"],
+        "tools": [{"type": "web_search", "search_context_size": search_context(record, stage),
                    "external_web_access": True}],
         "tool_choice": search["tool_choice"],
         "include": ["web_search_call.action.sources"],
         "text": {"verbosity": search["verbosity"]},
+        **generation_options(record, stage),
     }
 
 
@@ -84,12 +86,20 @@ def save_response(run: Path, entry: dict, result: AIMessage) -> None:
     actions = {}
     for block in blocks:
         if isinstance(block, dict) and block.get("type") == "web_search_call":
-            action = (block.get("action") or {}).get("type", "unknown")
+            value = block.get("action")
+            action = value.get("type", "unknown") if isinstance(value, dict) else "unknown"
             # Counts are operational only; arbitrary action strings never enter run.log.
-            action = action if action in {"search", "open_page", "find_in_page"} else "unknown"
+            action = action if isinstance(action, str) and action in {"search", "open_page", "find_in_page"} else "unknown"
             actions[action] = actions.get(action, 0) + 1
     entry["web_actions"] = actions
     write_json(path.with_name("provider_message.json"), result.model_dump(mode="json"))
+    from ..backend.access_audit import audit_access
+    from ML.deep_research.domain_decider.backend.tracing import event, reasoning_summaries
+    write_json(path.with_name("access_audit.json"), audit_access(result.text, blocks))
+    reasoning_summaries(path.with_name("reasoning_summary.json"), result.model_dump(mode="json"))
+    event(path.parent, "source_response_saved", response_id=result.id, reference="provider_message.json",
+          request_id=entry.get("request_id"), stage="source_discovery",
+          access_audit="access_audit.json", usage=result.usage_metadata)
     write_json(path.with_name("completion.json"), entry)
     if incomplete:
         raise IncompleteResponseError("Provider reported incomplete output")

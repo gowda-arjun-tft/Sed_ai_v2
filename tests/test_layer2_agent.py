@@ -40,7 +40,8 @@ class DirectCallTests(unittest.TestCase):
                     else:
                         self.assertNotIn("tools", payload)
                         if stage == "metadata":
-                            self.assertNotIn("text", payload)
+                            self.assertEqual(payload["text"]["verbosity"], "medium")
+                    self.assertEqual(payload["reasoning"]["summary"], "auto")
             fake = FakeStages()
             fake.run(run)
             record = load_json(run / "run.json")
@@ -56,6 +57,7 @@ class DirectCallTests(unittest.TestCase):
             run = new_run(Path(tmp))
             record = load_json(run / "run.json")
             record["web_search"].update(context_size="high", verbosity="low")
+            record.pop("stage_settings")  # Historical records keep their original options.
             write_json(run / "run.json", record)
             self.assertEqual(request_options("metadata", record), {})
             self.assertEqual(request_options("distribution", record),
@@ -222,7 +224,8 @@ class DirectCallTests(unittest.TestCase):
                      "entry-count or word limit", "Shared identity/context need not be repeated",
                      "Rule with two consequences", "Whole versus component estimate"):
             self.assertIn(word, prompts["distribution"])
-        plugin = (MODULE_DIR / "plugins/real_estate.md").read_text()
+            from ML.deep_research.domain_decider.backend.settings import DOMAIN_PLUGIN_PATH
+            plugin = DOMAIN_PLUGIN_PATH.read_text()
         requirements = (MODULE_DIR.parents[2] / "inputs/requirement.md").read_text()
         self.assertNotIn("## Exclusions", requirements)
         self.assertNotIn("## Deferred to a later round", requirements)

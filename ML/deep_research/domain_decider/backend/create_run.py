@@ -16,6 +16,7 @@ from .settings import (
     WEB_SEARCH_INPUT_LIMIT, WEB_SEARCH_LEVELS, WEB_SEARCH_VERBOSITY,
 )
 from .windows import source_windows
+from .stage_settings import resolve_stage_settings
 
 
 def require_current(run_dir: Path) -> dict:
@@ -34,6 +35,8 @@ def create_run(
     web_search_context_size: str = WEB_SEARCH_CONTEXT_SIZE,
     web_search_verbosity: str = WEB_SEARCH_VERBOSITY,
     public_input_confirmed: bool = False,
+    stage_settings: dict | None = None, destination: Path | None = None,
+    prompt_directory: Path | None = None,
 ) -> Path:
     """Input public-confirmed paths and settings; return a frozen run without model calls."""
     if public_input_confirmed is not True:
@@ -44,6 +47,9 @@ def create_run(
         raise ValueError(f"unsupported web-search context size: {web_search_context_size}")
     if web_search_verbosity not in WEB_SEARCH_LEVELS:
         raise ValueError(f"unsupported web-search verbosity: {web_search_verbosity}")
+    legacy = {stage: {"reasoning": reasoning_effort} for stage in STAGES}
+    legacy["design"].update(search_context=web_search_context_size, verbosity=web_search_verbosity)
+    resolved = resolve_stage_settings(stage_settings, legacy=legacy)
     if os.name != "nt":
         fact_sheet, domain_plugin, requirements = (
             Path(str(path).replace("\\", "/"))
@@ -51,7 +57,8 @@ def create_run(
         )
     paths = {"fact_sheet.md": fact_sheet, "domain_plugin.md": domain_plugin,
              "requirements.md": requirements}
-    paths.update({f"prompts/{stage}.md": PROMPTS_DIR / PROMPT_FILES[stage] for stage in STAGES})
+    paths.update({f"prompts/{stage}.md": Path(prompt_directory or PROMPTS_DIR) / PROMPT_FILES[stage]
+                  for stage in STAGES})
     snapshots, metadata = {}, {}
     for name, path in paths.items():
         path = Path(path).resolve()
@@ -64,14 +71,17 @@ def create_run(
     source = snapshots["fact_sheet.md"].decode("utf-8-sig")
     windows = source_windows(source, include_text=False)
     del source
-    group = storage_path(runs_dir) / run_group_name(Path(fact_sheet))
+    group = storage_path(destination).parent if destination is not None else storage_path(runs_dir) / run_group_name(Path(fact_sheet))
     group.mkdir(parents=True, exist_ok=True)
     while True:
-        run = group / f"L2_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"
+        run_id = f"L2_{datetime.now(UTC):%Y%m%d_%H%M%S}_{secrets.token_hex(2)}"
+        run = storage_path(destination) if destination is not None else group / run_id
         try:
             run.mkdir()
             break
         except FileExistsError:
+            if destination is not None:
+                raise
             continue
     for name, raw in snapshots.items():
         target = run / "_internal" / "inputs" / name
@@ -84,7 +94,8 @@ def create_run(
         window["input_bom_bytes"] = bom_bytes
     write_json(run / "_internal" / "trace" / "source" / "manifest.json", windows)
     write_json(run / "run.json", {
-        "schema_version": LAYER2_SCHEMA_VERSION, "run_id": run.name,
+        "schema_version": LAYER2_SCHEMA_VERSION, "run_id": run_id,
+        "stage_settings": resolved,
         "run_group": group.name, "status": "started", "started_at": now_iso(),
         "inputs": metadata, "model": MODEL_NAME, "reasoning_effort": reasoning_effort,
         "source_manifest_sha256": sha256(run / "_internal" / "trace" / "source" / "manifest.json"),
@@ -106,5 +117,5 @@ def create_run(
         "jobs": {}, "downstream_integrated": False,
     })
     atomic_write_text(run / "README.md",
-                      "# Layer 2 schema 9\n\nStatus: started.\n\nNot yet integrated with Layers 3/4.\n")
+                      "# Domain Decider\n\nStatus: started.\n")
     return run

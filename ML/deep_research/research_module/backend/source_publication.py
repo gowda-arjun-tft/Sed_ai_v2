@@ -145,12 +145,14 @@ def publish(run: Path) -> dict:
                     for key, item in research["prior_work"].items())
     _view(run, "README.md",
           f"# Layer 3{' research' if research else ' source discovery'}\n\nStatus: {record['status']}\n\n"
-          f"{len(links)}/{len(record['domains'])} JSON outputs published. [Log](run.log).\n\n"
+          f"{len(links)}/{len(record['domains'])} JSON outputs published. [Log]({'../run.log' if record.get('workflow_root') else 'run.log'}).\n\n"
           + "\n".join(links) + (
               f"\n\nWarnings: [internal observations]({audit})\n\n" + "\n".join(warnings)
               if issues else "")
           + uploads + research_text +
           "Access classifications are model-reported results through OpenAI at the time of testing; "
           "completion or valid JSON does not independently verify every URL. "
-          "Provider action traces, raw responses and frozen inputs remain in _internal/.\n")
+          "Provider action traces, raw responses and frozen inputs remain in _internal/. "
+          "[Source response traces](_internal/trace/responses/) include observational access_audit.json when available; "
+          "an explicit open is not proof of readable contents.\n")
     return {"published_sources": len(links), "observations": len(issues)}

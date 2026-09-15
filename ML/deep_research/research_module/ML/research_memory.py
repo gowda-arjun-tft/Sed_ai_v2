@@ -1,7 +1,7 @@
 """Domain-private native memory with lossless archives and final-dispatch input checks."""
 
 import json
-import time
+from uuid import uuid4
 
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
 from deepagents.middleware import SummarizationMiddleware
@@ -14,10 +14,10 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from ML.deep_research.domain_decider.ML.context import InputSizeError
 from ML.deep_research.domain_decider.backend.fs import atomic_write_text, text_hash, write_json
 from ML.deep_research.domain_decider.backend.jobs import IncompleteResponseError
-from ML.deep_research.domain_decider.backend.run_log import diagnostic_identifier, log_failure
 from ML.deep_research.domain_decider.backend.windows import token_count
-from ML.deep_research.domain_decider.backend.usage import UsageCallback
 from ..backend.research_budget import CallUnavailable
+from ML.deep_research.domain_decider.backend.stage_settings import generation_options
+from ML.deep_research.domain_decider.backend.tracing import event, private_json
 
 
 def count_input(messages, *, tools=None) -> int:
@@ -38,64 +38,7 @@ def check_input(messages, record, *, tools=None, options=None, ceiling=None) -> 
     return count
 
 
-class ResearchTrace(UsageCallback):
-    """Save complete model/tool records immediately; log only safe operational identifiers."""
-
-    raise_error = True
-    run_inline = True
-
-    def __init__(self, root, thread, logger, domain):
-        """Bind trace ownership to a trusted domain, not model-provided paths."""
-        root.mkdir(parents=True, exist_ok=True)
-        super().__init__(root, thread)
-        self.root, self.logger, self.domain = root, logger, domain
-        self.starts, self.phases = {}, {}
-
-    def on_chat_model_start(self, serialized, messages, *, run_id, metadata=None, **kwargs):
-        """Persist the dispatched input and distinguish main and compaction requests."""
-        self.starts[run_id] = time.perf_counter()
-        self.phases[run_id] = "compaction" if (metadata or {}).get("lc_source") == "summarization" else "research"
-        super().on_chat_model_start(serialized, messages, run_id=run_id,
-                                   metadata={"lc_agent_name": f"{self.domain}/{self.phases[run_id]}"}, **kwargs)
-        write_json(self.root / f"model-{run_id}-input.json",
-                   [[m.model_dump(mode="json") for m in group] for group in messages])
-        self.logger.info("model_started domain=%s phase=%s call=%s", self.domain, self.phases[run_id], run_id)
-
-    def on_llm_end(self, response, *, run_id, **kwargs):
-        """Persist provider messages and usage before the graph can lose an interrupted completion."""
-        for index, group in enumerate(response.generations):
-            if group:
-                write_json(self.root / f"model-{run_id}-{index}.json", group[0].message.model_dump(mode="json"))
-        super().on_llm_end(response, run_id=run_id, **kwargs)
-        self.logger.info("model_finished domain=%s phase=%s call=%s elapsed_seconds=%.3f",
-                         self.domain, self.phases.pop(run_id, "research"), run_id,
-                         time.perf_counter() - self.starts.pop(run_id, time.perf_counter()))
-
-    def on_llm_error(self, error, *, run_id, **kwargs):
-        """Release callback clocks and log failure frames without exception payloads."""
-        self.starts.pop(run_id, None)
-        self.phases.pop(run_id, None)
-        self._actors.pop(run_id, None)
-        log_failure(self.logger, "research_model_failed", error, domain=self.domain, call=str(run_id))
-
-    def on_tool_start(self, serialized, input_str, *, run_id, **kwargs):
-        """Retain tool arguments privately, never in run.log."""
-        self.starts[run_id] = time.perf_counter()
-        write_json(self.root / f"tool-{run_id}-input.json", {"tool": serialized.get("name"), "input": input_str})
-        self.logger.info("tool_started domain=%s tool=%s call=%s", self.domain,
-                         diagnostic_identifier(serialized.get("name")), run_id)
-
-    def on_tool_end(self, output, *, run_id, **kwargs):
-        """Retain complete tool results and observed duration."""
-        value = output.model_dump(mode="json") if hasattr(output, "model_dump") else str(output)
-        write_json(self.root / f"tool-{run_id}-output.json", value)
-        self.logger.info("tool_finished domain=%s call=%s elapsed_seconds=%.3f", self.domain, run_id,
-                         time.perf_counter() - self.starts.pop(run_id, time.perf_counter()))
-
-    def on_tool_error(self, error, *, run_id, **kwargs):
-        """Keep failures operational and remove stale tool clocks."""
-        self.starts.pop(run_id, None)
-        log_failure(self.logger, "research_tool_failed", error, domain=self.domain, call=str(run_id))
+from .research_trace import ResearchTrace
 
 
 class ResearchGuard(AgentMiddleware):
@@ -112,8 +55,19 @@ class ResearchGuard(AgentMiddleware):
                 and request.tool_call["name"] not in {"ls", "glob", "grep", "read_file"}):
             return ToolMessage(content="Operational limitation: finalization permits saved-file reading only.",
                                tool_call_id=request.tool_call["id"], name=request.tool_call["name"], status="error")
+        identifier = uuid4().hex
+        state = getattr(request, "state", {}) or {}
+        private_json(self.root / "trace" / f"operation-{identifier}-before.json",
+                     {"call": request.tool_call, "todos": state.get("todos"), "files": state.get("files")})
+        event(self.root / "trace", "tool_proposed", tool_call_id=request.tool_call["id"],
+              reference=f"operation-{identifier}-before.json")
         try:
-            return await handler(request)
+            result = await handler(request)
+            private_json(self.root / "trace" / f"operation-{identifier}-result.json",
+                         getattr(result, "update", result))
+            event(self.root / "trace", "tool_result", tool_call_id=request.tool_call["id"],
+                  reference=f"operation-{identifier}-result.json")
+            return result
         except CallUnavailable as error:
             return ToolMessage(content=str(error), tool_call_id=request.tool_call["id"],
                                name=request.tool_call["name"], status="error")
@@ -130,12 +84,19 @@ class ResearchGuard(AgentMiddleware):
             elif self.budget.phase == "finalization":
                 tools = [t for t in tools if getattr(t, "name", None) in {"ls", "glob", "grep", "read_file"}]
             request = request.override(system_message=system.model_copy(update={"content": content}), tools=tools)
+        settings = {**request.model_settings, **generation_options(self.record, "research")}
+        request = request.override(model_settings=settings)
         values = ([request.system_message] if request.system_message else []) + request.messages
         profile = getattr(request.model, "profile", None) or {}
         count = check_input(values, self.record, tools=request.tools, options=request.model_settings,
                             ceiling=profile.get("max_input_tokens") or profile.get("max_context_tokens"))
         self.logger.info("research_input estimated_tokens=%d exceptional=%s", count,
                          count > self.record["research"]["target_tokens"])
+        identifier = uuid4().hex
+        private_json(self.root / "trace" / f"dispatch-{identifier}.json",
+                     {"messages": values, "options": settings,
+                      "tools": [t if isinstance(t, dict) else convert_to_openai_tool(t) for t in request.tools]})
+        event(self.root / "trace", "context_checked", reference=f"dispatch-{identifier}.json", estimated_tokens=count)
         return request
 
     async def awrap_model_call(self, request, handler):
@@ -158,16 +119,19 @@ class ResearchGuard(AgentMiddleware):
                 atomic_write_text(self.root / "response.md", message.text)
                 write_json(self.root / "final.json", {"fingerprint": self.fingerprint,
                            "sha256": text_hash(message.text), "message": message.model_dump(mode="json")})
+                event(self.root / "trace", "final_response_saved", fingerprint=self.fingerprint,
+                      sha256=text_hash(message.text), reference="../final.json")
         return result
 
 
 class ResearchSummarization(SummarizationMiddleware):
     """Explicit native summarizer with domain-private, retrievable conversation archives."""
 
-    def __init__(self, model, backend, record, prompt, logger, budget=None):
+    def __init__(self, model, backend, record, prompt, logger, budget=None, root=None):
         """Use native safe message partitioning, with no argument or summary-input truncation."""
         self.record, self.prompt, self.logger = record, prompt, logger
         self.budget = budget
+        self.root = root
         policy = record["research"]
         super().__init__(model, backend=backend, trigger=("tokens", policy["summary_trigger_tokens"]),
                          keep=("tokens", policy["summary_keep_tokens"]), summary_prompt=prompt,
@@ -177,31 +141,72 @@ class ResearchSummarization(SummarizationMiddleware):
         """Retain existing summaries but reserve the last invocation for the final main response."""
         if self.budget and self.budget.remaining is not None and self.budget.remaining <= 1:
             return await handler(request.override(messages=self._get_effective_messages(request)))
-        return await super().awrap_model_call(request, handler)
+        if self.root is None:
+            return await super().awrap_model_call(request, handler)
+        identifier = uuid4().hex
+        effective = self._get_effective_messages(request)
+        before = self._count_tokens(effective, request.system_message, request.tools)
+        private_json(self.root / "trace" / f"compaction-{identifier}-before.json",
+                     {"effective": effective, "system": request.system_message})
+        async def observe(updated):
+            """Observe the native middleware's exact downstream context without altering it."""
+            private_json(self.root / "trace" / f"compaction-{identifier}-after.json", updated.messages)
+            after = self._count_tokens(updated.messages, updated.system_message, updated.tools)
+            event(self.root / "trace", "memory_context_observed", operation=identifier, before_tokens=before,
+                  context_changed=updated.messages != effective,
+                  after_tokens=after, trigger_tokens=self.record["research"]["summary_trigger_tokens"],
+                  before_reference=f"compaction-{identifier}-before.json", after_reference=f"compaction-{identifier}-after.json")
+            return await handler(updated)
+        return await super().awrap_model_call(request, observe)
 
     async def _acreate_summary(self, messages_to_summarize):
         """Count the exact summary input and use one normal request without framework retry wrappers."""
         content = self.prompt.format(messages=get_buffer_string(messages_to_summarize, format="xml"))
+        options = generation_options(self.record, "summary")
+        identifier = uuid4().hex
+        if self.root is not None:
+            private_json(self.root / "trace" / f"summary-{identifier}-selected.json", messages_to_summarize)
         def prepare(note, final):
             """Validate the supporting summary's own instructions plus its current counter."""
             request = [HumanMessage(content=content + ("\n\n" + note if note else ""))]
-            check_input(request, self.record)
+            check_input(request, self.record, options=options)
             return request
 
         async def invoke(request):
             """Dispatch one native summary, sharing the domain's model transport."""
-            return await self.model.ainvoke(request, config={"metadata": {"lc_source": "summarization"}})
+            return await self.model.ainvoke(request, config={"metadata": {"lc_source": "summarization"}}, **options)
 
         response = (await self.budget.call("summary", prepare, invoke) if self.budget
                     else await invoke(prepare("", False)))
         self.logger.info("compaction_finished archived_messages=%d", len(messages_to_summarize))
+        if self.root is not None:
+            private_json(self.root / "trace" / f"summary-{identifier}-response.json", response)
+            event(self.root / "trace", "summary_returned", operation=identifier,
+                  selected_reference=f"summary-{identifier}-selected.json", response_reference=f"summary-{identifier}-response.json",
+                  selected_messages=len(messages_to_summarize))
         return response.text
+
+    def _partition_messages(self, messages, cutoff_index):
+        """Observe native safe partitioning, including repeated single-message compactions."""
+        selected, retained = super()._partition_messages(messages, cutoff_index)
+        if self.root is not None:
+            identifier = uuid4().hex
+            private_json(self.root / "trace" / f"partition-{identifier}.json",
+                         {"selected": selected, "retained_unchanged": retained, "cutoff_index": cutoff_index})
+            event(self.root / "trace", "compaction_partition", reference=f"partition-{identifier}.json",
+                  selected_messages=len(selected), retained_messages=len(retained))
+        return selected, retained
 
     async def _aoffload_to_backend(self, backend, messages, session_id):
         """Make archive failure an operational preservation failure, never silently lossy compaction."""
         path = await super()._aoffload_to_backend(backend, messages, session_id)
         if path is None:
             raise OSError("Cannot preserve research conversation archive")
+        if self.root is not None:
+            from ML.deep_research.domain_decider.backend.fs import sha256
+            actual = (self.root / path.lstrip("/")).resolve()
+            digest = sha256(actual) if actual.is_relative_to(self.root.resolve()) and actual.is_file() else None
+            event(self.root / "trace", "archive_saved", path=path, sha256=digest, selected_messages=len(messages))
         return path
 
 

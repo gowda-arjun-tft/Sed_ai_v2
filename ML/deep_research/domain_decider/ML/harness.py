@@ -58,6 +58,8 @@ def build_model(reasoning_effort: str = REASONING_EFFORT, **overrides: Any) -> A
 
     configure_provider()
     options = apply_provider_profile(MODEL_SPEC)
-    options["reasoning_effort"] = reasoning_effort
+    # The Responses adapter leaves the legacy key intact when reasoning is also supplied.
+    options.pop("reasoning_effort", None)
+    options["reasoning"] = {"effort": reasoning_effort}
     options.update(overrides)
     return init_chat_model(MODEL_SPEC, **options)

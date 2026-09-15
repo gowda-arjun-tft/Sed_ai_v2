@@ -17,11 +17,11 @@ class StructureTests(unittest.TestCase):
         self.assertEqual(len(cells), 1)
         self.assertEqual(notebook["metadata"]["kernelspec"]["display_name"], "SedAI Docker — Python 3.12")
         source = "".join(cells[0]["source"])
-        for control in ("FACT_SHEET_PATH", "DOMAIN_WEB_SEARCH_DEPTH", "SOURCE_WEB_SEARCH_DEPTH",
-                        "LAYER3_RESUME_RUN_PATH", "LAYER3_PREPARED_RUN_PATH", "PUBLIC_INPUT_CONFIRMED"):
+        for control in ("FACT_SHEET_PATH", "STAGE_SETTINGS", "REASONING_SUMMARIES",
+                        "RESUME_RUN_PATH", "PUBLIC_INPUT_CONFIRMED"):
             self.assertIn(control, source)
-        self.assertIn("asyncio.to_thread(run_domain, L2_DYNAMIC_RUN)", source)
-        self.assertIn("create_research(L2_DYNAMIC_RUN", source)
+        self.assertIn("await run_all(FULL_RUN", source)
+        self.assertIn("ML.deep_research.workflow", source)
         compile(source, str(notebook_path), "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
 
     def test_development_uses_original_workspace_without_hidden_run_volumes(self):
@@ -55,7 +55,7 @@ class StructureTests(unittest.TestCase):
         root = settings.MODULE_DIR
         self.assertEqual(root, REPO_ROOT / "ML" / "deep_research" / "domain_decider")
         self.assertEqual(settings.PROMPTS_DIR, root / "ML" / "prompts")
-        self.assertEqual(settings.DOMAIN_PLUGIN_PATH, root / "plugins" / "real_estate.md")
+        self.assertEqual(settings.DOMAIN_PLUGIN_PATH, REPO_ROOT / "inputs/plugins/real_estate.md")
         self.assertTrue(settings.DOMAIN_PLUGIN_PATH.is_file())
         self.assertEqual({p.name for p in root.glob("*.py")}, {"__init__.py", "__main__.py"})
         self.assertEqual({p.name for p in settings.PROMPTS_DIR.glob("*.md")}, set(settings.PROMPT_FILES.values()))

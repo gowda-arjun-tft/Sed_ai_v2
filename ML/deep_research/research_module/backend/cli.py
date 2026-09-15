@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ML.deep_research.domain_decider.backend.cli import load_dotenv_key
 from ML.deep_research.domain_decider.backend.settings import REASONING_EFFORTS
+from ML.deep_research.domain_decider.backend.stage_settings import read_stage_settings
 
 from .create_run import create_run, require_current, verify_inputs
 from .document_uploads import _run_uploads, run_writer, upload_documents
@@ -76,6 +77,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-suggestion", type=Path, help="editable source guidance Markdown")
     parser.add_argument("--research-instruction", type=Path, help="editable research purpose and report instructions")
     parser.add_argument("--research-config", type=Path, help="JSON research call limits; three null values mean unlimited")
+    parser.add_argument("--stage-settings", type=Path, help="JSON per-stage generation controls")
     parser.add_argument("--reasoning-effort", choices=sorted(REASONING_EFFORTS))
     parser.add_argument("--research-reasoning-effort", choices=sorted(REASONING_EFFORTS))
     parser.add_argument("--web-search-depth", choices=sorted(WEB_SEARCH_LEVELS))
@@ -98,9 +100,12 @@ def main(argv: list[str] | None = None) -> int:
     """Create/resume frozen Layer 3 phases or print non-mutating observations."""
     parser = _parser()
     args = parser.parse_args(argv)
+    if args.stage_settings and any((args.reasoning_effort, args.research_reasoning_effort,
+                                   args.web_search_depth, args.web_search_verbosity)):
+        parser.error("--stage-settings cannot be mixed with legacy generation settings")
     new_options = any((args.source_suggestion, args.research_instruction, args.research_config,
                        args.reasoning_effort, args.research_reasoning_effort,
-                       args.web_search_depth, args.web_search_verbosity))
+                       args.web_search_depth, args.web_search_verbosity, args.stage_settings))
     if args.check_only:
         if args.online or args.public_input_confirmed or args.retry_failed or new_options:
             parser.error("--check-only does not accept run or provider options")
@@ -122,10 +127,12 @@ def main(argv: list[str] | None = None) -> int:
         if not os.getenv("OPENAI_API_KEY"):
             parser.error(f"OPENAI_API_KEY is empty; add it to {REPO_ROOT / '.env'}")
         try:
+            settings = read_stage_settings(args.stage_settings) if args.stage_settings else None
             if args.research_from:
                 if args.source_suggestion or args.reasoning_effort:
                     parser.error("--research-from preserves preparation inputs and reasoning")
                 run_dir = create_research_run(args.research_from, RUNS_DIR,
+                    stage_settings=settings,
                     research_instruction=args.research_instruction or RESEARCH_INSTRUCTION_PATH,
                     research_config=args.research_config or RESEARCH_CONFIG_PATH,
                     public_input_confirmed=args.public_input_confirmed,
@@ -134,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
                     web_search_verbosity=args.web_search_verbosity)
             else:
                 run_dir = create_run(args.research, RUNS_DIR,
+                    stage_settings=settings,
                     research_instruction=args.research_instruction or RESEARCH_INSTRUCTION_PATH,
                     research_config=args.research_config or RESEARCH_CONFIG_PATH,
                     source_suggestion=args.source_suggestion or SOURCE_SUGGESTION_PATH,

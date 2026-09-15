@@ -115,9 +115,8 @@ class ResearchHandoffTests(unittest.IsolatedAsyncioTestCase):
             model = ResearchModel()
             with model.offline(root / "checkpoints"), patch("ML.deep_research.research_module.ML.domain_agent.build_model", build):
                 await run_all(run)
-            self.assertEqual(len(clients), 2)
-            self.assertIs(clients[0][0], clients[1][0])
-            self.assertIs(clients[0][1], clients[1][1])
+            self.assertEqual(len(clients), 2 * len(load_json(run / "run.json")["domains"]))
+            self.assertTrue(all(group[0] is clients[0][0] and group[1] is clients[0][1] for group in clients))
             self.assertTrue(all(client.is_closed for group in clients for client in group))
             self.assertEqual(load_json(run / "run.json")["status"], "complete")
 

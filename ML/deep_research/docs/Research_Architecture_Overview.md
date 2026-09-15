@@ -78,11 +78,52 @@ runs Domain Decider with `asyncio.to_thread`. Only its saved `complete` status p
 creation from that exact directory. The Research Module async public entrypoint owns all later
 scheduling. No new pipeline scheduler, model call or research loop was introduced.
 
-Explicit actions select existing domain output (resume/reuse), research resume, new linked
-research or upload-only. Blank paths create fresh runs; conflicting selections fail first.
-Resume uses frozen instructions/settings, not current notebook configuration. The notebook's
-fresh defaults preserve the user's consent/settings; API consent still defaults false.
-Prompts, budget phases, memory, tools, checkpoint paths, schemas and model settings are unchanged.
+The notebook exposes full execution and explicit workflow-root resume only. Blank resume
+creates `runs/<factsheet-name>/run_001/`, then `run_002/`, etc. One OS-locked durable counter
+allocates numbers before directory creation; abandoned reservations may leave gaps. Identity
+uses the repository-relative source path where possible, not its contents. Same-name inputs
+at different paths receive readable `_2`, `_3` group disambiguation.
+
+`workflow.py` is a thin coordinator over the public phase runners. It freezes every selected
+input and both phases' prompts before the first call, records phase destinations, and resumes
+completed work without rediscovery. Its children are `domain_decider/` and `research_module/`;
+internal L2/L3 IDs, schema 9, call ledgers and checkpoint threads remain separate. A root
+`run.log` is the canonical operational log; child README links point there. Standalone module
+APIs/CLI retain historical paths, linked-research and upload-only actions without migration.
+Resume ignores current notebook settings and uses frozen copies. Public consent defaults false.
+Cancellation in synchronous domain preparation waits for its worker to exit before releasing
+the workflow lock, then prevents research handoff. Research cancellation uses native cleanup.
+
+### Request settings and policy versions
+
+One notebook `STAGE_SETTINGS` dictionary controls all request paths. `REASONING_SUMMARIES`
+requests provider `reasoning.summary="auto"` for new runs; returned summaries are private
+trace artifacts, not hidden chain-of-thought or report text. Provider rejection remains a
+visible operational error; no fallback silently removes the option.
+
+| Stage | Reasoning | Search context | Verbosity |
+| --- | --- | --- | --- |
+| Metadata | high | — | medium |
+| Domain design | high | medium | medium |
+| Distribution | high | — | medium |
+| Source discovery | high | medium | low |
+| Main research / final report | high | via helper | medium |
+| Research search helper | high | medium | low |
+| Document analysis | high | — | medium |
+| Summarization | medium | — | medium |
+
+Supported reasoning levels, including `max`, remain selectable. Search context is a context-size
+setting, not a search-count promise. No web tool is added to metadata, distribution, document
+analysis or summarization. The main graph calls its existing search helper. Summary and document
+requests use independent settings, execution-owned clients and the same domain call allowance.
+Actual options are counted and fingerprinted. APIs accept keyword-only `stage_settings`; explicit
+values override legacy arguments. CLI `--stage-settings` and PowerShell `-StageSettings` read JSON
+and reject mixed legacy generation flags or overrides on resume/check/upload-only. Legacy API
+defaults remain when not explicitly overridden.
+
+Research capability 4 freezes these options, persistent source guidance and the 50 MiB webpage
+allowance. Versions 1–3 retain their original frozen behavior. Domain schema 9 freezes a separate
+versioned stage-settings policy; no historical response or policy is rewritten.
 
 ## 1. Purpose and current scope
 
@@ -92,7 +133,7 @@ Research Module converts the dynamic research domains produced by Domain Decider
 | --- | --- |
 | Branch | `layer3-v1` |
 | Operational schema | Research Module schema 9 |
-| Research capability | Version 3 for new runs |
+| Research capability | Version 4 for new runs; earlier policies remain frozen |
 | Domain count | Dynamic; inherited from Domain Decider |
 | Model | `gpt-5.6-luna` |
 | Final output | One Markdown research report per domain |
@@ -268,7 +309,7 @@ A domain with zero eligible prepared sources is still scheduled. Its researcher 
 
 ## 7. Stage 4 — persistent domain research
 
-Research Module creates one Deep Agents 0.7.7 graph per domain. New capability-version-3 runs execute domains sequentially so one domain is completed or safely retained before the next begins.
+Research Module creates one Deep Agents 0.7.7 graph per domain. New capability-version-4 runs execute domains sequentially so one domain is completed or safely retained before the next begins.
 
 Each researcher receives:
 
@@ -277,6 +318,7 @@ Complete domain Markdown
 + shared asset metadata
 + eligible source JSON
 + user research instruction
++ frozen source guidance (persistent through compaction)
 ```
 
 The persistent system prompt is generic. It tells the agent to:
@@ -293,6 +335,13 @@ The persistent system prompt is generic. It tells the agent to:
 
 Coverage and completion remain model decisions. Python does not require headings, grade claims, add conclusions or resend a completed report for repair.
 
+The editable user instruction requests preliminary findings followed by external reassessment
+inside this same loop: investigate external drivers, asset exposure and counterevidence, then
+refine consequences, conditions, timeframes and corresponding actions. Risks/opportunities and
+report presentation stay in that user file. The real-estate plugin in `inputs/plugins/` adds
+asset-linked external responsibilities without assuming cross-agent communication. Requirements,
+geography, horizon and confidential-origin warnings remain unchanged.
+
 ## 8. Research tools
 
 | Capability | Implementation and purpose |
@@ -306,6 +355,19 @@ Coverage and completion remain model decisions. Python does not require headings
 The agent has no shell, deletion or delegation tool. File writes are allowed only under `/notes/`. Cross-domain, cross-run and host-path access is unavailable.
 
 Document answers are cached by document content hash, exact questions, prompt and model settings. Cached answers do not consume another logical model-call slot. A file ID is never treated as document content; the ID must be submitted as a real provider file input.
+
+New webpage reads enforce both declared and streamed 52,428,800-byte limits; historical
+policies retain 10 MiB. This is separate from document upload and direct file-input limits.
+Unicode paths/queries are encoded without changing existing escapes or meaningful parameters;
+public-host and redirect validation still applies. Exact-URL search duplicates retain first-seen
+order and fill missing titles/snippets from later provider records, never invented text.
+Failures distinguish restrictions, missing endpoints, size, encoding and extraction limitations.
+The existing agent may search by title/publisher/topic and inspect an authoritative exact result;
+Python adds no fallback search loop, crawler or access bypass.
+
+Source-finder `access_audit.json` lists every proposed URL occurrence alongside available explicit
+open actions. An action demonstrates only that an open was recorded, not successful reading.
+Missing action evidence stays uncertain; this audit never changes claims, status or retries.
 
 ## 9. Memory and context management
 
@@ -381,6 +443,11 @@ A linked run copies and hashes matching prior evidence, document answers, archiv
 
 ## 12. Output structure
 
+For a full workflow, the following module view is under `run_001/research_module/`. Domain
+preparation is its sibling. The root contains the workflow README, manifest, canonical log and
+`_internal/trace/events.jsonl`; module traces and reports remain independently owned. Standalone
+module runs retain the shown `L3_<id>` directory and their own operational log.
+
 ```text
 L3_<id>/
 ├── README.md
@@ -416,6 +483,26 @@ Output meaning:
 
 There is no merged portfolio report. Cross-domain synthesis is intentionally outside the current workflow.
 
+### Reconstructable private execution timeline
+
+Existing callbacks and native saver boundaries append UTC-stamped events correlated by workflow,
+domain/thread, request, logical-call reservation, tool call and checkpoint IDs. The private index
+links exact dispatched context/options, provider messages/usage and separately returned reasoning
+summaries. Tool traces retain arguments/results, todo/note state before/proposed changes and native
+checkpoint-write receipts. File/archive reads link to the actual returned content. Todo completion
+is a model-authored state, not independently verified coverage.
+
+Compaction traces retain effective input, native selected/unchanged retained messages, archive path
+and hash, returned summary, before/after estimates and next dispatched context. The native algorithm,
+250K trigger and 100K retention are unchanged. Checkpoint receipts observe existing saves; they do
+not create redundant checkpoints. Native search/open/find order is preserved without inventing
+provider timestamps or hidden reasoning. Operational logs remain payload-free; internal traces can
+contain sensitive research data and require the same access protection as the run inputs.
+
+Forced-compaction offline fixtures exercise early-evidence retrieval and complete tool groups.
+They do not establish real-model information retention or prove repeated one-message compaction is
+optimal; inspect the selected/retained trace evidence before changing those thresholds.
+
 ## 13. Status and failure semantics
 
 | Event | Behavior |
@@ -450,7 +537,7 @@ Execution completion does not prove source relevance, access accuracy, citation 
 | Python `upload_documents(...)` | Explicit upload-only enrichment without source-finder model calls. |
 | CLI | New run, linked research, explicit resume, upload-only and observational check-only actions. |
 | PowerShell `run.ps1` | Windows adapter for the same Research Module actions and Docker path translation. |
-| `CDI_Layer2_Layer3.ipynb` | User controls for Domain Decider input, Research Module creation/resume/upload mode, source guidance, research instruction, config, reasoning and search settings. |
+| `CDI_Layer2_Layer3.ipynb` | Full numbered workflow or explicit root resume; paths, consent, call config and one stage-settings dictionary. |
 
 ### Code organization
 
@@ -477,17 +564,18 @@ keeps operational recovery separate from model behavior while preserving the pac
 | Setting | Default |
 | --- | --- |
 | Source-finder reasoning | High |
-| Research reasoning | Max |
+| Research reasoning | High in the full-workflow notebook; legacy standalone API default max |
 | Source-discovery concurrency | 5 |
 | Research-domain concurrency | 1 (sequential) |
 | Web-search depth | Medium |
-| Response verbosity | Low |
+| Response verbosity | Stage-specific; see request-settings table |
 | Provider request timeout | 600 seconds |
 | Provider transport retries | 3 |
 | Research logical calls | 80 per domain |
 | Wrap-up / finalization | After 60 / after 70 used calls |
 | Document upload processing | Sequential |
-| Download ceiling | 512,000,000 bytes |
+| New webpage-fetch ceiling | 52,428,800 bytes (50 MiB) |
+| Document download ceiling | 512,000,000 bytes |
 | Direct file-input ceiling | 50,000,000 bytes |
 | Application output-token cap | None |
 
@@ -565,4 +653,4 @@ Only duplicated HTML exports were removed; Markdown sources and standalone histo
 Evaluate shared metadata and domain content together: correct metadata does not cancel misleading
 domain prose. Routing completeness, test passes and execution completion do not establish real-model
 fact retention, source relevance, access accuracy or citation support. Live evaluation needs separate
-authorization. No model calls, uploads or historical-run migrations accompany this organization change.
+authorization. No model calls, uploads or historical-run migrations accompany this implementation.

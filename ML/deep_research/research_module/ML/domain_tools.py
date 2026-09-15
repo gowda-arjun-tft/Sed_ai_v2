@@ -7,7 +7,8 @@ from langchain.tools import tool
 
 from ML.deep_research.domain_decider.backend.fs import text_hash, write_json
 from ML.deep_research.domain_decider.backend.run_log import log_failure
-from .providers.openai_search import _fetch, _hits
+from ML.deep_research.domain_decider.backend.tracing import event
+from .providers.openai_search import _fetch, _hits, access_failure
 from .research_documents import DocumentLimitation, recovered_provider, save_provider
 from .research_memory import check_input
 from ..backend.research_budget import CallUnavailable
@@ -25,14 +26,16 @@ def make_tools(root, record, domain, documents, budget=None):
     @tool
     async def search_web(query: str) -> str:
         """Search for relevant public sources. Snippets are discovery; read underlying evidence."""
-        options = {**request_options(record), "model": record["model"], "store": False,
-                   "reasoning": {"effort": record["reasoning_effort"]}}
+        options = {"model": record["model"], "store": False,
+                   "reasoning": {"effort": record["reasoning_effort"]},
+                   **request_options(record, "research_search")}
         request = "Find sources for the exact research question, with citations.\n\n" + query
         check_input([request], record, options=options, ceiling=record["web_search"]["input_token_limit"])
         key = text_hash(json.dumps([query, options], sort_keys=True))
         cache = evidence / "search" / key
         async with locks.setdefault(key, asyncio.Lock()):
             if (cache / "hits.json").exists():
+                event(cache, "search_cache_reused", reference="hits.json")
                 return (cache / "hits.json").read_text(encoding="utf-8")
             response = recovered_provider(cache, phase="search")
 
@@ -45,7 +48,10 @@ def make_tools(root, record, domain, documents, budget=None):
 
             async def invoke(value):
                 """Dispatch through the execution-owned SDK client."""
-                return await documents.client.responses.create(input=value, **options)
+                event(cache, "supporting_model_started", stage="search", reference="request.json")
+                response = await documents.client.responses.create(input=value, **options)
+                save_provider(cache, response, phase="search")
+                return response
 
             try:
                 if response is None:
@@ -56,7 +62,6 @@ def make_tools(root, record, domain, documents, budget=None):
             except Exception as error:
                 log_failure(documents.logger, "search_failed", error, domain=domain)
                 return f"Search unavailable ({type(error).__name__}); investigate alternatives or disclose the gap."
-            save_provider(cache, response, phase="search")
             hits = [vars(hit) for hit in _hits(response)]
             write_json(cache / "hits.json", hits)
             return json.dumps(hits, ensure_ascii=False)
@@ -67,17 +72,23 @@ def make_tools(root, record, domain, documents, budget=None):
         key = text_hash(normalize_url(url))
         async with locks.setdefault(key, asyncio.Lock()):
             saved = store.record_for_url(url)
+            reused = saved is not None
             if saved is None:
                 if budget:
                     budget.require_research()
                 try:
-                    document = await asyncio.to_thread(_fetch, url)
+                    allowance = record["research"].get("webpage_max_bytes", 10 * 1024 * 1024)
+                    document = await asyncio.to_thread(_fetch, url, allowance)
                 except Exception as error:
-                    write_json(evidence / "access" / f"{key}.json", {"url": url, "error_type": type(error).__name__})
+                    details = access_failure(error)
+                    write_json(evidence / "access" / f"{key}.json", {"url": url, **details})
                     log_failure(documents.logger, "source_read_failed", error, domain=domain)
-                    return f"Source could not be read ({type(error).__name__}); no evidence was inferred."
+                    return (f"Source could not be read: {json.dumps(details)}. No evidence was inferred. "
+                            "Search by the title, publisher and topic, then open an exact authoritative result URL.")
                 saved = store.store(document)
             text = store.source_text(saved["source_sha256"])
+            event(evidence, "source_content_retained", reused=reused, source_sha256=saved["source_sha256"],
+                  text_reference=saved.get("text_path"), text_available=text is not None)
             if text is None:
                 return "Source bytes retained but no readable text. Try read_document for a document or find an alternative."
             path = "/evidence/" + saved["text_path"]

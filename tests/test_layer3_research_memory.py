@@ -70,6 +70,21 @@ class ResearchMemoryTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(all("Runtime call allowance:" in group[0].text for _, group, _ in model.calls))
             self.assertTrue(all("# Selected user research instruction" in group[0].text
                                 for _, group, _ in model.calls if isinstance(group[0], SystemMessage)))
+            self.assertTrue(all("# Selected source guidance" in group[0].text
+                                for _, group, _ in model.calls if isinstance(group[0], SystemMessage)))
+            trace = run / job["root"] / "trace"
+            events = [json.loads(line) for line in (trace / "events.jsonl").read_text().splitlines()]
+            kinds = {item["event"] for item in events}
+            self.assertTrue({"compaction_partition", "summary_returned", "archive_saved",
+                             "checkpoint_saved", "checkpoint_writes_saved", "context_checked",
+                             "tool_proposed", "tool_result", "final_response_saved"} <= kinds, kinds)
+            partitions = [load_json(trace / item["reference"]) for item in events
+                          if item["event"] == "compaction_partition"]
+            self.assertTrue(all("selected" in item and "retained_unchanged" in item for item in partitions))
+            self.assertTrue(any(item["event"] == "archive_saved" and item["sha256"] for item in events))
+            self.assertTrue(all(item.get("thread") == job["thread_id"] for item in events
+                                if item["event"] == "checkpoint_saved"))
+            self.assertNotIn("https://official.example", (run / "run.log").read_text())
             # Every dispatched call must preserve complete tool-call/result groups.
             for _, messages, _ in model.calls:
                 pending = set()

@@ -9,8 +9,10 @@ remain historical records, not the current execution contract.
 The packages are `domain_decider` and `research_module`, retaining backend/ML separation.
 One notebook cell preflights inputs/consent/storage, runs domain preparation synchronously
 off-thread, then passes only its completed run into the existing async research entrypoint.
-Explicit resume/linked/upload paths bypass unnecessary preparation. Blank paths create new
-runs. Frozen keys, L2_/L3_ prefixes, prompts, harness, checkpoint threads and policies remain.
+The notebook exposes full execution and explicit root resume. Blank paths create numbered
+`runs/<factsheet>/run_NNN` workflows with frozen inputs/prompts for both phases, one canonical
+log and a private event index. Advanced linked/upload/module actions remain in APIs/CLI.
+Frozen keys, internal L2/L3 identities, graph/checkpoint machinery and old policies remain.
 Current guides are consolidated; dated Markdown, standalone artifacts and run README files remain.
 
 ## Components
@@ -26,7 +28,7 @@ requirements set priorities and the user-approved broader research scope. Python
 Public entrypoints remain create_run and run_all, with explicit public-input confirmation for new runs.
 
 Layer 3 schema 9 runs one native source finder per actual Layer 2 domain, with five concurrent jobs,
-then uploads unique source documents. New runs freeze research capability version 3 and continue into
+then uploads unique source documents. New runs freeze research capability version 4 and continue into
 one persistent Deep Agents 0.7.7 graph per domain sequentially, with no synthesizer. It accepts
 completed schema-9 metadata/domain Markdown and editable source suggestions. Uploading remains ordinary
 Python; document analysis is an explicit tool-free file-input request inside the researcher's tool loop.
@@ -95,7 +97,7 @@ Native file permissions restrict model writes to /notes; no shell, deletion, del
 paths. Native TodoListMiddleware tracks a model-authored plan without completion gates. Explicit native
 summarization starts at 250K estimated tokens, retains the latest 100K where feasible and archives full
 dialogue for retrieval. Final assembled input checks apply a 300K target/350K ceiling and provider capacity;
-search alone retains 128K. Research version 3 shares a durable logical-call ledger across main,
+search alone retains 128K. Research versions 3/4 share a durable logical-call ledger across main,
 search, document and summarization requests. Every dispatch has an atomic reservation and ephemeral
 counter; failures/uncertain responses consume slots. Frozen config defaults to 80/60/70: after wrap-up,
 prioritize essential gaps; after finalization, use saved-file reading only. The final slot belongs
@@ -110,9 +112,21 @@ executing the parent graph or creating sidecars beside its database. Missing not
 Fresh threads and allowances retain parent usage separately; compatible caches and source references
 remain reusable. The frozen user instruction stays active during compaction; prior work is evidence.
 
+Capability 4 also keeps frozen source guidance active through compaction. Eight request paths have
+independent frozen reasoning/verbosity/search settings, including a separate summary model using
+the same execution-owned transports and logical-call counter. Supported provider reasoning summaries
+are requested and saved privately; hidden chain-of-thought is neither requested nor claimed.
+Existing callbacks/saver boundaries record exact contexts, todo/note changes, tool/file results,
+selected/retained compaction messages, archive hashes, summary responses and checkpoint receipts.
+No extra checkpoint or monitoring stack is added. Exact-URL open audits are observational only.
+New webpage reads allow 50 MiB with Unicode-safe encoded components and original URL/query safety;
+document upload/file-input limits stay separate. Historical policies keep their original allowance.
+
 ## External Services
 
 The same fixed OpenAI model, selected reasoning, three transport retries and store=False remain.
+The shared Responses builder uses the native reasoning object, without a parallel legacy
+reasoning_effort argument; per-stage overrides retain their selected effort and summary policy.
 Within Layer 2, the domain designer alone binds native Responses API web_search (auto). New runs freeze independently
 selected low/medium/high search depth and response verbosity; both default to medium.
 Provider-hosted search actions require no application agent loop or separate L3 researcher.

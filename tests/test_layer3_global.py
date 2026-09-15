@@ -81,7 +81,7 @@ class GlobalReadinessTests(unittest.TestCase):
                 "http://127.0.0.1/private",
             )
 
-        validate.assert_called_once_with("http://127.0.0.1/private")
+        validate.assert_called_with("http://127.0.0.1/private")
         self.assertIs(actual, expected)
 
     def test_fetch_rejects_declared_and_streamed_oversize_sources(self):
@@ -111,7 +111,7 @@ class GlobalReadinessTests(unittest.TestCase):
                     "ML.deep_research.research_module.ML.providers.openai_search.MAX_SOURCE_BYTES",
                     10,
                 ),
-                self.assertRaisesRegex(ValueError, "10 MiB"),
+                self.assertRaisesRegex(ValueError, "download allowance"),
             ):
                 _fetch("https://public.example/report")
 

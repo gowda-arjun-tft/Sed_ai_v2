@@ -18,6 +18,23 @@ corresponding action. Distinguish a supported opportunity from a scenario requir
 further evidence. Do not manufacture financial benefits, likelihood ratings, risks or
 opportunities to fill sections.
 
+## External reassessment before the final report
+
+After preliminary risks and opportunities emerge, investigate their external drivers
+within this same research task. Connect each material finding to relevant policy,
+counterparty decisions, public budgets, market demand, financing, infrastructure,
+climate or supply-chain developments. Follow a concrete chain: external change → the
+asset's actual exposure or dependency → consequences and potential benefit → timeframe
+and conditions. Test counterevidence, contractual protections and existing safeguards.
+Do not turn a world event into an asset risk without a supported transmission pathway.
+
+Refine, qualify or withdraw the preliminary finding as the evidence requires. Distinguish
+current effects from announced changes and scenarios. Resolve numerical or scope errors
+before writing. Deliver one final Markdown report for this domain with clear Risks,
+Opportunities and Evidence gaps sections and actions beside the findings they address;
+state when no supported finding was established rather than inventing one. This is a
+second analytical pass within the existing loop, not a request for another agent or report.
+
 ## Evidence discipline
 
 Place citations beside supported findings. Preserve quantities, dates, conditions,

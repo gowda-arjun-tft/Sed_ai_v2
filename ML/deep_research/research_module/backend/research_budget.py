@@ -4,6 +4,7 @@ import asyncio
 import time
 
 from ML.deep_research.domain_decider.backend.fs import load_json, now_iso, write_json
+from ML.deep_research.domain_decider.backend.tracing import event, LOGICAL_CALL
 
 
 class BudgetExhausted(RuntimeError):
@@ -97,6 +98,7 @@ class CallBudget:
                        "started_at": now_iso(), "outcome": "reserved"}
             self.state["calls"].append(receipt)
             self.save()
+            event(self.path.parent / "trace", "call_reserved", thread=self.entry["thread_id"], **receipt)
             if self.phase != phase:
                 self.logger.info("research_phase_changed previous=%s phase=%s used=%d thread=%s",
                                  phase, self.phase, self.used, self.entry["thread_id"])
@@ -104,6 +106,7 @@ class CallBudget:
                              kind, receipt["number"], phase, self.used,
                              "unlimited" if self.remaining is None else self.remaining, self.entry["thread_id"])
         started = time.perf_counter()
+        token = LOGICAL_CALL.set({"thread": self.entry["thread_id"], "number": receipt["number"], "kind": kind})
         try:
             result = await invoke(payload)
         except BaseException as error:
@@ -115,6 +118,8 @@ class CallBudget:
         finally:
             receipt["elapsed_seconds"] = round(time.perf_counter() - started, 3)
             self.save()
+            event(self.path.parent / "trace", "call_finished", thread=self.entry["thread_id"], **receipt)
+            LOGICAL_CALL.reset(token)
             self.logger.info("research_call_finished kind=%s number=%d outcome=%s elapsed_seconds=%.3f phase=%s thread=%s",
                              kind, receipt["number"], receipt["outcome"], receipt["elapsed_seconds"],
                              self.phase, self.entry["thread_id"])

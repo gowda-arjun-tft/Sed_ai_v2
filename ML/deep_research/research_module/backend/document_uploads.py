@@ -19,9 +19,8 @@ from .source_publication import parse_json, publish
 
 
 @contextmanager
-def run_writer(run):
-    """Hold one OS-released writer lock across public discovery/upload entrypoints."""
-    path = run / "_internal/trace/writer.lock"
+def file_writer(path, *, blocking=False):
+    """Hold an OS-released lock; short counter reservations may wait for another allocator."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a+b") as handle:
         handle.seek(0, 2)
@@ -32,12 +31,12 @@ def run_writer(run):
         try:
             if os.name == "nt":
                 import msvcrt
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK, 1)
             else:
                 import fcntl
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(handle, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         except OSError as error:
-            raise RuntimeError("This Layer 3 run already has an active writer") from error
+            raise RuntimeError("This run already has an active writer") from error
         try:
             yield
         finally:
@@ -46,6 +45,11 @@ def run_writer(run):
                 msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
             else:
                 fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def run_writer(run):
+    """Hold one OS-released writer lock across public discovery/upload entrypoints."""
+    return file_writer(run / "_internal/trace/writer.lock")
 
 
 def collect(run, record):

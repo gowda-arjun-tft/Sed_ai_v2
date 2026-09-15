@@ -37,7 +37,7 @@ class ResearchConfigTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(reads[0].samefile(config))
             relative = "_internal/inputs/research_config.json"
             record = load_json(parent / "run.json")
-            self.assertEqual(record["research"]["version"], 3)
+            self.assertEqual(record["research"]["version"], 4)
             self.assertEqual(record["research"]["maximum_calls"], 8)
             self.assertEqual((parent / relative).read_bytes(), raw)
             self.assertEqual(record["inputs"][relative]["sha256"], hashlib.sha256(raw).hexdigest())
@@ -101,6 +101,9 @@ class ResearchConfigTests(unittest.IsolatedAsyncioTestCase):
             _, run = await linked_run(root, ["energy"])
             record = load_json(run / "run.json")
             record["research"].update(version=2, maximum_calls=80, wrap_up_after=60, finalize_after=70)
+            record.pop("stage_settings")
+            record["research"].pop("persistent_source_guidance")
+            record["research"].pop("webpage_max_bytes")
             relative = "_internal/inputs/research_config.json"
             record["inputs"].pop(relative)
             (run / relative).unlink()
@@ -117,4 +120,6 @@ class ResearchConfigTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(model.calls), calls)
             self.assertEqual(load_json(run / "run.json")["status"], "complete")
             self.assertTrue(all("of 80" in group[0].text for _, group, _ in model.calls))
+            self.assertTrue(all("summary" not in options.get("reasoning", {}) for _, _, options in model.calls))
+            self.assertTrue(all("# Selected source guidance" not in group[0].text for _, group, _ in model.calls))
             self.assertEqual(snapshot(run / "_internal/inputs"), before)

@@ -15,6 +15,7 @@ param(
     [string]$SourceSuggestion,
     [string]$ResearchInstruction,
     [string]$ResearchConfig,
+    [string]$StageSettings,
     [switch]$Online,
     [switch]$PublicInputConfirmed,
     [string]$ResumeL3,
@@ -31,6 +32,13 @@ $Python = 'C:\src\anaconda3\envs\compute\python.exe'
 # this, Windows defaults to the ANSI code page and a single non-ASCII
 # character in a printed path raises UnicodeEncodeError.
 $env:PYTHONIOENCODING = 'utf-8'
+
+if ($StageSettings -and ($Resume -or $ResumeL3 -or $UploadDocumentsL3)) {
+    throw '-StageSettings applies only to creation; resume uses frozen settings.'
+}
+if ($StageSettings -and (@('Layer2WebSearchDepth', 'Layer2WebSearchVerbosity', 'ResearchReasoningEffort').Where({ $PSBoundParameters.ContainsKey($_) }).Count -gt 0)) {
+    throw '-StageSettings cannot be combined with legacy generation settings.'
+}
 
 if (-not ($Research -or $ResearchFromL3 -or $ResumeL3 -or $UploadDocumentsL3) -and -not (Test-Path -LiteralPath $Python)) {
     throw "Required compute interpreter not found: $Python"
@@ -91,7 +99,7 @@ function Invoke-Layer3([string[]]$Arguments) {
     }
     $Converted = @($Arguments)
     for ($Index = 1; $Index -lt $Converted.Count; $Index++) {
-        if ($Converted[$Index - 1] -in @('--research', '--research-from', '--resume-l3', '--source-suggestion', '--research-instruction', '--research-config')) {
+        if ($Converted[$Index - 1] -in @('--research', '--research-from', '--resume-l3', '--source-suggestion', '--research-instruction', '--research-config', '--stage-settings')) {
             $Resolved = [IO.Path]::GetFullPath($Converted[$Index], $ProjectDir)
             $Relative = [IO.Path]::GetRelativePath($ProjectDir, $Resolved)
             if ($Relative -eq '..' -or $Relative.StartsWith('..\') -or [IO.Path]::IsPathRooted($Relative)) {
@@ -105,7 +113,8 @@ function Invoke-Layer3([string[]]$Arguments) {
 
 if ($Research -or $ResearchFromL3) {
     $Layer3Args = if ($ResearchFromL3) { @('--research-from', $ResearchFromL3) } else { @('--research', $Research) }
-    $Layer3Args += @('--research-reasoning-effort', $ResearchReasoningEffort)
+    if ($StageSettings) { $Layer3Args += @('--stage-settings', $StageSettings) }
+    else { $Layer3Args += @('--research-reasoning-effort', $ResearchReasoningEffort) }
     if ($SourceSuggestion) {
         $Layer3Args += @('--source-suggestion', $SourceSuggestion)
     }
@@ -140,7 +149,10 @@ if ($Research -or $ResearchFromL3) {
     if (-not $PublicInputConfirmed) {
         throw 'Layer 2 web-assisted domain design requires -PublicInputConfirmed.'
     }
-    & $Python -m ML.deep_research.domain_decider $FactSheet --domain-plugin $DomainPlugin --requirements $Requirements --web-search-depth $Layer2WebSearchDepth --web-search-verbosity $Layer2WebSearchVerbosity --public-input-confirmed
+    $Layer2Args = @($FactSheet, '--domain-plugin', $DomainPlugin, '--requirements', $Requirements, '--public-input-confirmed')
+    if ($StageSettings) { $Layer2Args += @('--stage-settings', $StageSettings) }
+    else { $Layer2Args += @('--web-search-depth', $Layer2WebSearchDepth, '--web-search-verbosity', $Layer2WebSearchVerbosity) }
+    & $Python -m ML.deep_research.domain_decider @Layer2Args
 }
 
 exit $LASTEXITCODE
